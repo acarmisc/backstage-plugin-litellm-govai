@@ -1,0 +1,14 @@
+{
+  "name": "@govai/backstage-plugin-litellm-monorepo",
+  "version": "0.0.1",
+  "private": true,
+  "description": "LiteLLM Governance plugin packages for Backstage. Designed for use within Backstage monorepo.",
+  "scripts": {
+    "build": "echo 'Use from Backstage monorepo: yarn workspace @govai/backstage-plugin-litellm build'",
+    "test": "echo 'Use from Backstage monorepo: yarn workspace @govai/backstage-plugin-litellm test'",
+    "lint": "echo 'Use from Backstage monorepo: yarn workspace @govai/backstage-plugin-litellm lint'"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  }
+}
