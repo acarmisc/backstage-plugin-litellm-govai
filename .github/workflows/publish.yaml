@@ -1,0 +1,63 @@
+name: Publish to npm
+
+on:
+  workflow_dispatch:
+    inputs:
+      package:
+        description: 'Package to publish (litellm or litellm-backend)'
+        required: true
+        default: 'litellm'
+      version:
+        description: 'Version tag (e.g., 0.0.1)'
+        required: true
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Check for workspace context
+        id: check_workspace
+        run: |
+          if [ -f "../../package.json" ] && grep -q '"workspaces"' ../../package.json 2>/dev/null; then
+            echo "in_workspace=true" >> $GITHUB_OUTPUT
+          else
+            echo "in_workspace=false" >> $GITHUB_OUTPUT
+          fi
+          cat $GITHUB_OUTPUT
+      
+      - name: Error if not in workspace
+        if: steps.check_workspace.outputs.in_workspace == 'false'
+        run: |
+          echo "::error::This plugin requires being in a Backstage monorepo to publish."
+          echo "The plugin uses workspace dependencies (workspace:^) that only resolve within a Backstage monorepo."
+          echo "To publish: copy these packages into a Backstage monorepo's plugins/ directory, then run this workflow."
+          exit 1
+      
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          registry-url: 'https://registry.npmjs.org'
+          token: ${{ secrets.NPM_TOKEN }}
+      
+      - name: Install dependencies
+        run: yarn install --immutable
+      
+      - name: Build package
+        run: |
+          if [ "${{ github.event.inputs.package }}" == "litellm" ]; then
+            yarn workspace @govai/backstage-plugin-litellm build
+          else
+            yarn workspace @govai/backstage-plugin-litellm-backend build
+          fi
+      
+      - name: Publish
+        run: |
+          cd packages/${{ github.event.inputs.package }}
+          npm publish --access public --tag latest
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
