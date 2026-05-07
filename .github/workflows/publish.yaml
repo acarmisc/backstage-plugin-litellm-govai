@@ -1,0 +1,40 @@
+name: Publish
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version bump (patch|minor|major)'
+        required: true
+        default: 'patch'
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+          token: ${{ secrets.NPM_TOKEN }}
+      
+      - name: Install dependencies
+        run: yarn install --immutable
+      
+      - name: Build
+        run: |
+          yarn workspace @govai/backstage-plugin-litellm build
+          yarn workspace @govai/backstage-plugin-litellm-backend build
+      
+      - name: Publish frontend
+        run: yarn npm publish --access public --workspace @govai/backstage-plugin-litellm
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      
+      - name: Publish backend
+        run: yarn npm publish --access public --workspace @govai/backstage-plugin-litellm-backend
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

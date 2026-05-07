@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+      
+      - name: Install dependencies
+        run: yarn install --immutable
+      
+      - name: Type check
+        run: yarn tsc
+      
+      - name: Lint
+        run: yarn lint
+      
+      - name: Test
+        run: yarn test --passWithNoTests
+
+  build-packages:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+      
+      - name: Install dependencies
+        run: yarn install --immutable
+      
+      - name: Build packages
+        run: |
+          yarn workspace @govai/backstage-plugin-litellm build
+          yarn workspace @govai/backstage-plugin-litellm-backend build
