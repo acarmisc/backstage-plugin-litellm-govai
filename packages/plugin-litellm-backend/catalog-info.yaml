@@ -1,0 +1,12 @@
+apiVersion: backstage.io/v1alpha1
+kind: Plugin
+metadata:
+  name: litellm-backend
+  description: LiteLLM Governance backend plugin for Backstage
+  tags:
+    - ai
+    - governance
+    - litellm
+spec:
+  lifecycle: experimental
+  owner: platform-team
