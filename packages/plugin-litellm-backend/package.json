@@ -36,6 +36,7 @@
     "@backstage/config": "workspace:^",
     "@backstage/backend-openapi-utils": "workspace:^",
     "@backstage/types": "workspace:^",
+    "@backstage/backend-common": "workspace:^",
     "express": "^4.18.2",
     "winston": "^3.11.0"
   },
