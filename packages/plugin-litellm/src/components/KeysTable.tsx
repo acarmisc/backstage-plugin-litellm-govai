@@ -1,4 +1,3 @@
-import React from 'react';
 import {
   Table,
   TableColumn,
@@ -74,7 +73,9 @@ const columns: TableColumn<LiteLLMKey>[] = [
       const isExpiring = isExpiringSoon(row.expires);
       return (
         <Typography
-          color={isExpiredVal ? 'error' : isExpiring ? 'warning' : undefined}
+          style={{
+            color: isExpiredVal ? '#d32f2f' : isExpiring ? '#ed6c02' : undefined,
+          }}
         >
           {formatDate(row.expires)}
           {isExpiredVal && ' (Expired)'}

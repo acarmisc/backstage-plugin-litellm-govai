@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Page,
   Content,
@@ -42,7 +42,7 @@ export function LiteLLMPage() {
 
   if (loading) {
     return (
-      <Page>
+      <Page themeId="tool">
         <Header title="My AI Management" subtitle="LiteLLM Governance" />
         <Content>
           <Progress />
@@ -53,7 +53,7 @@ export function LiteLLMPage() {
 
   if (error) {
     return (
-      <Page>
+      <Page themeId="tool">
         <Header title="My AI Management" subtitle="LiteLLM Governance" />
         <Content>
           <ResponseErrorPanel error={error} />
@@ -63,7 +63,7 @@ export function LiteLLMPage() {
   }
 
   return (
-    <Page>
+    <Page themeId="tool">
       <Header title="My AI Management" subtitle="LiteLLM Governance" />
       <Content>
         {userInfo?.context && <UserContextCard context={userInfo.context} />}

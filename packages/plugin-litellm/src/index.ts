@@ -1,4 +1,6 @@
-export { litellmPlugin } from './plugin';
+import { litellmPlugin } from './plugin';
+export { litellmPlugin };
+export default litellmPlugin;
 export { liteLLMRouteRef } from './routes';
 export { litellmApiRef } from './api';
 export type { LiteLLMApi, LiteLLMUserInfo, LiteLLMKey, LiteLLMTeam, LiteLLMDailyActivity } from './api';

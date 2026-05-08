@@ -1,5 +1,5 @@
 import { Config } from '@backstage/config';
-import type { IdentityService } from '@backstage/backend-plugin-api';
+import type { HttpAuthService } from '@backstage/backend-plugin-api';
 import express from 'express';
 import { Logger } from 'winston';
 import { LiteLLMClient } from './client';
@@ -7,26 +7,20 @@ import type { UserContext } from './types';
 
 export interface RouterOptions {
   config: Config;
-  identity: IdentityService;
+  httpAuth: HttpAuthService;
   logger: Logger;
 }
 
 export async function createRouter(options: RouterOptions): Promise<express.Router> {
-  const { config, identity, logger } = options;
+  const { config, httpAuth, logger } = options;
 
-  const litellmConfig = config.getConfig('litellm');
-  const client = new LiteLLMClient({
-    litellm: {
-      baseUrl: litellmConfig.getString('baseUrl'),
-      masterKey: litellmConfig.getString('masterKey'),
-    },
-  });
+  const client = new LiteLLMClient(config);
 
   const router = express.Router();
 
   router.get('/info', async (req, res) => {
     try {
-      const userContext = await resolveUserContext(identity, req);
+      const userContext = await resolveUserContext(httpAuth, req);
       logger.info(`Fetching user info for: ${userContext.userId}`);
 
       const userInfo = await client.getUserInfo(userContext.userId);
@@ -52,7 +46,7 @@ export async function createRouter(options: RouterOptions): Promise<express.Rout
 
   router.get('/usage', async (req, res) => {
     try {
-      const userContext = await resolveUserContext(identity, req);
+      const userContext = await resolveUserContext(httpAuth, req);
       const days = parseInt(req.query.days as string, 10) || 7;
 
       logger.info(`Fetching usage for: ${userContext.userId}, days: ${days}`);
@@ -72,30 +66,18 @@ export async function createRouter(options: RouterOptions): Promise<express.Rout
 }
 
 async function resolveUserContext(
-  identity: IdentityService,
+  httpAuth: HttpAuthService,
   req: express.Request,
 ): Promise<UserContext> {
-  const token = req.headers.authorization?.replace(/^Bearer\s+/i, '');
-  if (!token) {
-    throw new Error('Missing authorization token');
-  }
+  const credentials = await httpAuth.credentials(req);
 
-  const userInfo = await identity.getIdentity({ token });
-
-  if (!userInfo?.user) {
-    throw new Error('Unable to resolve user identity');
-  }
-
-  const entityRef = userInfo.user.ref;
-  const parts = entityRef.split('/');
-  const username = parts[parts.length - 1];
-
-  // Use email as user_id for LiteLLM (as per spec)
-  const email = userInfo.user.email || `${username}@unknown`;
+  // Use entity ref from credentials principal if available
+  const principalRef = (credentials.principal as any).userEntityRef ?? (credentials.principal as any).subject ?? '';
+  const email = principalRef ? principalRef.split(':').pop() || 'user@unknown' : 'user@unknown';
 
   return {
     userId: email,
     email,
-    entityRef,
+    entityRef: principalRef,
   };
 }

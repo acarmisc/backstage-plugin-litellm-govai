@@ -1,5 +1,4 @@
-import React from 'react';
-import { InfoCard, MarkdownContent } from '@backstage/core-components';
+import { InfoCard } from '@backstage/core-components';
 
 interface UserContext {
   userId: string;
@@ -15,7 +14,6 @@ export function UserContextCard({ context }: Props) {
   return (
     <InfoCard
       title="User Identity"
-      subvariant="elevated"
     >
       <div style={{ display: 'grid', gap: 8 }}>
         <div>
