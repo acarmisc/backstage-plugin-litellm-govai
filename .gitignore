@@ -1,0 +1,19 @@
+# Dependencies
+node_modules
+.pnp
+.pnp.js
+
+# Lock files (Backstage uses yarn)
+package-lock.json
+yarn.lock
+
+# Build outputs (built separately in monorepo and copied)
+dist/
+
+# Testing
+coverage
+
+# Misc
+.DS_Store
+*.log
+*.local

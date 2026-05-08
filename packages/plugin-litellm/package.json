@@ -1,11 +1,11 @@
 {
-  "name": "@govai/backstage-plugin-litellm",
-  "version": "0.0.1",
+  "name": "backstage-govai-litellm",
+  "version": "0.1.0",
   "backstage": {
     "role": "frontend-plugin",
     "pluginId": "litellm",
     "pluginPackages": [
-      "@govai/backstage-plugin-litellm"
+      "backstage-govai-litellm"
     ]
   },
   "publishConfig": {
@@ -13,27 +13,23 @@
   },
   "license": "Apache-2.0",
   "sideEffects": false,
-  "main": "src/index.ts",
-  "types": "src/index.ts",
+  "main": "dist/index.esm.js",
+  "types": "dist/index.d.ts",
   "files": [
     "dist"
   ],
   "scripts": {
-    "build": "backstage-cli package build",
-    "clean": "backstage-cli package clean",
-    "lint": "backstage-cli package lint",
-    "prepack": "backstage-cli package prepack",
-    "postpack": "backstage-cli package postpack",
-    "start": "backstage-cli package start",
-    "test": "backstage-cli package test"
+    "build": "echo 'Build dist/ from Backstage monorepo: backstage-cli package build'",
+    "prepack": "echo 'Dist files must be built in Backstage monorepo and copied here'",
+    "postpack": ""
   },
   "dependencies": {
-    "@backstage/core-components": "workspace:^",
-    "@backstage/core-plugin-api": "workspace:^",
-    "@backstage/frontend-plugin-api": "workspace:^",
-    "@backstage/plugin-catalog-react": "workspace:^",
-    "@backstage/theme": "workspace:^",
-    "@backstage/types": "workspace:^",
+    "@backstage/core-components": "^0.14.10",
+    "@backstage/core-plugin-api": "^1.9.3",
+    "@backstage/frontend-plugin-api": "^0.7.0",
+    "@backstage/plugin-catalog-react": "^1.13.0",
+    "@backstage/theme": "^0.5.6",
+    "@backstage/types": "^1.1.0",
     "@material-ui/core": "^4.12.4",
     "@material-ui/icons": "^4.9.1",
     "@material-ui/lab": "4.0.0-alpha.61",
@@ -42,11 +38,11 @@
     "zod": "^3.22.4"
   },
   "devDependencies": {
-    "@backstage/cli": "workspace:^",
-    "@backstage/core-app-api": "workspace:^",
-    "@backstage/dev-utils": "workspace:^",
-    "@backstage/frontend-test-utils": "workspace:^",
-    "@backstage/test-utils": "workspace:^",
+    "@backstage/cli": "^0.28.0",
+    "@backstage/core-app-api": "^0.1.1",
+    "@backstage/dev-utils": "^0.2.18",
+    "@backstage/frontend-test-utils": "^0.1.0",
+    "@backstage/test-utils": "^0.1.0",
     "@testing-library/dom": "^10.0.0",
     "@testing-library/jest-dom": "^6.0.0",
     "@testing-library/react": "^16.0.0",

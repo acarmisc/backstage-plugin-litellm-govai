@@ -1,0 +1,1 @@
+{"version":3,"file":"routes.esm.js","sources":["../src/routes.ts"],"sourcesContent":["import { createRouteRef } from '@backstage/core-plugin-api';\n\nexport const liteLLMRouteRef = createRouteRef({\n  id: 'litellm',\n});"],"names":[],"mappings":";;AAEO,MAAM,kBAAkB,cAAA,CAAe;AAAA,EAC5C,EAAA,EAAI;AACN,CAAC;;;;"}
