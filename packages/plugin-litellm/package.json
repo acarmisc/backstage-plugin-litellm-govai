@@ -1,5 +1,5 @@
 {
-  "name": "@govai/backstage-plugin-litellm",
+  "name": "@acarmisc/backstage-plugin-litellm",
   "version": "0.1.0",
   "backstage": {
     "role": "frontend-plugin",
@@ -33,7 +33,7 @@
     "@material-ui/core": "^4.12.4",
     "@material-ui/icons": "^4.9.1",
     "@material-ui/lab": "4.0.0-alpha.61",
-    "react": "^18.2.0",
+    "react": "^17.0.0 || ^18.0.0",
     "react-use": "^17.2.4",
     "recharts": "^2.12.0",
     "zod": "^3.22.4"

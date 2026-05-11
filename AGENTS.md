@@ -6,8 +6,10 @@ Backstage plugin for LiteLLM governance - allows developers to manage their virt
 
 ## Packages
 
-- `@govai/backstage-plugin-litellm` - Frontend React components
-- `@govai/backstage-plugin-litellm-backend` - Backend Express router
+- `@acarmisc/backstage-plugin-litellm` - Frontend React components
+- `@acarmisc/backstage-plugin-litellm-backend` - Backend Express router
+
+**Note:** These packages were published to the `@acarmisc` npm scope. The original `@govai` scope requires organizational membership.
 
 ## Architecture
 
@@ -21,8 +23,8 @@ To test in the parent Backstage (`../backstage`):
 1. **Link packages** - Add to Backstage's workspace or use `yarn workspace`:
    ```
    cd ../backstage
-   yarn add @govai/backstage-plugin-litellm
-   yarn add @govai/backstage-plugin-litellm-backend
+   yarn add @acarmisc/backstage-plugin-litellm
+   yarn add @acarmisc/backstage-plugin-litellm-backend
    ```
 
 2. **Add to app-config.yaml**:
@@ -34,13 +36,13 @@ To test in the parent Backstage (`../backstage`):
 
 3. **Register backend** - In `packages/backend/src/plugins/litellm.ts`:
    ```typescript
-   import { litellmPlugin } from '@govai/backstage-plugin-litellm-backend';
+   import { litellmPlugin } from '@acarmisc/backstage-plugin-litellm-backend';
    // Add to createBackend() in index.ts
    ```
 
 4. **Register frontend** - In `packages/app/src/App.tsx`:
    ```typescript
-   import { litellmPlugin } from '@govai/backstage-plugin-litellm';
+   import { litellmPlugin } from '@acarmisc/backstage-plugin-litellm';
    // Add route and nav item using the new Frontend System
    ```
 
