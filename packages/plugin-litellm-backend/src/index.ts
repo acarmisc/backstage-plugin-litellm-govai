@@ -1,7 +1,4 @@
-export * from './plugin';
-export * from './router';
-export * from './client';
+export { litellmPlugin } from './plugin';
+export { createRouter } from './router';
 export * from './types';
-
-import plugin from './plugin';
-export default plugin;
+export { LiteLLMClient } from './client';

@@ -1,68 +1,77 @@
-import { createApiRef } from '@backstage/core-plugin-api';
+import { FetchApi } from '@backstage/core-plugin-api';
+import { UserInfo, VirtualKey, ModelInfo, UsageMetrics, GenerateKeyRequest, GenerateKeyResponse } from './types';
 
-export interface LiteLLMKey {
-  key_alias: string;
-  spend: number;
-  models: string[];
-  expires: string | null;
-}
+export class LiteLlmApi {
+  private fetchApi: FetchApi;
+  private basePath: string;
 
-export interface LiteLLMUserInfo {
-  user_id: string;
-  spend: number;
-  keys: LiteLLMKey[];
-  context: {
-    userId: string;
-    email: string;
-    entityRef: string;
-  };
-}
+  constructor(fetchApi: FetchApi, basePath: string = '/api/litellm') {
+    this.fetchApi = fetchApi;
+    this.basePath = basePath;
+  }
 
-export interface LiteLLMTeam {
-  team_id: string;
-  team_alias: string;
-}
-
-export interface LiteLLMDailyActivity {
-  date: string;
-  spend: number;
-  prompt_tokens: number;
-  completion_tokens: number;
-  total_tokens: number;
-}
-
-export interface LiteLLMApi {
-  getUserInfo(): Promise<LiteLLMUserInfo>;
-  getTeams(): Promise<{ teams: LiteLLMTeam[] }>;
-  getUsage(days?: number): Promise<{ usage: LiteLLMDailyActivity[] }>;
-}
-
-export const litellmApiRef = createApiRef<LiteLLMApi>({
-  id: 'plugin.litellm.service',
-});
-
-export class DefaultLiteLLMApi implements LiteLLMApi {
-  async getUserInfo(): Promise<LiteLLMUserInfo> {
-    const response = await fetch('/api/litellm/info');
+  private async get<T>(path: string, params?: Record<string, string>): Promise<T> {
+    const url = new URL(`${this.basePath}${path}`, window.location.origin);
+    if (params) {
+      Object.entries(params).forEach(([key, value]) => {
+        url.searchParams.append(key, value);
+      });
+    }
+    const response = await this.fetchApi.fetch(url.toString());
     if (!response.ok) {
-      throw new Error(`Failed to fetch user info: ${response.statusText}`);
+      throw new Error(`Failed to fetch: ${response.status} ${response.statusText}`);
     }
     return response.json();
   }
 
-  async getTeams(): Promise<{ teams: LiteLLMTeam[] }> {
-    const response = await fetch('/api/litellm/teams');
+  private async post<T>(path: string, body: unknown): Promise<T> {
+    const response = await this.fetchApi.fetch(`${this.basePath}${path}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
     if (!response.ok) {
-      throw new Error(`Failed to fetch teams: ${response.statusText}`);
+      throw new Error(`Failed to fetch: ${response.status} ${response.statusText}`);
     }
     return response.json();
   }
 
-  async getUsage(days: number = 7): Promise<{ usage: LiteLLMDailyActivity[] }> {
-    const response = await fetch(`/api/litellm/usage?days=${days}`);
+  private async del<T>(path: string): Promise<T> {
+    const response = await fetch(`${this.basePath}${path}`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+    });
     if (!response.ok) {
-      throw new Error(`Failed to fetch usage: ${response.statusText}`);
+      throw new Error(`Failed to fetch: ${response.status} ${response.statusText}`);
     }
     return response.json();
+  }
+
+  async getUserInfo(userId?: string): Promise<UserInfo> {
+    const params = userId ? { user_id: userId } : undefined;
+    return this.get<UserInfo>('/user/info', params);
+  }
+
+  async listKeys(userId?: string): Promise<VirtualKey[]> {
+    const params = userId ? { user_id: userId } : undefined;
+    return this.get<VirtualKey[]>('/keys', params);
+  }
+
+  async generateKey(request: GenerateKeyRequest): Promise<GenerateKeyResponse> {
+    return this.post<GenerateKeyResponse>('/keys/generate', request);
+  }
+
+  async deleteKey(keyId: string): Promise<{ success: boolean }> {
+    return this.del<{ success: boolean }>(`/keys/${encodeURIComponent(keyId)}`);
+  }
+
+  async listModels(): Promise<ModelInfo[]> {
+    return this.get<ModelInfo[]>('/models');
+  }
+
+  async getUsage(startDate: string, endDate: string, userId?: string): Promise<UsageMetrics> {
+    const params: Record<string, string> = { start_date: startDate, end_date: endDate };
+    if (userId) params.user_id = userId;
+    return this.get<UsageMetrics>('/usage', params);
   }
 }

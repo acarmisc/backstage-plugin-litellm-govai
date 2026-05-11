@@ -1,11 +1,11 @@
 {
-  "name": "backstage-govai-litellm",
+  "name": "@govai/backstage-plugin-litellm",
   "version": "0.1.0",
   "backstage": {
     "role": "frontend-plugin",
     "pluginId": "litellm",
     "pluginPackages": [
-      "backstage-govai-litellm"
+      "@govai/backstage-plugin-litellm"
     ]
   },
   "publishConfig": {
@@ -35,6 +35,7 @@
     "@material-ui/lab": "4.0.0-alpha.61",
     "react": "^18.2.0",
     "react-use": "^17.2.4",
+    "recharts": "^2.12.0",
     "zod": "^3.22.4"
   },
   "devDependencies": {

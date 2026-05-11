@@ -27,8 +27,6 @@ export interface ModelInfo {
   mode: string;
   supports_function_calling?: boolean;
   supports_vision?: boolean;
-  input_cost_per_token?: number;
-  output_cost_per_token?: number;
 }
 
 export interface UsageMetrics {
@@ -58,7 +56,6 @@ export interface GenerateKeyRequest {
   max_budget?: number;
   tpm_limit?: number;
   rpm_limit?: number;
-  user_id?: string;
 }
 
 export interface GenerateKeyResponse {
@@ -66,16 +63,9 @@ export interface GenerateKeyResponse {
   key_alias?: string;
   expires_at?: string;
   max_budget?: number;
-  tpm_limit?: number;
-  rpm_limit?: number;
-  models?: string[];
 }
 
-export interface DeleteKeyRequest {
-  keys: string[];
-}
-
-export interface LiteLLMConfig {
-  baseUrl: string;
-  masterKey: string;
+export interface DateRange {
+  start: Date;
+  end: Date;
 }

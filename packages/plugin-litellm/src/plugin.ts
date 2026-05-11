@@ -1,17 +1,23 @@
-import { createPlugin, createApiFactory } from '@backstage/core-plugin-api';
-import { liteLLMRouteRef } from './routes';
-import { litellmApiRef, DefaultLiteLLMApi } from './api';
+import { createFrontendPlugin } from '@backstage/frontend-plugin-api';
+import { PageExtension } from '@backstage/frontend-plugin-api';
+import { LiteLLMPage } from './components/LiteLLMPage';
+import { fetchApiRef } from '@backstage/core-plugin-api';
 
-export const litellmPlugin = createPlugin({
+export const litellmPlugin = createFrontendPlugin({
   id: 'litellm',
-  routes: {
-    root: liteLLMRouteRef,
-  },
-  apis: [
-    createApiFactory({
-      api: litellmApiRef,
-      deps: {},
-      factory: () => new DefaultLiteLLMApi(),
+  extensions: [
+    PageExtension.create({
+      id: 'litellm.page',
+      defaultPath: '/litellm',
+      title: 'LiteLLM',
+      component: {
+        loader: async () => {
+          const { fetchApi } = await import('@backstage/core-plugin-api');
+          return function LiteLLMRoot() {
+            return <LiteLLMPage fetchApi={fetchApi} />;
+          };
+        },
+      },
     }),
   ],
 });

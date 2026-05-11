@@ -1,27 +1,21 @@
-import { createBackendPlugin, coreServices } from '@backstage/backend-plugin-api';
-import { loggerToWinstonLogger } from '@backstage/backend-common';
+import { createBackendPlugin } from '@backstage/backend-plugin-api';
 import { createRouter } from './router';
 
-export default createBackendPlugin({
+export const litellmPlugin = createBackendPlugin({
   pluginId: 'litellm',
-  register(env) {
-    env.registerInit({
+  register(reg: any) {
+    reg.registerInit({
       deps: {
-        config: coreServices.rootConfig,
-        httpAuth: coreServices.httpAuth,
-        http: coreServices.httpRouter,
-        logger: coreServices.logger,
+        httpRouter: 'coreServices.httpRouter',
+        config: 'coreServices.rootConfig',
+        logger: 'coreServices.logger',
       },
-      async init({ config, httpAuth, http, logger }) {
-        const winstonLogger = loggerToWinstonLogger(logger);
-
+      async init({ httpRouter, config, logger }) {
         const router = await createRouter({
           config,
-          httpAuth,
-          logger: winstonLogger,
+          logger,
         });
-
-        http.use(router);
+        httpRouter.use(router);
       },
     });
   },

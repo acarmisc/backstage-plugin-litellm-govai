@@ -1,86 +1,110 @@
+import { Router, Request, Response } from 'express';
 import { Config } from '@backstage/config';
-import type { HttpAuthService } from '@backstage/backend-plugin-api';
-import express from 'express';
-import { Logger } from 'winston';
 import { LiteLLMClient } from './client';
-import type { UserContext } from './types';
+import {
+  UserInfo,
+  VirtualKey,
+  ModelInfo,
+  UsageMetrics,
+  GenerateKeyRequest,
+  GenerateKeyResponse,
+} from './types';
 
 export interface RouterOptions {
   config: Config;
-  httpAuth: HttpAuthService;
-  logger: Logger;
+  logger: any;
 }
 
-export async function createRouter(options: RouterOptions): Promise<express.Router> {
-  const { config, httpAuth, logger } = options;
+export async function createRouter(options: RouterOptions): Promise<Router> {
+  const { config, logger } = options;
 
-  const client = new LiteLLMClient(config);
+  const baseUrl = config.getString('litellm.baseUrl');
+  const masterKey = config.getString('litellm.masterKey');
+  const client = new LiteLLMClient({ baseUrl, masterKey });
 
-  const router = express.Router();
+  const router = Router();
 
-  router.get('/info', async (req, res) => {
-    try {
-      const userContext = await resolveUserContext(httpAuth, req);
-      logger.info(`Fetching user info for: ${userContext.userId}`);
-
-      const userInfo = await client.getUserInfo(userContext.userId);
-      res.json({
-        ...userInfo,
-        context: userContext,
-      });
-    } catch (error) {
-      logger.error('Failed to fetch user info', error);
-      res.status(500).json({ error: error instanceof Error ? error.message : 'Unknown error' });
-    }
-  });
-
-  router.get('/teams', async (_req, res) => {
-    try {
-      const teams = await client.listTeams();
-      res.json(teams);
-    } catch (error) {
-      logger.error('Failed to fetch teams', error);
-      res.status(500).json({ error: error instanceof Error ? error.message : 'Unknown error' });
-    }
-  });
-
-  router.get('/usage', async (req, res) => {
-    try {
-      const userContext = await resolveUserContext(httpAuth, req);
-      const days = parseInt(req.query.days as string, 10) || 7;
-
-      logger.info(`Fetching usage for: ${userContext.userId}, days: ${days}`);
-      const usage = await client.getDailyActivity(userContext.userId, days);
-      res.json({ usage });
-    } catch (error) {
-      logger.error('Failed to fetch usage', error);
-      res.status(500).json({ error: error instanceof Error ? error.message : 'Unknown error' });
-    }
-  });
-
-  router.get('/health', (_req, res) => {
+  router.get('/health', (_req: Request, res: Response) => {
     res.json({ status: 'ok' });
   });
 
+  router.get('/user/info', async (req: Request, res: Response) => {
+    try {
+      const userId = req.query.user_id as string | undefined;
+      const userInfo: UserInfo = await client.getUserInfo(userId);
+      res.json(userInfo);
+    } catch (error: any) {
+      logger.error('Failed to fetch user info', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  router.get('/keys', async (req: Request, res: Response) => {
+    try {
+      const userId = req.query.user_id as string | undefined;
+      const keys: VirtualKey[] = await client.listKeys(userId);
+      res.json(keys);
+    } catch (error: any) {
+      logger.error('Failed to list keys', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  router.post('/keys/generate', async (req: Request, res: Response) => {
+    try {
+      const request: GenerateKeyRequest = req.body;
+      const result: GenerateKeyResponse = await client.generateKey(request);
+      res.json(result);
+    } catch (error: any) {
+      logger.error('Failed to generate key', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  router.delete('/keys/:keyId', async (req: Request, res: Response) => {
+    try {
+      const { keyId } = req.params;
+      if (!keyId) {
+        res.status(400).json({ error: 'keyId is required' });
+        return;
+      }
+      await client.deleteKeys({ keys: [keyId] });
+      res.json({ success: true });
+    } catch (error: any) {
+      logger.error('Failed to delete key', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  router.get('/models', async (_req: Request, res: Response) => {
+    try {
+      const models: ModelInfo[] = await client.listModels();
+      res.json(models);
+    } catch (error: any) {
+      logger.error('Failed to list models', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  router.get('/usage', async (req: Request, res: Response) => {
+    try {
+      const { start_date, end_date, user_id, group_by } = req.query;
+      if (!start_date || !end_date) {
+        res.status(400).json({ error: 'start_date and end_date are required' });
+        return;
+      }
+      const usage: UsageMetrics = await client.getUsage(
+        start_date as string,
+        end_date as string,
+        user_id as string | undefined,
+        group_by as string | undefined
+      );
+      res.json(usage);
+    } catch (error: any) {
+      logger.error('Failed to fetch usage', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   return router;
-}
-
-async function resolveUserContext(
-  httpAuth: HttpAuthService,
-  req: express.Request,
-): Promise<UserContext> {
-  // Allow unauthenticated requests by explicitly requesting 'none' credentials.
-  // This is safe because `dangerouslyDisableDefaultAuthPolicy: true` is set in app-config.
-  const credentials = await httpAuth.credentials(req, { allow: ['none'] });
-
-  // Use entity ref from credentials principal if available
-  const principal = credentials.principal as { userEntityRef?: string; subject?: string };
-  const principalRef = principal?.userEntityRef ?? principal?.subject ?? '';
-  const email = principalRef ? principalRef.split(':').pop() || 'user@unknown' : 'user@unknown';
-
-  return {
-    userId: email,
-    email,
-    entityRef: principalRef,
-  };
 }

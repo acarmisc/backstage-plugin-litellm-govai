@@ -1,55 +1,80 @@
-import { Config } from './types';
-import type {
-  LiteLLMUserInfo,
-  LiteLLMTeam,
-  LiteLLMDailyActivity,
-} from './types';
+import { LiteLLMConfig, UserInfo, VirtualKey, ModelInfo, UsageMetrics, GenerateKeyRequest, GenerateKeyResponse, DeleteKeyRequest } from './types';
+
+const DEFAULT_TIMEOUT = 30000;
 
 export class LiteLLMClient {
   private baseUrl: string;
   private masterKey: string;
+  private timeout: number;
 
-  constructor(config: Config) {
-    this.baseUrl = config.litellm.baseUrl;
-    this.masterKey = config.litellm.masterKey;
+  constructor(config: LiteLLMConfig, timeout = DEFAULT_TIMEOUT) {
+    this.baseUrl = config.baseUrl.replace(/\/$/, '');
+    this.masterKey = config.masterKey;
+    this.timeout = timeout;
   }
 
-  private async request<T>(endpoint: string, queryParams?: Record<string, string>): Promise<T> {
-    const url = new URL(`${this.baseUrl}${endpoint}`);
-    if (queryParams) {
-      Object.entries(queryParams).forEach(([key, value]) => {
-        url.searchParams.append(key, value);
+  private async request<T>(path: string, options: RequestInit = {}): Promise<T> {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), this.timeout);
+
+    try {
+      const response = await fetch(`${this.baseUrl}${path}`, {
+        ...options,
+        signal: controller.signal,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${this.masterKey}`,
+          ...options.headers,
+        },
       });
+
+      if (!response.ok) {
+        const errorBody = await response.text();
+        throw new Error(`LiteLLM API error: ${response.status} ${response.statusText} - ${errorBody}`);
+      }
+
+      return response.json();
+    } finally {
+      clearTimeout(timeoutId);
     }
+  }
 
-    const response = await fetch(url.toString(), {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${this.masterKey}`,
-        'Content-Type': 'application/json',
-      },
+  async getUserInfo(userId?: string): Promise<UserInfo> {
+    const query = userId ? `?user_id=${encodeURIComponent(userId)}` : '';
+    return this.request<UserInfo>(`/user/info${query}`);
+  }
+
+  async listKeys(userId?: string): Promise<VirtualKey[]> {
+    const query = userId ? `?user_id=${encodeURIComponent(userId)}` : '';
+    return this.request<VirtualKey[]>(`/key/info${query}`);
+  }
+
+  async generateKey(request: GenerateKeyRequest): Promise<GenerateKeyResponse> {
+    return this.request<GenerateKeyResponse>('/key/generate', {
+      method: 'POST',
+      body: JSON.stringify(request),
     });
-
-    if (!response.ok) {
-      const error = await response.text();
-      throw new Error(`LiteLLM API error (${response.status}): ${error}`);
-    }
-
-    return response.json();
   }
 
-  async getUserInfo(userId: string): Promise<LiteLLMUserInfo> {
-    return this.request<LiteLLMUserInfo>('/user/info', { user_id: userId });
-  }
-
-  async listTeams(): Promise<{ teams: LiteLLMTeam[] }> {
-    return this.request<{ teams: LiteLLMTeam[] }>('/team/list');
-  }
-
-  async getDailyActivity(userId: string, days: number = 7): Promise<LiteLLMDailyActivity[]> {
-    return this.request<LiteLLMDailyActivity[]>('/user/daily/activity', {
-      user_id: userId,
-      days: days.toString(),
+  async deleteKeys(request: DeleteKeyRequest): Promise<{ success: boolean }> {
+    return this.request<{ success: boolean }>('/key/delete', {
+      method: 'POST',
+      body: JSON.stringify(request),
     });
+  }
+
+  async listModels(): Promise<ModelInfo[]> {
+    return this.request<ModelInfo[]>('/models');
+  }
+
+  async getUsage(startDate: string, endDate: string, userId?: string, groupBy?: string): Promise<UsageMetrics> {
+    const params = new URLSearchParams({
+      start_date: startDate,
+      end_date: endDate,
+    });
+    if (userId) params.append('user_id', userId);
+    if (groupBy) params.append('group_by', groupBy);
+
+    return this.request<UsageMetrics>(`/usage/keys?${params.toString()}`);
   }
 }
