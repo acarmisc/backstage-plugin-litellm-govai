@@ -69,10 +69,13 @@ async function resolveUserContext(
   httpAuth: HttpAuthService,
   req: express.Request,
 ): Promise<UserContext> {
-  const credentials = await httpAuth.credentials(req);
+  // Allow unauthenticated requests by explicitly requesting 'none' credentials.
+  // This is safe because `dangerouslyDisableDefaultAuthPolicy: true` is set in app-config.
+  const credentials = await httpAuth.credentials(req, { allow: ['none'] });
 
   // Use entity ref from credentials principal if available
-  const principalRef = (credentials.principal as any).userEntityRef ?? (credentials.principal as any).subject ?? '';
+  const principal = credentials.principal as { userEntityRef?: string; subject?: string };
+  const principalRef = principal?.userEntityRef ?? principal?.subject ?? '';
   const email = principalRef ? principalRef.split(':').pop() || 'user@unknown' : 'user@unknown';
 
   return {

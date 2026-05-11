@@ -8,16 +8,16 @@ export default createBackendPlugin({
     env.registerInit({
       deps: {
         config: coreServices.rootConfig,
-        identity: coreServices.identity,
+        httpAuth: coreServices.httpAuth,
         http: coreServices.httpRouter,
         logger: coreServices.logger,
       },
-      async init({ config, identity, http, logger }) {
+      async init({ config, httpAuth, http, logger }) {
         const winstonLogger = loggerToWinstonLogger(logger);
 
         const router = await createRouter({
           config,
-          identity,
+          httpAuth,
           logger: winstonLogger,
         });
 
