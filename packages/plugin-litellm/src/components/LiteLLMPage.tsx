@@ -1,12 +1,13 @@
-import React, { useState, useCallback } from 'react';
-import { Grid, Box, Snackbar, Alert, CircularProgress } from '@mui/material';
+import React, { useState, useCallback, useMemo } from 'react';
+import { Grid, Box, Snackbar, Alert, CircularProgress, Typography, Paper } from '@mui/material';
 import { useAsync, useAsyncRetry } from 'react-use';
 import { useApi } from '@backstage/core-plugin-api';
 import { DashboardHeader } from './DashboardHeader';
 import { KeysTable } from './KeysTable';
 import { UsageStats } from './UsageStats';
+import { TeamUsage } from './TeamUsage';
 import { liteLlmApiRef } from '../api';
-import { DateRange, GenerateKeyRequest, GenerateKeyResponse } from '../types';
+import { DateRange, GenerateKeyRequest, GenerateKeyResponse, UsageMetrics } from '../types';
 
 export const LiteLLMPage: React.FC = () => {
   const api = useApi(liteLlmApiRef);
@@ -20,41 +21,74 @@ export const LiteLLMPage: React.FC = () => {
 
   const [snackbar, setSnackbar] = useState<{ message: string; severity: 'success' | 'error' } | null>(null);
 
-  const { value: userInfo, loading: userLoading } = useAsync(async () => {
-    try {
-      return await api.getUserInfo();
-    } catch (e: any) {
-      setSnackbar({ message: `Failed to load user info: ${e.message}`, severity: 'error' });
-      return null;
-    }
-  }, [api]);
+  // Team usage cache: teamId -> UsageMetrics
+  const [teamUsageCache, setTeamUsageCache] = useState<Record<string, UsageMetrics | null>>({});
+  const [teamUsageLoading, setTeamUsageLoading] = useState<Record<string, boolean>>({});
 
-  const {
-    value: keys,
-    loading: keysLoading,
-    retry: refreshKeys,
-  } = useAsyncRetry(async () => {
-    try {
-      return await api.listKeys();
-    } catch (e: any) {
-      setSnackbar({ message: `Failed to load keys: ${e.message}`, severity: 'error' });
-      return [];
-    }
-  }, [api]);
+  const { value: userInfo, loading: userLoading, error: userError } = useAsync(
+    () => api.getUserInfo(),
+    [api],
+  );
 
-  const { value: models, loading: modelsLoading } = useAsync(async () => {
-    try {
-      return await api.listModels();
-    } catch {
-      return [];
-    }
-  }, [api]);
+  const { value: keys, loading: keysLoading, retry: refreshKeys } = useAsyncRetry(
+    async () => {
+      try {
+        return await api.listKeys();
+      } catch (e: any) {
+        setSnackbar({ message: `Failed to load keys: ${e.message}`, severity: 'error' });
+        return [];
+      }
+    },
+    [api],
+  );
+
+  const { value: allModels, loading: modelsLoading } = useAsync(
+    () => api.listModels().catch(() => []),
+    [api],
+  );
+
+  const { value: teams, loading: teamsLoading } = useAsync(
+    () => api.getTeams().catch(() => []),
+    [api],
+  );
 
   const { value: usage, loading: usageLoading } = useAsync(async () => {
     const startDate = dateRange.start.toISOString().split('T')[0];
     const endDate = dateRange.end.toISOString().split('T')[0];
     return api.getUsage(startDate, endDate);
   }, [api, dateRange]);
+
+  // Fetch team usage on demand when a team card is expanded
+  const loadTeamUsage = useCallback(async (teamId: string) => {
+    if (teamUsageCache[teamId] !== undefined || teamUsageLoading[teamId]) return;
+    setTeamUsageLoading(prev => ({ ...prev, [teamId]: true }));
+    try {
+      const startDate = dateRange.start.toISOString().split('T')[0];
+      const endDate = dateRange.end.toISOString().split('T')[0];
+      const data = await api.getTeamUsage(teamId, startDate, endDate);
+      setTeamUsageCache(prev => ({ ...prev, [teamId]: data }));
+    } catch {
+      setTeamUsageCache(prev => ({ ...prev, [teamId]: null }));
+    } finally {
+      setTeamUsageLoading(prev => ({ ...prev, [teamId]: false }));
+    }
+  }, [api, dateRange, teamUsageCache, teamUsageLoading]);
+
+  // Models available for key generation: intersection of all models with user-level
+  // and team-level restrictions. If a user has no model restrictions, all models are allowed.
+  const allowedModels = useMemo(() => {
+    if (!allModels?.length) return [];
+    const userModels = userInfo?.models;
+    const teamModels = teams?.flatMap(t => t.models ?? []);
+    const hasUserRestriction = userModels && userModels.length > 0;
+    const hasTeamRestriction = teamModels && teamModels.length > 0;
+    if (!hasUserRestriction && !hasTeamRestriction) return allModels;
+    const allowed = new Set([
+      ...(hasUserRestriction ? userModels! : allModels.map(m => m.model_name)),
+      ...(hasTeamRestriction ? teamModels! : []),
+    ]);
+    return allModels.filter(m => allowed.has(m.model_name));
+  }, [allModels, userInfo, teams]);
 
   const handleGenerateKey = useCallback(
     async (request: GenerateKeyRequest): Promise<GenerateKeyResponse> => {
@@ -79,10 +113,27 @@ export const LiteLLMPage: React.FC = () => {
     [api, refreshKeys],
   );
 
-  if ((userLoading || keysLoading || modelsLoading) && !userInfo && !keys) {
+  const isInitialLoading = userLoading && !userInfo;
+
+  if (isInitialLoading) {
     return (
       <Box display="flex" justifyContent="center" alignItems="center" minHeight="50vh">
         <CircularProgress />
+      </Box>
+    );
+  }
+
+  // User exists in Backstage but has no LiteLLM account
+  if (userError || !userInfo) {
+    return (
+      <Box p={3}>
+        <Paper sx={{ p: 3 }}>
+          <Typography variant="h6" gutterBottom>Account not provisioned</Typography>
+          <Typography color="text.secondary">
+            Your Backstage account is not linked to a LiteLLM user. Contact your administrator
+            to have an account created with the appropriate team and model access.
+          </Typography>
+        </Paper>
       </Box>
     );
   }
@@ -91,21 +142,36 @@ export const LiteLLMPage: React.FC = () => {
     <Box p={3}>
       <Grid container spacing={2}>
         <Grid item xs={12}>
-          <DashboardHeader userInfo={userInfo ?? null} loading={userLoading} />
+          <DashboardHeader userInfo={userInfo} loading={userLoading} />
         </Grid>
+
+        <Grid item xs={12}>
+          <TeamUsage
+            teams={teams ?? []}
+            loading={teamsLoading}
+            dateRange={dateRange}
+            getTeamUsage={teamId => {
+              if (teamUsageCache[teamId] === undefined) loadTeamUsage(teamId);
+              return teamUsageCache[teamId] ?? null;
+            }}
+            getTeamUsageLoading={teamId => teamUsageLoading[teamId] ?? false}
+          />
+        </Grid>
+
         <Grid item xs={12}>
           <KeysTable
             keys={keys ?? []}
-            models={models ?? []}
-            loading={keysLoading}
+            models={allowedModels}
+            loading={keysLoading || modelsLoading}
             onGenerateKey={handleGenerateKey}
             onDeleteKey={handleDeleteKey}
           />
         </Grid>
+
         <Grid item xs={12}>
           <UsageStats
             usage={usage ?? null}
-            models={models ?? []}
+            models={allModels ?? []}
             dateRange={dateRange}
             onDateRangeChange={setDateRange}
             loading={usageLoading}

@@ -1,4 +1,14 @@
-import { LiteLLMConfig, UserInfo, VirtualKey, ModelInfo, UsageMetrics, GenerateKeyRequest, GenerateKeyResponse, DeleteKeyRequest } from './types';
+import {
+  LiteLLMConfig,
+  UserInfo,
+  VirtualKey,
+  ModelInfo,
+  UsageMetrics,
+  TeamInfo,
+  GenerateKeyRequest,
+  GenerateKeyResponse,
+  DeleteKeyRequest,
+} from './types';
 
 const DEFAULT_TIMEOUT = 30000;
 
@@ -69,14 +79,19 @@ export class LiteLLMClient {
     return Array.isArray(response) ? response : (response.data ?? []);
   }
 
+  async getTeamInfo(teamId: string): Promise<TeamInfo> {
+    return this.request<TeamInfo>(`/team/info?team_id=${encodeURIComponent(teamId)}`);
+  }
+
   async getUsage(startDate: string, endDate: string, userId?: string, groupBy?: string): Promise<UsageMetrics> {
-    const params = new URLSearchParams({
-      start_date: startDate,
-      end_date: endDate,
-    });
+    const params = new URLSearchParams({ start_date: startDate, end_date: endDate });
     if (userId) params.append('user_id', userId);
     if (groupBy) params.append('group_by', groupBy);
+    return this.request<UsageMetrics>(`/usage/keys?${params.toString()}`);
+  }
 
+  async getTeamUsage(teamId: string, startDate: string, endDate: string): Promise<UsageMetrics> {
+    const params = new URLSearchParams({ start_date: startDate, end_date: endDate, team_id: teamId });
     return this.request<UsageMetrics>(`/usage/keys?${params.toString()}`);
   }
 }

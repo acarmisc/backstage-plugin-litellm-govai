@@ -1,12 +1,30 @@
 export interface UserInfo {
   user_id: string;
-  email: string;
-  team_id?: string;
-  team_alias?: string;
+  user_email?: string;
+  email?: string;
+  teams?: string[];
+  models?: string[];
   max_budget?: number;
+  spend?: number;
   current_spend?: number;
   soft_limit?: number;
   hard_limit?: number;
+}
+
+export interface TeamMember {
+  user_id: string;
+  role: 'admin' | 'user';
+}
+
+export interface TeamInfo {
+  team_id: string;
+  team_alias?: string;
+  max_budget?: number;
+  spend: number;
+  members_with_roles?: TeamMember[];
+  models?: string[];
+  tpm_limit?: number;
+  rpm_limit?: number;
 }
 
 export interface VirtualKey {

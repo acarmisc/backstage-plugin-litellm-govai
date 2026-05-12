@@ -1,13 +1,23 @@
 import { createApiRef, FetchApi } from '@backstage/core-plugin-api';
-import { UserInfo, VirtualKey, ModelInfo, UsageMetrics, GenerateKeyRequest, GenerateKeyResponse } from './types';
+import {
+  UserInfo,
+  VirtualKey,
+  ModelInfo,
+  UsageMetrics,
+  TeamInfo,
+  GenerateKeyRequest,
+  GenerateKeyResponse,
+} from './types';
 
 export interface LiteLlmApiInterface {
-  getUserInfo(userId?: string): Promise<UserInfo>;
-  listKeys(userId?: string): Promise<VirtualKey[]>;
+  getUserInfo(): Promise<UserInfo>;
+  listKeys(): Promise<VirtualKey[]>;
   generateKey(request: GenerateKeyRequest): Promise<GenerateKeyResponse>;
   deleteKey(keyId: string): Promise<{ success: boolean }>;
   listModels(): Promise<ModelInfo[]>;
-  getUsage(startDate: string, endDate: string, userId?: string): Promise<UsageMetrics>;
+  getTeams(): Promise<TeamInfo[]>;
+  getUsage(startDate: string, endDate: string): Promise<UsageMetrics>;
+  getTeamUsage(teamId: string, startDate: string, endDate: string): Promise<UsageMetrics>;
 }
 
 export const liteLlmApiRef = createApiRef<LiteLlmApiInterface>({
@@ -26,9 +36,7 @@ export class LiteLlmApi implements LiteLlmApiInterface {
   private async get<T>(path: string, params?: Record<string, string>): Promise<T> {
     const url = new URL(`${this.basePath}${path}`, window.location.origin);
     if (params) {
-      Object.entries(params).forEach(([key, value]) => {
-        url.searchParams.append(key, value);
-      });
+      Object.entries(params).forEach(([key, value]) => url.searchParams.append(key, value));
     }
     const response = await this.fetchApi.fetch(url.toString());
     if (!response.ok) {
@@ -60,14 +68,14 @@ export class LiteLlmApi implements LiteLlmApiInterface {
     return response.json();
   }
 
-  async getUserInfo(userId?: string): Promise<UserInfo> {
-    const params = userId ? { user_id: userId } : undefined;
-    return this.get<UserInfo>('/user/info', params);
+  // User identity is resolved server-side from the Backstage Bearer token.
+  // No user_id param needed on the frontend.
+  async getUserInfo(): Promise<UserInfo> {
+    return this.get<UserInfo>('/user/info');
   }
 
-  async listKeys(userId?: string): Promise<VirtualKey[]> {
-    const params = userId ? { user_id: userId } : undefined;
-    return this.get<VirtualKey[]>('/keys', params);
+  async listKeys(): Promise<VirtualKey[]> {
+    return this.get<VirtualKey[]>('/keys');
   }
 
   async generateKey(request: GenerateKeyRequest): Promise<GenerateKeyResponse> {
@@ -82,9 +90,18 @@ export class LiteLlmApi implements LiteLlmApiInterface {
     return this.get<ModelInfo[]>('/models');
   }
 
-  async getUsage(startDate: string, endDate: string, userId?: string): Promise<UsageMetrics> {
-    const params: Record<string, string> = { start_date: startDate, end_date: endDate };
-    if (userId) params.user_id = userId;
-    return this.get<UsageMetrics>('/usage', params);
+  async getTeams(): Promise<TeamInfo[]> {
+    return this.get<TeamInfo[]>('/teams');
+  }
+
+  async getUsage(startDate: string, endDate: string): Promise<UsageMetrics> {
+    return this.get<UsageMetrics>('/usage', { start_date: startDate, end_date: endDate });
+  }
+
+  async getTeamUsage(teamId: string, startDate: string, endDate: string): Promise<UsageMetrics> {
+    return this.get<UsageMetrics>(`/teams/${encodeURIComponent(teamId)}/usage`, {
+      start_date: startDate,
+      end_date: endDate,
+    });
   }
 }
