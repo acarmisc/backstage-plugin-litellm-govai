@@ -97,3 +97,33 @@ export interface LiteLLMConfig {
   baseUrl: string;
   masterKey: string;
 }
+
+export interface ProvisioningDefaults {
+  maxBudget: number;
+  budgetDuration: string;
+  models: string[];
+  teams: string[];
+  tpmLimit?: number;
+  rpmLimit?: number;
+  metadata: Record<string, string>;
+}
+
+export interface CreateUserRequest {
+  user_id: string;
+  user_email?: string;
+  max_budget?: number;
+  budget_duration?: string;
+  models?: string[];
+  teams?: string[];
+  tpm_limit?: number;
+  rpm_limit?: number;
+  metadata?: Record<string, string>;
+}
+
+export interface CreateUserResponse {
+  user_id: string;
+  user_email?: string;
+  max_budget?: number;
+  models?: string[];
+  teams?: string[];
+}

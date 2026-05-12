@@ -125,14 +125,24 @@ export const LiteLLMPage: React.FC = () => {
 
   // User exists in Backstage but has no LiteLLM account
   if (userError || !userInfo) {
+    const isProvisioningEnabled = (userError as any)?.body?.provisioning === true;
+    const hint = (userError as any)?.body?.hint;
     return (
       <Box p={3}>
         <Paper sx={{ p: 3 }}>
           <Typography variant="h6" gutterBottom>Account not provisioned</Typography>
-          <Typography color="text.secondary">
-            Your Backstage account is not linked to a LiteLLM user. Contact your administrator
-            to have an account created with the appropriate team and model access.
+          <Typography color="text.secondary" paragraph>
+            Your Backstage account is not linked to a LiteLLM user.
           </Typography>
+          {hint ? (
+            <Typography variant="body2" color="text.secondary">{hint}</Typography>
+          ) : (
+            <Typography variant="body2" color="text.secondary">
+              {isProvisioningEnabled
+                ? 'Auto-provisioning is enabled but failed. Check the backend logs.'
+                : 'Set litellm.provisioning.enabled: true in app-config.yaml to enable auto-provisioning, or ask your administrator to create the account manually.'}
+            </Typography>
+          )}
         </Paper>
       </Box>
     );

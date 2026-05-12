@@ -10,6 +10,7 @@ import {
   TeamInfo,
   GenerateKeyRequest,
   GenerateKeyResponse,
+  ProvisioningDefaults,
 } from './types';
 
 export interface RouterOptions {
@@ -19,12 +20,40 @@ export interface RouterOptions {
 }
 
 /**
+ * Reads the provisioning block from config, applying safe defaults for every
+ * field so the feature works out-of-the-box without any YAML required.
+ *
+ * Safe defaults rationale:
+ *   maxBudget:      $10  — prevents runaway spend on a forgotten test account
+ *   budgetDuration: 30d  — monthly reset, aligns with typical billing cycles
+ *   models:         []   — empty means all proxy models are allowed;
+ *                          restrict here or at team level for tighter control
+ *   teams:          []   — no automatic team assignment; add IDs to enrol users
+ *   tpmLimit:       none — LiteLLM global / team limits still apply
+ *   rpmLimit:       none — same
+ *   metadata:       backstage source tag only
+ */
+function readProvisioningDefaults(config: Config): { enabled: boolean; defaults: ProvisioningDefaults } {
+  const enabled = config.getOptionalBoolean('litellm.provisioning.enabled') ?? false;
+  const defaults: ProvisioningDefaults = {
+    maxBudget: config.getOptionalNumber('litellm.provisioning.defaults.maxBudget') ?? 10,
+    budgetDuration: config.getOptionalString('litellm.provisioning.defaults.budgetDuration') ?? '30d',
+    models: config.getOptionalStringArray('litellm.provisioning.defaults.models') ?? [],
+    teams: config.getOptionalStringArray('litellm.provisioning.defaults.teams') ?? [],
+    tpmLimit: config.getOptionalNumber('litellm.provisioning.defaults.tpmLimit'),
+    rpmLimit: config.getOptionalNumber('litellm.provisioning.defaults.rpmLimit'),
+    metadata: (config.getOptional<Record<string, string>>('litellm.provisioning.defaults.metadata') ?? {}),
+  };
+  return { enabled, defaults };
+}
+
+/**
  * Extracts the authenticated Backstage user identity from the request token.
- * Returns the userEntityRef (e.g. "user:default/john.doe") or undefined if
+ * Returns the userEntityRef (e.g. "user:default/john.doe") or undefined when
  * the request carries no user credential (service-to-service calls).
  */
 async function resolveUserId(req: Request, auth: AuthService): Promise<string | undefined> {
-  const rawToken = req.headers.authorization?.slice(7); // strip "Bearer "
+  const rawToken = req.headers.authorization?.slice(7);
   if (!rawToken) return undefined;
   try {
     const credentials = await auth.authenticate(rawToken);
@@ -33,9 +62,46 @@ async function resolveUserId(req: Request, auth: AuthService): Promise<string | 
       return principal.userEntityRef as string;
     }
   } catch {
-    // token invalid or service token — fall through
+    // invalid or service token — caller gets query-param fallback
   }
   return undefined;
+}
+
+/**
+ * Creates a LiteLLM user for the given Backstage identity using the configured
+ * defaults. Returns the UserInfo of the newly created account.
+ */
+async function provisionUser(
+  client: LiteLLMClient,
+  userId: string,
+  defaults: ProvisioningDefaults,
+  logger: any,
+): Promise<UserInfo | null> {
+  const payload = {
+    user_id: userId,
+    max_budget: defaults.maxBudget,
+    budget_duration: defaults.budgetDuration,
+    models: defaults.models,
+    teams: defaults.teams,
+    ...(defaults.tpmLimit !== undefined && { tpm_limit: defaults.tpmLimit }),
+    ...(defaults.rpmLimit !== undefined && { rpm_limit: defaults.rpmLimit }),
+    metadata: {
+      ...defaults.metadata,
+      provisioned_by: 'backstage',
+      provisioned_at: new Date().toISOString(),
+      backstage_entity: userId,
+    },
+  };
+
+  logger.info(`Provisioning new LiteLLM user for Backstage identity: ${userId}`);
+  try {
+    await client.createUser(payload);
+    // Fetch the freshly-created user record to return consistent UserInfo shape
+    return await client.getUserInfo(userId);
+  } catch (err: any) {
+    logger.error(`Failed to provision LiteLLM user ${userId}: ${err.message}`);
+    return null;
+  }
 }
 
 export async function createRouter(options: RouterOptions): Promise<Router> {
@@ -44,21 +110,44 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
   const baseUrl = config.getString('litellm.baseUrl');
   const masterKey = config.getString('litellm.masterKey');
   const client = new LiteLLMClient({ baseUrl, masterKey });
+  const { enabled: provisioningEnabled, defaults: provisioningDefaults } = readProvisioningDefaults(config);
+
+  if (provisioningEnabled) {
+    logger.info(
+      `LiteLLM auto-provisioning enabled — defaults: budget=$${provisioningDefaults.maxBudget}/${provisioningDefaults.budgetDuration}, models=${provisioningDefaults.models.length ? provisioningDefaults.models.join(',') : 'all'}, teams=[${provisioningDefaults.teams.join(',')}]`,
+    );
+  }
 
   const router = Router();
 
   router.get('/health', (_req: Request, res: Response) => {
-    res.json({ status: 'ok' });
+    res.json({ status: 'ok', provisioning: provisioningEnabled });
   });
 
-  // Resolve user: prefer the identity extracted from the Backstage token so the
-  // caller cannot spoof another user_id. Falls back to the query param only when
-  // no user token is present (e.g. admin tooling using a service token).
   router.get('/user/info', async (req: Request, res: Response) => {
     try {
       const tokenUserId = await resolveUserId(req, auth);
       const userId = tokenUserId ?? (req.query.user_id as string | undefined);
-      const userInfo: UserInfo = await client.getUserInfo(userId);
+
+      let userInfo: UserInfo | null = await client.getUserInfo(userId);
+
+      if (!userInfo) {
+        if (provisioningEnabled && userId) {
+          userInfo = await provisionUser(client, userId, provisioningDefaults, logger);
+        }
+
+        if (!userInfo) {
+          res.status(404).json({
+            error: 'User not found in LiteLLM',
+            provisioning: provisioningEnabled,
+            hint: provisioningEnabled
+              ? 'Provisioning attempted but failed — check LiteLLM logs'
+              : 'Enable litellm.provisioning.enabled in app-config.yaml or create the user manually',
+          });
+          return;
+        }
+      }
+
       res.json(userInfo);
     } catch (error: any) {
       logger.error('Failed to fetch user info', error);
@@ -83,7 +172,6 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
       const tokenUserId = await resolveUserId(req, auth);
       const request: GenerateKeyRequest = {
         ...req.body,
-        // Bind generated key to the authenticated user so LiteLLM enforces their limits.
         ...(tokenUserId && { user_id: tokenUserId }),
       };
       const result: GenerateKeyResponse = await client.generateKey(request);
@@ -119,16 +207,13 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
     }
   });
 
-  // Returns TeamInfo for every team the authenticated user belongs to.
-  // Team membership is read from /user/info .teams[], then each team is
-  // resolved in parallel via /team/info.
   router.get('/teams', async (req: Request, res: Response) => {
     try {
       const tokenUserId = await resolveUserId(req, auth);
       const userId = tokenUserId ?? (req.query.user_id as string | undefined);
-      const userInfo: UserInfo = await client.getUserInfo(userId);
+      const userInfo: UserInfo | null = await client.getUserInfo(userId);
 
-      if (!userInfo.teams?.length) {
+      if (!userInfo?.teams?.length) {
         res.json([]);
         return;
       }
@@ -170,13 +255,13 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
 
   router.get('/usage', async (req: Request, res: Response) => {
     try {
-      const { start_date, end_date, user_id, group_by } = req.query;
+      const { start_date, end_date, group_by } = req.query;
       if (!start_date || !end_date) {
         res.status(400).json({ error: 'start_date and end_date are required' });
         return;
       }
       const tokenUserId = await resolveUserId(req, auth);
-      const userId = tokenUserId ?? (user_id as string | undefined);
+      const userId = tokenUserId ?? (req.query.user_id as string | undefined);
       const usage: UsageMetrics = await client.getUsage(
         start_date as string,
         end_date as string,

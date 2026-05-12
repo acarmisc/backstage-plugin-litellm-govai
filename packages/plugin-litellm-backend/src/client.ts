@@ -8,6 +8,8 @@ import {
   GenerateKeyRequest,
   GenerateKeyResponse,
   DeleteKeyRequest,
+  CreateUserRequest,
+  CreateUserResponse,
 } from './types';
 
 const DEFAULT_TIMEOUT = 30000;
@@ -40,7 +42,9 @@ export class LiteLLMClient {
 
       if (!response.ok) {
         const errorBody = await response.text();
-        throw new Error(`LiteLLM API error: ${response.status} ${response.statusText} - ${errorBody}`);
+        const err = new Error(`LiteLLM API error: ${response.status} ${response.statusText} - ${errorBody}`);
+        (err as any).status = response.status;
+        throw err;
       }
 
       return response.json();
@@ -49,9 +53,25 @@ export class LiteLLMClient {
     }
   }
 
-  async getUserInfo(userId?: string): Promise<UserInfo> {
+  /**
+   * Returns null when the user is not found in LiteLLM (404).
+   * Throws on all other errors so callers know something went wrong.
+   */
+  async getUserInfo(userId?: string): Promise<UserInfo | null> {
     const query = userId ? `?user_id=${encodeURIComponent(userId)}` : '';
-    return this.request<UserInfo>(`/user/info${query}`);
+    try {
+      return await this.request<UserInfo>(`/user/info${query}`);
+    } catch (err: any) {
+      if (err.status === 404) return null;
+      throw err;
+    }
+  }
+
+  async createUser(payload: CreateUserRequest): Promise<CreateUserResponse> {
+    return this.request<CreateUserResponse>('/user/new', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
   }
 
   async listKeys(userId?: string): Promise<VirtualKey[]> {
