@@ -1,7 +1,20 @@
-import { FetchApi } from '@backstage/core-plugin-api';
+import { createApiRef, FetchApi } from '@backstage/core-plugin-api';
 import { UserInfo, VirtualKey, ModelInfo, UsageMetrics, GenerateKeyRequest, GenerateKeyResponse } from './types';
 
-export class LiteLlmApi {
+export interface LiteLlmApiInterface {
+  getUserInfo(userId?: string): Promise<UserInfo>;
+  listKeys(userId?: string): Promise<VirtualKey[]>;
+  generateKey(request: GenerateKeyRequest): Promise<GenerateKeyResponse>;
+  deleteKey(keyId: string): Promise<{ success: boolean }>;
+  listModels(): Promise<ModelInfo[]>;
+  getUsage(startDate: string, endDate: string, userId?: string): Promise<UsageMetrics>;
+}
+
+export const liteLlmApiRef = createApiRef<LiteLlmApiInterface>({
+  id: 'plugin.litellm.api',
+});
+
+export class LiteLlmApi implements LiteLlmApiInterface {
   private fetchApi: FetchApi;
   private basePath: string;
 
@@ -37,7 +50,7 @@ export class LiteLlmApi {
   }
 
   private async del<T>(path: string): Promise<T> {
-    const response = await fetch(`${this.basePath}${path}`, {
+    const response = await this.fetchApi.fetch(`${this.basePath}${path}`, {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
     });

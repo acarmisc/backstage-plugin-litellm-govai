@@ -1,11 +1,11 @@
 {
   "name": "@acarmisc/backstage-plugin-litellm",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "backstage": {
     "role": "frontend-plugin",
     "pluginId": "litellm",
     "pluginPackages": [
-      "@govai/backstage-plugin-litellm"
+      "@acarmisc/backstage-plugin-litellm"
     ]
   },
   "publishConfig": {
@@ -30,12 +30,13 @@
     "@backstage/plugin-catalog-react": "^1.13.0",
     "@backstage/theme": "^0.5.6",
     "@backstage/types": "^1.1.0",
-    "@material-ui/core": "^4.12.4",
-    "@material-ui/icons": "^4.9.1",
-    "@material-ui/lab": "4.0.0-alpha.61",
+    "@emotion/react": "^11.11.0",
+    "@emotion/styled": "^11.11.0",
+    "@mui/icons-material": "^5.18.0",
+    "@mui/material": "^5.16.0",
     "react": "^17.0.0 || ^18.0.0",
     "react-use": "^17.2.4",
-    "recharts": "^2.12.0",
+    "recharts": "^2.15.4",
     "zod": "^3.22.4"
   },
   "devDependencies": {

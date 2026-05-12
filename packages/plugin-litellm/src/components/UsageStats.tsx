@@ -9,7 +9,7 @@ import {
   MenuItem,
   Grid,
   CircularProgress,
-} from '@material-ui/core';
+} from '@mui/material';
 import {
   AreaChart,
   Area,
@@ -32,30 +32,7 @@ interface UsageStatsProps {
   loading: boolean;
 }
 
-type DatePreset = 'today' | '7d' | '30d' | 'custom';
-
-const DateRangeSelector: React.FC<{
-  preset: DatePreset;
-  onChange: (preset: DatePreset, customRange?: DateRange) => void;
-  dateRange: DateRange;
-}> = ({ preset, onChange, dateRange }) => {
-  return (
-    <Box display="flex" gap={1}>
-      {(['today', '7d', '30d'] as DatePreset[]).map((p) => (
-        <Select
-          key={p}
-          value={preset}
-          onChange={(e) => onChange(e.target.value as DatePreset)}
-          size="small"
-        >
-          <MenuItem value="today">Today</MenuItem>
-          <MenuItem value="7d">Last 7 days</MenuItem>
-          <MenuItem value="30d">Last 30 days</MenuItem>
-        </Select>
-      ))}
-    </Box>
-  );
-};
+type DatePreset = 'today' | '7d' | '30d';
 
 export const UsageStats: React.FC<UsageStatsProps> = ({
   usage,
@@ -64,11 +41,22 @@ export const UsageStats: React.FC<UsageStatsProps> = ({
   onDateRangeChange,
   loading,
 }) => {
+  const [selectedPreset, setSelectedPreset] = useState<DatePreset>('7d');
   const [selectedModel, setSelectedModel] = useState<string>('all');
+
+  const handlePresetChange = (preset: DatePreset) => {
+    setSelectedPreset(preset);
+    const end = new Date();
+    const start = new Date();
+    if (preset === 'today') start.setHours(0, 0, 0, 0);
+    else if (preset === '7d') start.setDate(start.getDate() - 7);
+    else if (preset === '30d') start.setDate(start.getDate() - 30);
+    onDateRangeChange({ start, end });
+  };
 
   if (loading) {
     return (
-      <Paper style={{ padding: 16 }}>
+      <Paper sx={{ p: 2 }}>
         <Box display="flex" justifyContent="center" p={4}>
           <CircularProgress />
         </Box>
@@ -76,17 +64,14 @@ export const UsageStats: React.FC<UsageStatsProps> = ({
     );
   }
 
-  const formatDate = (date: Date) => {
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-  };
-
-  const dailyData = usage?.daily_usage?.map((d) => ({
-    date: d.date,
-    spend: d.spend,
-    promptTokens: d.prompt_tokens,
-    completionTokens: d.completion_tokens,
-    totalTokens: d.total_tokens,
-  })) || [];
+  const dailyData =
+    usage?.daily_usage?.map((d) => ({
+      date: d.date,
+      spend: d.spend,
+      promptTokens: d.prompt_tokens,
+      completionTokens: d.completion_tokens,
+      totalTokens: d.total_tokens,
+    })) || [];
 
   const usageByModelData = Object.entries(usage?.usage_by_model || {}).map(([model, data]) => ({
     model,
@@ -101,25 +86,29 @@ export const UsageStats: React.FC<UsageStatsProps> = ({
       : usageByModelData.filter((d) => d.model === selectedModel);
 
   return (
-    <Paper style={{ padding: 16 }}>
+    <Paper sx={{ p: 2 }}>
       <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
         <Typography variant="h6">Usage Analytics</Typography>
         <Box display="flex" gap={2} alignItems="center">
-          <DateRangeSelector
-            preset="7d"
-            onChange={(preset) => {
-              const end = new Date();
-              const start = new Date();
-              if (preset === 'today') start.setHours(0, 0, 0, 0);
-              else if (preset === '7d') start.setDate(start.getDate() - 7);
-              else if (preset === '30d') start.setDate(start.getDate() - 30);
-              onDateRangeChange({ start, end });
-            }}
-            dateRange={dateRange}
-          />
-          <FormControl size="small" style={{ minWidth: 150 }}>
+          <FormControl size="small" sx={{ minWidth: 140 }}>
+            <InputLabel>Period</InputLabel>
+            <Select
+              value={selectedPreset}
+              label="Period"
+              onChange={(e) => handlePresetChange(e.target.value as DatePreset)}
+            >
+              <MenuItem value="today">Today</MenuItem>
+              <MenuItem value="7d">Last 7 days</MenuItem>
+              <MenuItem value="30d">Last 30 days</MenuItem>
+            </Select>
+          </FormControl>
+          <FormControl size="small" sx={{ minWidth: 150 }}>
             <InputLabel>Model</InputLabel>
-            <Select value={selectedModel} onChange={(e) => setSelectedModel(e.target.value)} label="Model">
+            <Select
+              value={selectedModel}
+              label="Model"
+              onChange={(e) => setSelectedModel(e.target.value)}
+            >
               <MenuItem value="all">All Models</MenuItem>
               {models.map((m) => (
                 <MenuItem key={m.model_name} value={m.model_name}>
@@ -133,7 +122,7 @@ export const UsageStats: React.FC<UsageStatsProps> = ({
 
       <Grid container spacing={3}>
         <Grid item xs={12} md={6}>
-          <Typography variant="subtitle2" color="textSecondary" gutterBottom>
+          <Typography variant="subtitle2" color="text.secondary" gutterBottom>
             Daily Spend
           </Typography>
           <Box height={250}>
@@ -150,7 +139,7 @@ export const UsageStats: React.FC<UsageStatsProps> = ({
         </Grid>
 
         <Grid item xs={12} md={6}>
-          <Typography variant="subtitle2" color="textSecondary" gutterBottom>
+          <Typography variant="subtitle2" color="text.secondary" gutterBottom>
             Token Usage by Model
           </Typography>
           <Box height={250}>
@@ -171,19 +160,19 @@ export const UsageStats: React.FC<UsageStatsProps> = ({
         <Grid item xs={12}>
           <Box display="flex" gap={4} flexWrap="wrap">
             <Box>
-              <Typography variant="body2" color="textSecondary">Total Spend</Typography>
+              <Typography variant="body2" color="text.secondary">Total Spend</Typography>
               <Typography variant="h5">${usage?.total_spend?.toFixed(4) || '0.00'}</Typography>
             </Box>
             <Box>
-              <Typography variant="body2" color="textSecondary">Total Tokens</Typography>
+              <Typography variant="body2" color="text.secondary">Total Tokens</Typography>
               <Typography variant="h5">{usage?.total_tokens?.toLocaleString() || '0'}</Typography>
             </Box>
             <Box>
-              <Typography variant="body2" color="textSecondary">Prompt Tokens</Typography>
+              <Typography variant="body2" color="text.secondary">Prompt Tokens</Typography>
               <Typography variant="h5">{usage?.prompt_tokens?.toLocaleString() || '0'}</Typography>
             </Box>
             <Box>
-              <Typography variant="body2" color="textSecondary">Completion Tokens</Typography>
+              <Typography variant="body2" color="text.secondary">Completion Tokens</Typography>
               <Typography variant="h5">{usage?.completion_tokens?.toLocaleString() || '0'}</Typography>
             </Box>
           </Box>

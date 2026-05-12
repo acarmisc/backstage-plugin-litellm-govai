@@ -1,16 +1,28 @@
-import { createFrontendPlugin } from '@backstage/frontend-plugin-api';
-import { PageExtension } from '@backstage/frontend-plugin-api';
-import { LiteLLMPage } from './components/LiteLLMPage';
+import React from 'react';
+import {
+  createFrontendPlugin,
+  createApiExtension,
+  createPageExtension,
+  createApiFactory,
+  fetchApiRef,
+} from '@backstage/frontend-plugin-api';
+import { liteLlmApiRef, LiteLlmApi } from './api';
 
 export const litellmPlugin = createFrontendPlugin({
   id: 'litellm',
   extensions: [
-    PageExtension.create({
-      id: 'litellm.page',
+    createApiExtension({
+      factory: createApiFactory({
+        api: liteLlmApiRef,
+        deps: { fetchApi: fetchApiRef },
+        factory: ({ fetchApi }) => new LiteLlmApi(fetchApi),
+      }),
+    }),
+    createPageExtension({
       defaultPath: '/litellm',
-      title: 'LiteLLM',
-      component: {
-        loader: async () => LiteLLMPage,
+      loader: async () => {
+        const { LiteLLMPage } = await import('./components/LiteLLMPage');
+        return React.createElement(LiteLLMPage);
       },
     }),
   ],

@@ -1,12 +1,12 @@
 {
   "name": "@acarmisc/backstage-plugin-litellm-backend",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "The Backstage backend plugin for LiteLLM governance",
   "backstage": {
     "role": "backend-plugin",
     "pluginId": "litellm",
     "pluginPackages": [
-      "@govai/backstage-plugin-litellm-backend"
+      "@acarmisc/backstage-plugin-litellm-backend"
     ]
   },
   "publishConfig": {

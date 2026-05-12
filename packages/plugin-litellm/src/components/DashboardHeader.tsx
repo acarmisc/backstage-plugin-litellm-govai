@@ -1,6 +1,6 @@
 import React from 'react';
-import { Box, Typography, LinearProgress, Paper, Chip } from '@material-ui/core';
-import { Warning, Group } from '@material-ui/icons';
+import { Box, Typography, LinearProgress, Paper, Chip } from '@mui/material';
+import { Warning, Group } from '@mui/icons-material';
 import { UserInfo } from '../types';
 
 interface DashboardHeaderProps {
@@ -11,7 +11,7 @@ interface DashboardHeaderProps {
 export const DashboardHeader: React.FC<DashboardHeaderProps> = ({ userInfo, loading }) => {
   if (loading) {
     return (
-      <Paper style={{ padding: 16, marginBottom: 16 }}>
+      <Paper sx={{ p: 2, mb: 2 }}>
         <LinearProgress />
       </Paper>
     );
@@ -28,14 +28,14 @@ export const DashboardHeader: React.FC<DashboardHeaderProps> = ({ userInfo, load
   const isNearLimit = budget > 0 && spend >= budget * 0.8 && !isOverBudget;
 
   return (
-    <Paper style={{ padding: 16, marginBottom: 16 }}>
+    <Paper sx={{ p: 2, mb: 2 }}>
       <Box display="flex" alignItems="center" gap={2} flexWrap="wrap">
         <Box flexGrow={1}>
           <Typography variant="h6">{userInfo.email}</Typography>
           {userInfo.team_alias && (
             <Box display="flex" alignItems="center" gap={0.5} mt={0.5}>
               <Group fontSize="small" color="action" />
-              <Typography variant="body2" color="textSecondary">
+              <Typography variant="body2" color="text.secondary">
                 {userInfo.team_alias}
               </Typography>
             </Box>
@@ -48,14 +48,16 @@ export const DashboardHeader: React.FC<DashboardHeaderProps> = ({ userInfo, load
               <Typography variant="body2">
                 Spend: ${spend.toFixed(2)} / ${budget.toFixed(2)}
               </Typography>
-              {isOverBudget && <Chip icon={<Warning />} label="Over Budget" size="small" color="secondary" />}
+              {isOverBudget && (
+                <Chip icon={<Warning />} label="Over Budget" size="small" color="error" />
+              )}
               {isNearLimit && <Chip label="Near Limit" size="small" color="warning" />}
             </Box>
             <LinearProgress
               variant="determinate"
               value={budgetPercentage}
-              color={isOverBudget ? 'secondary' : isNearLimit ? 'warning' : 'primary'}
-              style={{ height: 8, borderRadius: 4 }}
+              color={isOverBudget ? 'error' : isNearLimit ? 'warning' : 'primary'}
+              sx={{ height: 8, borderRadius: 1 }}
             />
           </Box>
         )}

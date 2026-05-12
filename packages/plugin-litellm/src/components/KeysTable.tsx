@@ -19,15 +19,15 @@ import {
   MenuItem,
   Chip,
   CircularProgress,
-} from '@material-ui/core';
-import { ContentCopy, Delete, Add, Visibility, VisibilityOff } from '@material-ui/icons';
-import { VirtualKey, ModelInfo, GenerateKeyRequest } from '../types';
+} from '@mui/material';
+import { ContentCopy, Delete, Add, Visibility, VisibilityOff } from '@mui/icons-material';
+import { VirtualKey, ModelInfo, GenerateKeyRequest, GenerateKeyResponse } from '../types';
 
 interface KeysTableProps {
   keys: VirtualKey[];
   models: ModelInfo[];
   loading: boolean;
-  onGenerateKey: (request: GenerateKeyRequest) => Promise<void>;
+  onGenerateKey: (request: GenerateKeyRequest) => Promise<GenerateKeyResponse>;
   onDeleteKey: (keyId: string) => Promise<void>;
 }
 
@@ -88,7 +88,7 @@ export const KeysTable: React.FC<KeysTableProps> = ({
 
   return (
     <>
-      <Paper style={{ marginBottom: 16 }}>
+      <Paper sx={{ mb: 2 }}>
         <Box display="flex" justifyContent="space-between" alignItems="center" p={2}>
           <Typography variant="h6">Virtual Keys</Typography>
           <Button
@@ -125,7 +125,7 @@ export const KeysTable: React.FC<KeysTableProps> = ({
               ) : keys.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={8} align="center">
-                    <Typography color="textSecondary">No keys found</Typography>
+                    <Typography color="text.secondary">No keys found</Typography>
                   </TableCell>
                 </TableRow>
               ) : (
@@ -134,7 +134,7 @@ export const KeysTable: React.FC<KeysTableProps> = ({
                     <TableCell>{key.key_alias || '-'}</TableCell>
                     <TableCell>
                       <Box display="flex" alignItems="center" gap={0.5}>
-                        <Typography variant="body2" component="code" style={{ fontFamily: 'monospace' }}>
+                        <Typography variant="body2" component="code" sx={{ fontFamily: 'monospace' }}>
                           {showKeyValue === key.key ? key.key : maskKey(key.key)}
                         </Typography>
                         <IconButton
@@ -163,7 +163,7 @@ export const KeysTable: React.FC<KeysTableProps> = ({
                       </Box>
                     </TableCell>
                     <TableCell align="right">
-                      <IconButton color="secondary" onClick={() => onDeleteKey(key.key)}>
+                      <IconButton color="error" onClick={() => onDeleteKey(key.key)}>
                         <Delete />
                       </IconButton>
                     </TableCell>
@@ -180,7 +180,7 @@ export const KeysTable: React.FC<KeysTableProps> = ({
         <DialogContent>
           {newKeyValue ? (
             <Box>
-              <Typography variant="body2" color="textSecondary" gutterBottom>
+              <Typography variant="body2" color="text.secondary" gutterBottom>
                 Copy this key now. You won't be able to see it again.
               </Typography>
               <Box
@@ -189,9 +189,9 @@ export const KeysTable: React.FC<KeysTableProps> = ({
                 gap={1}
                 mt={2}
                 p={2}
-                style={{ backgroundColor: '#f5f5f5', borderRadius: 4 }}
+                sx={{ backgroundColor: 'action.hover', borderRadius: 1 }}
               >
-                <Typography component="code" style={{ fontFamily: 'monospace', wordBreak: 'break-all' }}>
+                <Typography component="code" sx={{ fontFamily: 'monospace', wordBreak: 'break-all' }}>
                   {newKeyValue}
                 </Typography>
                 <IconButton onClick={() => copyToClipboard(newKeyValue)}>
@@ -223,7 +223,7 @@ export const KeysTable: React.FC<KeysTableProps> = ({
               <TextField
                 label="Max Budget (USD)"
                 type="number"
-                value={formData.max_budget || ''}
+                value={formData.max_budget ?? ''}
                 onChange={(e) =>
                   setFormData({ ...formData, max_budget: e.target.value ? Number(e.target.value) : undefined })
                 }
@@ -232,7 +232,7 @@ export const KeysTable: React.FC<KeysTableProps> = ({
               <TextField
                 label="TPM Limit"
                 type="number"
-                value={formData.tpm_limit || ''}
+                value={formData.tpm_limit ?? ''}
                 onChange={(e) =>
                   setFormData({ ...formData, tpm_limit: e.target.value ? Number(e.target.value) : undefined })
                 }
@@ -243,7 +243,7 @@ export const KeysTable: React.FC<KeysTableProps> = ({
                 label="Models"
                 SelectProps={{ multiple: true }}
                 value={formData.models || []}
-                onChange={(e) => setFormData({ ...formData, models: e.target.value as string[] })}
+                onChange={(e) => setFormData({ ...formData, models: e.target.value as unknown as string[] })}
                 fullWidth
               >
                 {models.map((model) => (

@@ -46,7 +46,8 @@ export class LiteLLMClient {
 
   async listKeys(userId?: string): Promise<VirtualKey[]> {
     const query = userId ? `?user_id=${encodeURIComponent(userId)}` : '';
-    return this.request<VirtualKey[]>(`/key/info${query}`);
+    const response = await this.request<{ info: VirtualKey[] } | VirtualKey[]>(`/key/info${query}`);
+    return Array.isArray(response) ? response : (response.info ?? []);
   }
 
   async generateKey(request: GenerateKeyRequest): Promise<GenerateKeyResponse> {
@@ -64,7 +65,8 @@ export class LiteLLMClient {
   }
 
   async listModels(): Promise<ModelInfo[]> {
-    return this.request<ModelInfo[]>('/models');
+    const response = await this.request<{ data: ModelInfo[] } | ModelInfo[]>('/models');
+    return Array.isArray(response) ? response : (response.data ?? []);
   }
 
   async getUsage(startDate: string, endDate: string, userId?: string, groupBy?: string): Promise<UsageMetrics> {
