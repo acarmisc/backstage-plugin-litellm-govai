@@ -12,8 +12,8 @@ export const litellmPlugin = createBackendPlugin({
         auth: coreServices.auth,
         discovery: coreServices.discovery,
       },
-      async init({ httpRouter, config, logger, auth }) {
-        const router = await createRouter({ config, logger, auth });
+      async init({ httpRouter, config, logger, auth, discovery }) {
+        const router = await createRouter({ config, logger, auth, discovery });
         httpRouter.use(router);
       },
     });

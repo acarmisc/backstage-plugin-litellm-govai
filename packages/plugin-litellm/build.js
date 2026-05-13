@@ -7,8 +7,9 @@ async function build() {
     platform: 'browser',
     outfile: 'dist/index.esm.js',
     format: 'esm',
-    packages: 'external', // all node_modules external; only bundle local source
+    packages: 'external',
     sourcemap: true,
+    loader: { '.ts': 'tsx', '.tsx': 'tsx' },
   });
   console.log('Build complete');
 }

@@ -12,6 +12,14 @@ export interface Config {
      */
     masterKey: string;
 
+    /**
+     * Email domain appended to the Backstage user entity name to form the
+     * LiteLLM user_id. When set, a user named "john.doe" maps to
+     * "john.doe@<userIdDomain>" in LiteLLM. Omit to use the bare entity name.
+     * @visibility backend
+     */
+    userIdDomain?: string;
+
     provisioning?: {
       /**
        * When true the backend automatically creates a LiteLLM user on first
@@ -68,6 +76,26 @@ export interface Config {
          */
         metadata?: Record<string, string>;
       };
+
+      /**
+       * Role-based provisioning overrides. Evaluated in order — first match wins.
+       * When a Backstage user belongs to the listed group, these settings override
+       * the defaults above. Fields omitted here fall back to defaults.
+       */
+      roles?: Array<{
+        /**
+         * Backstage group entity ref, e.g. "group:default/ai-power-users".
+         * Matched against the user's memberOf relations in the catalog.
+         */
+        group: string;
+        maxBudget?: number;
+        budgetDuration?: string;
+        models?: string[];
+        teams?: string[];
+        tpmLimit?: number;
+        rpmLimit?: number;
+        metadata?: Record<string, string>;
+      }>;
     };
   };
 }

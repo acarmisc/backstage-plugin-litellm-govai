@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { Config } from '@backstage/config';
-import { AuthService } from '@backstage/backend-plugin-api';
+import { AuthService, DiscoveryService } from '@backstage/backend-plugin-api';
+import { CatalogClient } from '@backstage/catalog-client';
 import { LiteLLMClient } from './client';
 import {
   UserInfo,
@@ -11,12 +12,30 @@ import {
   GenerateKeyRequest,
   GenerateKeyResponse,
   ProvisioningDefaults,
+  RoleConfig,
 } from './types';
 
 export interface RouterOptions {
   config: Config;
   logger: any;
   auth: AuthService;
+  discovery: DiscoveryService;
+}
+
+/**
+ * Converts a Backstage user entity ref to a LiteLLM user_id.
+ *
+ * When userIdDomain is configured, the entity name is suffixed with the domain
+ * so that LiteLLM user_ids match the organisation's email addresses:
+ *   "user:default/andrea.carmisciano" + "abstract.it"
+ *   → "andrea.carmisciano@abstract.it"
+ *
+ * Without a domain the bare entity name is returned unchanged, which works for
+ * deployments where LiteLLM users were created with plain usernames.
+ */
+function toLiteLLMUserId(userEntityRef: string, userIdDomain?: string): string {
+  const name = userEntityRef.split('/').pop() ?? userEntityRef;
+  return userIdDomain ? `${name}@${userIdDomain}` : name;
 }
 
 /**
@@ -33,6 +52,36 @@ export interface RouterOptions {
  *   rpmLimit:       none — same
  *   metadata:       backstage source tag only
  */
+function readRoleConfigs(config: Config): RoleConfig[] {
+  const raw = config.getOptional<any[]>('litellm.provisioning.roles');
+  if (!raw?.length) return [];
+  return raw.map((r: any) => ({
+    group: r.group as string,
+    maxBudget: r.maxBudget,
+    budgetDuration: r.budgetDuration,
+    models: r.models,
+    teams: r.teams,
+    tpmLimit: r.tpmLimit,
+    rpmLimit: r.rpmLimit,
+    metadata: r.metadata,
+  }));
+}
+
+/**
+ * Merges role config over defaults. Role fields override defaults only when explicitly set.
+ */
+function applyRoleOverrides(defaults: ProvisioningDefaults, role: RoleConfig): ProvisioningDefaults {
+  return {
+    maxBudget: role.maxBudget ?? defaults.maxBudget,
+    budgetDuration: role.budgetDuration ?? defaults.budgetDuration,
+    models: role.models ?? defaults.models,
+    teams: role.teams ?? defaults.teams,
+    tpmLimit: role.tpmLimit ?? defaults.tpmLimit,
+    rpmLimit: role.rpmLimit ?? defaults.rpmLimit,
+    metadata: { ...defaults.metadata, ...(role.metadata ?? {}) },
+  };
+}
+
 function readProvisioningDefaults(config: Config): { enabled: boolean; defaults: ProvisioningDefaults } {
   const enabled = config.getOptionalBoolean('litellm.provisioning.enabled') ?? false;
   const defaults: ProvisioningDefaults = {
@@ -104,13 +153,44 @@ async function provisionUser(
   }
 }
 
+/**
+ * Fetches the user's Backstage group memberships and returns the first matching
+ * role config (priority order), or undefined when no role matches.
+ */
+async function resolveUserRole(
+  userEntityRef: string,
+  roleConfigs: RoleConfig[],
+  catalogClient: CatalogClient,
+  auth: AuthService,
+  logger: any,
+): Promise<RoleConfig | undefined> {
+  if (!roleConfigs.length) return undefined;
+  try {
+    const { token } = await auth.getPluginRequestToken({
+      onBehalfOf: await auth.getOwnServiceCredentials(),
+      targetPluginId: 'catalog',
+    });
+    const entity = await catalogClient.getEntityByRef(userEntityRef, { token });
+    const groups = (entity?.relations ?? [])
+      .filter(r => r.type === 'memberOf')
+      .map(r => r.targetRef);
+    return roleConfigs.find(rc => groups.includes(rc.group));
+  } catch (err: any) {
+    logger.warn(`Could not resolve Backstage groups for ${userEntityRef}: ${err.message}`);
+    return undefined;
+  }
+}
+
 export async function createRouter(options: RouterOptions): Promise<Router> {
-  const { config, logger, auth } = options;
+  const { config, logger, auth, discovery } = options;
 
   const baseUrl = config.getString('litellm.baseUrl');
   const masterKey = config.getString('litellm.masterKey');
+  const userIdDomain = config.getOptionalString('litellm.userIdDomain');
   const client = new LiteLLMClient({ baseUrl, masterKey });
   const { enabled: provisioningEnabled, defaults: provisioningDefaults } = readProvisioningDefaults(config);
+  const roleConfigs = readRoleConfigs(config);
+  const catalogClient = new CatalogClient({ discoveryApi: discovery });
 
   if (provisioningEnabled) {
     logger.info(
@@ -126,14 +206,25 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
 
   router.get('/user/info', async (req: Request, res: Response) => {
     try {
-      const tokenUserId = await resolveUserId(req, auth);
-      const userId = tokenUserId ?? (req.query.user_id as string | undefined);
+      const tokenEntityRef = await resolveUserId(req, auth);
+      const userId = tokenEntityRef
+        ? toLiteLLMUserId(tokenEntityRef, userIdDomain)
+        : (req.query.user_id as string | undefined);
 
       let userInfo: UserInfo | null = await client.getUserInfo(userId);
 
       if (!userInfo) {
         if (provisioningEnabled && userId) {
-          userInfo = await provisionUser(client, userId, provisioningDefaults, logger);
+          // Catalog lookup requires the Backstage entity ref, not the LiteLLM email
+          const catalogRef = tokenEntityRef ?? userId;
+          const matchedRole = await resolveUserRole(catalogRef, roleConfigs, catalogClient, auth, logger);
+          const effectiveDefaults = matchedRole
+            ? applyRoleOverrides(provisioningDefaults, matchedRole)
+            : provisioningDefaults;
+          if (matchedRole) {
+            logger.info(`User ${userId} matched role group ${matchedRole.group} — using role-specific provisioning`);
+          }
+          userInfo = await provisionUser(client, userId, effectiveDefaults, logger);
         }
 
         if (!userInfo) {
@@ -157,8 +248,10 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
 
   router.get('/keys', async (req: Request, res: Response) => {
     try {
-      const tokenUserId = await resolveUserId(req, auth);
-      const userId = tokenUserId ?? (req.query.user_id as string | undefined);
+      const tokenEntityRef = await resolveUserId(req, auth);
+      const userId = tokenEntityRef
+        ? toLiteLLMUserId(tokenEntityRef, userIdDomain)
+        : (req.query.user_id as string | undefined);
       const keys: VirtualKey[] = await client.listKeys(userId);
       res.json(keys);
     } catch (error: any) {
@@ -169,10 +262,11 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
 
   router.post('/keys/generate', async (req: Request, res: Response) => {
     try {
-      const tokenUserId = await resolveUserId(req, auth);
+      const tokenEntityRef = await resolveUserId(req, auth);
+      const resolvedUserId = tokenEntityRef ? toLiteLLMUserId(tokenEntityRef, userIdDomain) : undefined;
       const request: GenerateKeyRequest = {
         ...req.body,
-        ...(tokenUserId && { user_id: tokenUserId }),
+        ...(resolvedUserId && { user_id: resolvedUserId }),
       };
       const result: GenerateKeyResponse = await client.generateKey(request);
       res.json(result);
@@ -209,8 +303,10 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
 
   router.get('/teams', async (req: Request, res: Response) => {
     try {
-      const tokenUserId = await resolveUserId(req, auth);
-      const userId = tokenUserId ?? (req.query.user_id as string | undefined);
+      const tokenEntityRef = await resolveUserId(req, auth);
+      const userId = tokenEntityRef
+        ? toLiteLLMUserId(tokenEntityRef, userIdDomain)
+        : (req.query.user_id as string | undefined);
       const userInfo: UserInfo | null = await client.getUserInfo(userId);
 
       if (!userInfo?.teams?.length) {
@@ -260,8 +356,10 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
         res.status(400).json({ error: 'start_date and end_date are required' });
         return;
       }
-      const tokenUserId = await resolveUserId(req, auth);
-      const userId = tokenUserId ?? (req.query.user_id as string | undefined);
+      const tokenEntityRef = await resolveUserId(req, auth);
+      const userId = tokenEntityRef
+        ? toLiteLLMUserId(tokenEntityRef, userIdDomain)
+        : (req.query.user_id as string | undefined);
       const usage: UsageMetrics = await client.getUsage(
         start_date as string,
         end_date as string,

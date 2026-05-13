@@ -108,6 +108,17 @@ export interface ProvisioningDefaults {
   metadata: Record<string, string>;
 }
 
+export interface RoleConfig {
+  group: string;
+  maxBudget?: number;
+  budgetDuration?: string;
+  models?: string[];
+  teams?: string[];
+  tpmLimit?: number;
+  rpmLimit?: number;
+  metadata?: Record<string, string>;
+}
+
 export interface CreateUserRequest {
   user_id: string;
   user_email?: string;

@@ -90,7 +90,7 @@ export class LiteLLMClient {
   async generateKey(request: GenerateKeyRequest): Promise<GenerateKeyResponse> {
     return this.request<GenerateKeyResponse>('/key/generate', {
       method: 'POST',
-      body: JSON.stringify(request),
+      body: JSON.stringify({ json: request }),
     });
   }
 
@@ -115,10 +115,10 @@ export class LiteLLMClient {
     if (userId) params.append('user_id', userId);
     if (groupBy) params.append('group_by', groupBy);
     try {
-      return this.request<UsageMetrics>(`/usage/keys?${params.toString()}`);
+      return await this.request<UsageMetrics>(`/usage/keys?${params.toString()}`);
     } catch (err: any) {
       if (err.status === 404 || err.message.includes('not found')) {
-        return { data: [] };
+        return { total_spend: 0, total_tokens: 0, prompt_tokens: 0, completion_tokens: 0, usage_by_model: {}, daily_usage: [] };
       }
       throw err;
     }

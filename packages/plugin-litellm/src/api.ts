@@ -9,6 +9,16 @@ import {
   GenerateKeyResponse,
 } from './types';
 
+class ApiError extends Error {
+  body: unknown;
+  status: number;
+  constructor(message: string, status: number, body: unknown) {
+    super(message);
+    this.status = status;
+    this.body = body;
+  }
+}
+
 export interface LiteLlmApiInterface {
   getUserInfo(): Promise<UserInfo>;
   listKeys(): Promise<VirtualKey[]>;
@@ -33,15 +43,21 @@ export class LiteLlmApi implements LiteLlmApiInterface {
     this.basePath = basePath;
   }
 
+  private async throwIfNotOk(response: Response): Promise<void> {
+    if (!response.ok) {
+      let body: unknown;
+      try { body = await response.json(); } catch { body = await response.text().catch(() => ''); }
+      throw new ApiError(`${response.status} ${response.statusText}`, response.status, body);
+    }
+  }
+
   private async get<T>(path: string, params?: Record<string, string>): Promise<T> {
     const url = new URL(`${this.basePath}${path}`, window.location.origin);
     if (params) {
       Object.entries(params).forEach(([key, value]) => url.searchParams.append(key, value));
     }
     const response = await this.fetchApi.fetch(url.toString());
-    if (!response.ok) {
-      throw new Error(`Failed to fetch: ${response.status} ${response.statusText}`);
-    }
+    await this.throwIfNotOk(response);
     return response.json();
   }
 
@@ -51,9 +67,7 @@ export class LiteLlmApi implements LiteLlmApiInterface {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
-    if (!response.ok) {
-      throw new Error(`Failed to fetch: ${response.status} ${response.statusText}`);
-    }
+    await this.throwIfNotOk(response);
     return response.json();
   }
 
@@ -62,9 +76,7 @@ export class LiteLlmApi implements LiteLlmApiInterface {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
     });
-    if (!response.ok) {
-      throw new Error(`Failed to fetch: ${response.status} ${response.statusText}`);
-    }
+    await this.throwIfNotOk(response);
     return response.json();
   }
 
