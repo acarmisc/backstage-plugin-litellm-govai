@@ -241,16 +241,25 @@ export const KeysTable: React.FC<KeysTableProps> = ({
               <TextField
                 select
                 label="Models"
-                SelectProps={{ multiple: true }}
+                SelectProps={{ multiple: true, displayEmpty: true }}
                 value={formData.models || []}
                 onChange={(e) => setFormData({ ...formData, models: e.target.value as unknown as string[] })}
                 fullWidth
+                placeholder="Select models"
               >
-                {models.map((model) => (
-                  <MenuItem key={model.model_name} value={model.model_name}>
-                    {model.model_name}
+                {models.length === 0 ? (
+                  <MenuItem disabled value="">
+                    No models available
                   </MenuItem>
-                ))}
+                ) : (
+                  models.map((model) => (
+                    <MenuItem key={model.model_name} value={model.model_name}>
+                      {model.model_name}
+                      {model.supports_function_calling && ' 🔧'}
+                      {model.supports_vision && ' 👁️'}
+                    </MenuItem>
+                  ))
+                )}
               </TextField>
             </Box>
           )}
