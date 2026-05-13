@@ -76,8 +76,15 @@ export class LiteLLMClient {
 
   async listKeys(userId?: string): Promise<VirtualKey[]> {
     const query = userId ? `?user_id=${encodeURIComponent(userId)}` : '';
-    const response = await this.request<{ info: VirtualKey[] } | VirtualKey[]>(`/key/info${query}`);
-    return Array.isArray(response) ? response : (response.info ?? []);
+    try {
+      const response = await this.request<{ info: VirtualKey[] } | VirtualKey[]>(`/key/info${query}`);
+      return Array.isArray(response) ? response : (response.info ?? []);
+    } catch (err: any) {
+      if (err.status === 404 || err.message.includes('not found')) {
+        return [];
+      }
+      throw err;
+    }
   }
 
   async generateKey(request: GenerateKeyRequest): Promise<GenerateKeyResponse> {
@@ -107,7 +114,14 @@ export class LiteLLMClient {
     const params = new URLSearchParams({ start_date: startDate, end_date: endDate });
     if (userId) params.append('user_id', userId);
     if (groupBy) params.append('group_by', groupBy);
-    return this.request<UsageMetrics>(`/usage/keys?${params.toString()}`);
+    try {
+      return this.request<UsageMetrics>(`/usage/keys?${params.toString()}`);
+    } catch (err: any) {
+      if (err.status === 404 || err.message.includes('not found')) {
+        return { data: [] };
+      }
+      throw err;
+    }
   }
 
   async getTeamUsage(teamId: string, startDate: string, endDate: string): Promise<UsageMetrics> {
