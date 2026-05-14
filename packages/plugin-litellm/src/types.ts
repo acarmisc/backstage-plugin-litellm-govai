@@ -70,6 +70,7 @@ export interface UsageMetrics {
 export interface GenerateKeyRequest {
   alias?: string;
   models?: string[];
+  team_id?: string;
   duration?: string;
   max_budget?: number;
   tpm_limit?: number;

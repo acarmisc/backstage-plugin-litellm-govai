@@ -47,10 +47,24 @@ export const LiteLLMPage: React.FC = () => {
     [api],
   );
 
-  const { value: teams, loading: teamsLoading } = useAsync(
+  const { value: allTeams, loading: teamsLoading } = useAsync(
     () => api.getTeams().catch(() => []),
     [api],
   );
+
+  // Filter to teams the current user belongs to
+  const teams = useMemo(() => {
+    if (!allTeams?.length) return [];
+    if (!userInfo) return allTeams;
+    const userId = userInfo.user_id;
+    if (userInfo.teams?.length) {
+      return allTeams.filter(t => userInfo.teams!.includes(t.team_id));
+    }
+    const byMembership = allTeams.filter(t =>
+      t.members_with_roles?.some(m => m.user_id === userId),
+    );
+    return byMembership.length > 0 ? byMembership : allTeams;
+  }, [allTeams, userInfo]);
 
   const { value: usage, loading: usageLoading } = useAsync(async () => {
     const startDate = dateRange.start.toISOString().split('T')[0];
@@ -152,7 +166,7 @@ export const LiteLLMPage: React.FC = () => {
     <Box p={3}>
       <Grid container spacing={2}>
         <Grid item xs={12}>
-          <DashboardHeader userInfo={userInfo} loading={userLoading} />
+          <DashboardHeader userInfo={userInfo} teams={teams ?? []} loading={userLoading || teamsLoading} />
         </Grid>
 
         <Grid item xs={12}>
@@ -172,6 +186,7 @@ export const LiteLLMPage: React.FC = () => {
           <KeysTable
             keys={keys ?? []}
             models={allowedModels}
+            teams={teams ?? []}
             loading={keysLoading || modelsLoading}
             onGenerateKey={handleGenerateKey}
             onDeleteKey={handleDeleteKey}

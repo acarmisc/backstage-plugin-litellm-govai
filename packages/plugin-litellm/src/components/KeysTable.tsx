@@ -19,13 +19,15 @@ import {
   MenuItem,
   Chip,
   CircularProgress,
+  Autocomplete,
 } from '@mui/material';
 import { ContentCopy, Delete, Add, Visibility, VisibilityOff } from '@mui/icons-material';
-import { VirtualKey, ModelInfo, GenerateKeyRequest, GenerateKeyResponse } from '../types';
+import { VirtualKey, ModelInfo, TeamInfo, GenerateKeyRequest, GenerateKeyResponse } from '../types';
 
 interface KeysTableProps {
   keys: VirtualKey[];
   models: ModelInfo[];
+  teams: TeamInfo[];
   loading: boolean;
   onGenerateKey: (request: GenerateKeyRequest) => Promise<GenerateKeyResponse>;
   onDeleteKey: (keyId: string) => Promise<void>;
@@ -44,9 +46,19 @@ const formatDate = (dateStr: string): string => {
   }
 };
 
+const emptyForm = (): GenerateKeyRequest => ({
+  alias: '',
+  models: [],
+  duration: '30d',
+  max_budget: undefined,
+  tpm_limit: undefined,
+  team_id: undefined,
+});
+
 export const KeysTable: React.FC<KeysTableProps> = ({
   keys,
   models,
+  teams,
   loading,
   onGenerateKey,
   onDeleteKey,
@@ -54,21 +66,18 @@ export const KeysTable: React.FC<KeysTableProps> = ({
   const [generateModalOpen, setGenerateModalOpen] = useState(false);
   const [showKeyValue, setShowKeyValue] = useState<string | null>(null);
   const [newKeyValue, setNewKeyValue] = useState<string | null>(null);
-  const [formData, setFormData] = useState<GenerateKeyRequest>({
-    alias: '',
-    models: [],
-    duration: '30d',
-    max_budget: undefined,
-    tpm_limit: undefined,
-  });
+  const [formData, setFormData] = useState<GenerateKeyRequest>(emptyForm());
   const [submitting, setSubmitting] = useState(false);
+
+  const selectedModels = models.filter(m => (formData.models || []).includes(m.model_name));
+  const selectedTeam = teams.find(t => t.team_id === formData.team_id) ?? null;
 
   const handleGenerate = async () => {
     setSubmitting(true);
     try {
       const response = await onGenerateKey(formData);
-      setNewKeyValue(response?.key || '');
-      setFormData({ alias: '', models: [], duration: '30d' });
+      setNewKeyValue(response.key);
+      setFormData(emptyForm());
     } catch (error) {
       console.error('Failed to generate key:', error);
     } finally {
@@ -79,7 +88,7 @@ export const KeysTable: React.FC<KeysTableProps> = ({
   const handleCloseModal = () => {
     setGenerateModalOpen(false);
     setNewKeyValue(null);
-    setFormData({ alias: '', models: [], duration: '30d' });
+    setFormData(emptyForm());
   };
 
   const copyToClipboard = (text: string) => {
@@ -191,7 +200,10 @@ export const KeysTable: React.FC<KeysTableProps> = ({
                 p={2}
                 sx={{ backgroundColor: 'action.hover', borderRadius: 1 }}
               >
-                <Typography component="code" sx={{ fontFamily: 'monospace', wordBreak: 'break-all' }}>
+                <Typography
+                  component="code"
+                  sx={{ fontFamily: 'monospace', wordBreak: 'break-all', flex: 1 }}
+                >
                   {newKeyValue}
                 </Typography>
                 <IconButton onClick={() => copyToClipboard(newKeyValue)}>
@@ -220,6 +232,44 @@ export const KeysTable: React.FC<KeysTableProps> = ({
                 <MenuItem value="90d">90 Days</MenuItem>
                 <MenuItem value="1y">1 Year</MenuItem>
               </TextField>
+
+              {teams.length > 0 && (
+                <Autocomplete
+                  options={teams}
+                  getOptionLabel={t => t.team_alias || t.team_id}
+                  value={selectedTeam}
+                  onChange={(_e, team) =>
+                    setFormData({ ...formData, team_id: team?.team_id })
+                  }
+                  renderInput={params => (
+                    <TextField {...params} label="Team (optional)" fullWidth />
+                  )}
+                />
+              )}
+
+              {models.length > 0 && (
+                <Autocomplete
+                  multiple
+                  options={models}
+                  groupBy={m => m.mode || 'other'}
+                  getOptionLabel={m => m.model_name}
+                  value={selectedModels}
+                  onChange={(_e, selected) =>
+                    setFormData({ ...formData, models: selected.map(m => m.model_name) })
+                  }
+                  renderOption={(props, m) => (
+                    <li {...props}>
+                      {m.model_name}
+                      {m.supports_function_calling && ' 🔧'}
+                      {m.supports_vision && ' 👁️'}
+                    </li>
+                  )}
+                  renderInput={params => (
+                    <TextField {...params} label="Models" fullWidth />
+                  )}
+                />
+              )}
+
               <TextField
                 label="Max Budget (USD)"
                 type="number"
@@ -238,29 +288,6 @@ export const KeysTable: React.FC<KeysTableProps> = ({
                 }
                 fullWidth
               />
-              <TextField
-                select
-                label="Models"
-                SelectProps={{ multiple: true, displayEmpty: true }}
-                value={formData.models || []}
-                onChange={(e) => setFormData({ ...formData, models: e.target.value as unknown as string[] })}
-                fullWidth
-                placeholder="Select models"
-              >
-                {models.length === 0 ? (
-                  <MenuItem disabled value="">
-                    No models available
-                  </MenuItem>
-                ) : (
-                  models.map((model) => (
-                    <MenuItem key={model.model_name} value={model.model_name}>
-                      {model.model_name}
-                      {model.supports_function_calling && ' 🔧'}
-                      {model.supports_vision && ' 👁️'}
-                    </MenuItem>
-                  ))
-                )}
-              </TextField>
             </Box>
           )}
         </DialogContent>
