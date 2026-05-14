@@ -7,6 +7,7 @@ import {
   TeamInfo,
   GenerateKeyRequest,
   GenerateKeyResponse,
+  UpdateKeyRequest,
 } from './types';
 
 class ApiError extends Error {
@@ -23,6 +24,7 @@ export interface LiteLlmApiInterface {
   getUserInfo(): Promise<UserInfo>;
   listKeys(): Promise<VirtualKey[]>;
   generateKey(request: GenerateKeyRequest): Promise<GenerateKeyResponse>;
+  updateKey(keyId: string, request: UpdateKeyRequest): Promise<VirtualKey>;
   deleteKey(keyId: string): Promise<{ success: boolean }>;
   listModels(): Promise<ModelInfo[]>;
   getTeams(): Promise<TeamInfo[]>;
@@ -92,6 +94,10 @@ export class LiteLlmApi implements LiteLlmApiInterface {
 
   async generateKey(request: GenerateKeyRequest): Promise<GenerateKeyResponse> {
     return this.post<GenerateKeyResponse>('/keys/generate', request);
+  }
+
+  async updateKey(keyId: string, request: UpdateKeyRequest): Promise<VirtualKey> {
+    return this.post<VirtualKey>(`/keys/${encodeURIComponent(keyId)}/update`, request);
   }
 
   async deleteKey(keyId: string): Promise<{ success: boolean }> {

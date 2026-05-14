@@ -21,8 +21,15 @@ import {
   CircularProgress,
   Autocomplete,
 } from '@mui/material';
-import { ContentCopy, Delete, Add, Visibility, VisibilityOff } from '@mui/icons-material';
-import { VirtualKey, ModelInfo, TeamInfo, GenerateKeyRequest, GenerateKeyResponse } from '../types';
+import { ContentCopy, Delete, Add, Edit, Visibility, VisibilityOff } from '@mui/icons-material';
+import {
+  VirtualKey,
+  ModelInfo,
+  TeamInfo,
+  GenerateKeyRequest,
+  GenerateKeyResponse,
+  UpdateKeyRequest,
+} from '../types';
 
 interface KeysTableProps {
   keys: VirtualKey[];
@@ -30,8 +37,15 @@ interface KeysTableProps {
   teams: TeamInfo[];
   loading: boolean;
   onGenerateKey: (request: GenerateKeyRequest) => Promise<GenerateKeyResponse>;
+  onUpdateKey: (keyId: string, request: UpdateKeyRequest) => Promise<void>;
   onDeleteKey: (keyId: string) => Promise<void>;
 }
+
+const KEY_TYPES: { value: string; label: string }[] = [
+  { value: 'llm_api', label: 'AI API' },
+  { value: 'management', label: 'Management' },
+  { value: 'read_only', label: 'Read Only' },
+];
 
 const maskKey = (key: string): string => {
   if (key.length <= 8) return '***';
@@ -53,6 +67,15 @@ const emptyForm = (): GenerateKeyRequest => ({
   max_budget: undefined,
   tpm_limit: undefined,
   team_id: undefined,
+  key_type: 'llm_api',
+});
+
+const keyToEditForm = (k: VirtualKey): UpdateKeyRequest => ({
+  key_alias: k.key_alias ?? '',
+  models: k.models ?? [],
+  max_budget: k.max_budget,
+  tpm_limit: k.tpm_limit,
+  rpm_limit: k.rpm_limit,
 });
 
 export const KeysTable: React.FC<KeysTableProps> = ({
@@ -61,6 +84,7 @@ export const KeysTable: React.FC<KeysTableProps> = ({
   teams,
   loading,
   onGenerateKey,
+  onUpdateKey,
   onDeleteKey,
 }) => {
   const [generateModalOpen, setGenerateModalOpen] = useState(false);
@@ -69,8 +93,14 @@ export const KeysTable: React.FC<KeysTableProps> = ({
   const [formData, setFormData] = useState<GenerateKeyRequest>(emptyForm());
   const [submitting, setSubmitting] = useState(false);
 
+  const [editingKey, setEditingKey] = useState<VirtualKey | null>(null);
+  const [editForm, setEditForm] = useState<UpdateKeyRequest>({});
+  const [editSubmitting, setEditSubmitting] = useState(false);
+
   const selectedModels = models.filter(m => (formData.models || []).includes(m.model_name));
   const selectedTeam = teams.find(t => t.team_id === formData.team_id) ?? null;
+
+  const editSelectedModels = models.filter(m => (editForm.models || []).includes(m.model_name));
 
   const handleGenerate = async () => {
     setSubmitting(true);
@@ -89,6 +119,29 @@ export const KeysTable: React.FC<KeysTableProps> = ({
     setGenerateModalOpen(false);
     setNewKeyValue(null);
     setFormData(emptyForm());
+  };
+
+  const handleOpenEdit = (k: VirtualKey) => {
+    setEditingKey(k);
+    setEditForm(keyToEditForm(k));
+  };
+
+  const handleCloseEdit = () => {
+    setEditingKey(null);
+    setEditForm({});
+  };
+
+  const handleUpdate = async () => {
+    if (!editingKey) return;
+    setEditSubmitting(true);
+    try {
+      await onUpdateKey(editingKey.key, editForm);
+      handleCloseEdit();
+    } catch (error) {
+      console.error('Failed to update key:', error);
+    } finally {
+      setEditSubmitting(false);
+    }
   };
 
   const copyToClipboard = (text: string) => {
@@ -172,6 +225,9 @@ export const KeysTable: React.FC<KeysTableProps> = ({
                       </Box>
                     </TableCell>
                     <TableCell align="right">
+                      <IconButton onClick={() => handleOpenEdit(key)}>
+                        <Edit fontSize="small" />
+                      </IconButton>
                       <IconButton color="error" onClick={() => onDeleteKey(key.key)}>
                         <Delete />
                       </IconButton>
@@ -219,6 +275,17 @@ export const KeysTable: React.FC<KeysTableProps> = ({
                 onChange={(e) => setFormData({ ...formData, alias: e.target.value })}
                 fullWidth
               />
+              <TextField
+                select
+                label="Key Type"
+                value={formData.key_type || 'llm_api'}
+                onChange={(e) => setFormData({ ...formData, key_type: e.target.value })}
+                fullWidth
+              >
+                {KEY_TYPES.map(kt => (
+                  <MenuItem key={kt.value} value={kt.value}>{kt.label}</MenuItem>
+                ))}
+              </TextField>
               <TextField
                 select
                 label="Duration"
@@ -298,6 +365,75 @@ export const KeysTable: React.FC<KeysTableProps> = ({
               {submitting ? <CircularProgress size={24} /> : 'Generate'}
             </Button>
           )}
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={!!editingKey} onClose={handleCloseEdit} maxWidth="sm" fullWidth>
+        <DialogTitle>Edit Key</DialogTitle>
+        <DialogContent>
+          {editingKey && (
+            <Box display="flex" flexDirection="column" gap={2} mt={1}>
+              <Typography variant="body2" color="text.secondary">
+                <code style={{ fontFamily: 'monospace' }}>{maskKey(editingKey.key)}</code>
+              </Typography>
+              <TextField
+                label="Alias"
+                value={editForm.key_alias || ''}
+                onChange={(e) => setEditForm({ ...editForm, key_alias: e.target.value })}
+                fullWidth
+              />
+
+              {models.length > 0 && (
+                <Autocomplete
+                  multiple
+                  options={models}
+                  groupBy={m => m.mode || 'other'}
+                  getOptionLabel={m => m.model_name}
+                  value={editSelectedModels}
+                  onChange={(_e, selected) =>
+                    setEditForm({ ...editForm, models: selected.map(m => m.model_name) })
+                  }
+                  renderInput={params => (
+                    <TextField {...params} label="Models" fullWidth />
+                  )}
+                />
+              )}
+
+              <TextField
+                label="Max Budget (USD)"
+                type="number"
+                value={editForm.max_budget ?? ''}
+                onChange={(e) =>
+                  setEditForm({ ...editForm, max_budget: e.target.value ? Number(e.target.value) : undefined })
+                }
+                fullWidth
+              />
+              <TextField
+                label="TPM Limit"
+                type="number"
+                value={editForm.tpm_limit ?? ''}
+                onChange={(e) =>
+                  setEditForm({ ...editForm, tpm_limit: e.target.value ? Number(e.target.value) : undefined })
+                }
+                fullWidth
+              />
+              <TextField
+                label="RPM Limit"
+                type="number"
+                value={editForm.rpm_limit ?? ''}
+                onChange={(e) =>
+                  setEditForm({ ...editForm, rpm_limit: e.target.value ? Number(e.target.value) : undefined })
+                }
+                fullWidth
+              />
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseEdit}>Cancel</Button>
+          <Button onClick={handleUpdate} variant="contained" color="primary" disabled={editSubmitting}>
+            {editSubmitting ? <CircularProgress size={24} /> : 'Save'}
+          </Button>
         </DialogActions>
       </Dialog>
     </>

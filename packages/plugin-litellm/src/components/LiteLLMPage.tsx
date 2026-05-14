@@ -7,7 +7,7 @@ import { KeysTable } from './KeysTable';
 import { UsageStats } from './UsageStats';
 import { TeamUsage } from './TeamUsage';
 import { liteLlmApiRef } from '../api';
-import { DateRange, GenerateKeyRequest, GenerateKeyResponse, UsageMetrics } from '../types';
+import { DateRange, GenerateKeyRequest, GenerateKeyResponse, UpdateKeyRequest, UsageMetrics } from '../types';
 
 export const LiteLLMPage: React.FC = () => {
   const api = useApi(liteLlmApiRef);
@@ -114,6 +114,20 @@ export const LiteLLMPage: React.FC = () => {
     [api, refreshKeys],
   );
 
+  const handleUpdateKey = useCallback(
+    async (keyId: string, request: UpdateKeyRequest) => {
+      try {
+        await api.updateKey(keyId, request);
+        setSnackbar({ message: 'Key updated successfully', severity: 'success' });
+        refreshKeys();
+      } catch (e: any) {
+        setSnackbar({ message: `Failed to update key: ${e.message}`, severity: 'error' });
+        throw e;
+      }
+    },
+    [api, refreshKeys],
+  );
+
   const handleDeleteKey = useCallback(
     async (keyId: string) => {
       try {
@@ -189,6 +203,7 @@ export const LiteLLMPage: React.FC = () => {
             teams={teams ?? []}
             loading={keysLoading || modelsLoading}
             onGenerateKey={handleGenerateKey}
+            onUpdateKey={handleUpdateKey}
             onDeleteKey={handleDeleteKey}
           />
         </Grid>

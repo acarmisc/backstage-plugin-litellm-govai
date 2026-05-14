@@ -11,6 +11,7 @@ import {
   TeamInfo,
   GenerateKeyRequest,
   GenerateKeyResponse,
+  UpdateKeyRequest,
   ProvisioningDefaults,
   RoleConfig,
 } from './types';
@@ -272,6 +273,22 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
       res.json(result);
     } catch (error: any) {
       logger.error('Failed to generate key', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  router.post('/keys/:keyId/update', async (req: Request, res: Response) => {
+    try {
+      const { keyId } = req.params;
+      if (!keyId) {
+        res.status(400).json({ error: 'keyId is required' });
+        return;
+      }
+      const request: UpdateKeyRequest = { ...req.body, key: keyId };
+      const result = await client.updateKey(request);
+      res.json(result);
+    } catch (error: any) {
+      logger.error('Failed to update key', error);
       res.status(500).json({ error: error.message });
     }
   });

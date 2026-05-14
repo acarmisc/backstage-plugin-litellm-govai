@@ -75,6 +75,17 @@ export interface GenerateKeyRequest {
   max_budget?: number;
   tpm_limit?: number;
   rpm_limit?: number;
+  key_type?: string;
+}
+
+export interface UpdateKeyRequest {
+  key_alias?: string;
+  models?: string[];
+  max_budget?: number;
+  tpm_limit?: number;
+  rpm_limit?: number;
+  team_id?: string;
+  duration?: string;
 }
 
 export interface GenerateKeyResponse {

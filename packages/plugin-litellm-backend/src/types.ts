@@ -77,6 +77,19 @@ export interface GenerateKeyRequest {
   tpm_limit?: number;
   rpm_limit?: number;
   user_id?: string;
+  team_id?: string;
+  key_type?: string;
+}
+
+export interface UpdateKeyRequest {
+  key: string;
+  key_alias?: string;
+  models?: string[];
+  max_budget?: number;
+  tpm_limit?: number;
+  rpm_limit?: number;
+  team_id?: string;
+  duration?: string;
 }
 
 export interface GenerateKeyResponse {

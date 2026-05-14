@@ -1,6 +1,6 @@
 {
   "name": "@acarmisc/backstage-plugin-litellm-backend",
-  "version": "0.1.8",
+  "version": "0.1.10",
   "description": "The Backstage backend plugin for LiteLLM governance",
   "backstage": {
     "role": "backend-plugin",

@@ -7,6 +7,7 @@ import {
   TeamInfo,
   GenerateKeyRequest,
   GenerateKeyResponse,
+  UpdateKeyRequest,
   DeleteKeyRequest,
   CreateUserRequest,
   CreateUserResponse,
@@ -94,6 +95,13 @@ export class LiteLLMClient {
     });
   }
 
+  async updateKey(request: UpdateKeyRequest): Promise<VirtualKey> {
+    return this.request<VirtualKey>('/key/update', {
+      method: 'POST',
+      body: JSON.stringify(request),
+    });
+  }
+
   async deleteKeys(request: DeleteKeyRequest): Promise<{ success: boolean }> {
     return this.request<{ success: boolean }>('/key/delete', {
       method: 'POST',
@@ -110,22 +118,97 @@ export class LiteLLMClient {
     return this.request<TeamInfo>(`/team/info?team_id=${encodeURIComponent(teamId)}`);
   }
 
-  async getUsage(startDate: string, endDate: string, userId?: string, groupBy?: string): Promise<UsageMetrics> {
-    const params = new URLSearchParams({ start_date: startDate, end_date: endDate });
+  private emptyUsage(): UsageMetrics {
+    return {
+      total_spend: 0,
+      total_tokens: 0,
+      prompt_tokens: 0,
+      completion_tokens: 0,
+      usage_by_model: {},
+      daily_usage: [],
+    };
+  }
+
+  /**
+   * Transforms LiteLLM's SpendAnalyticsPaginatedResponse into the flatter
+   * UsageMetrics shape consumed by the frontend charts.
+   */
+  private transformDailyActivity(response: any): UsageMetrics {
+    const results: any[] = Array.isArray(response?.results) ? response.results : [];
+    const meta = response?.metadata ?? {};
+
+    const daily_usage = results
+      .map(r => ({
+        date: r.date,
+        spend: r.metrics?.spend ?? 0,
+        total_tokens: r.metrics?.total_tokens ?? 0,
+        prompt_tokens: r.metrics?.prompt_tokens ?? 0,
+        completion_tokens: r.metrics?.completion_tokens ?? 0,
+      }))
+      .sort((a, b) => a.date.localeCompare(b.date));
+
+    const usage_by_model: UsageMetrics['usage_by_model'] = {};
+    for (const r of results) {
+      const models = r.breakdown?.models ?? {};
+      for (const [name, entry] of Object.entries<any>(models)) {
+        const m = entry?.metrics ?? {};
+        const bucket = usage_by_model[name] ?? {
+          total_spend: 0,
+          total_tokens: 0,
+          prompt_tokens: 0,
+          completion_tokens: 0,
+        };
+        bucket.total_spend += m.spend ?? 0;
+        bucket.total_tokens += m.total_tokens ?? 0;
+        bucket.prompt_tokens += m.prompt_tokens ?? 0;
+        bucket.completion_tokens += m.completion_tokens ?? 0;
+        usage_by_model[name] = bucket;
+      }
+    }
+
+    return {
+      total_spend: meta.total_spend ?? 0,
+      total_tokens: meta.total_tokens ?? 0,
+      prompt_tokens: meta.total_prompt_tokens ?? 0,
+      completion_tokens: meta.total_completion_tokens ?? 0,
+      usage_by_model,
+      daily_usage,
+    };
+  }
+
+  async getUsage(startDate: string, endDate: string, userId?: string, _groupBy?: string): Promise<UsageMetrics> {
+    const params = new URLSearchParams({
+      start_date: startDate,
+      end_date: endDate,
+      page_size: '100',
+    });
     if (userId) params.append('user_id', userId);
-    if (groupBy) params.append('group_by', groupBy);
     try {
-      return await this.request<UsageMetrics>(`/usage/keys?${params.toString()}`);
+      const response = await this.request<any>(`/user/daily/activity?${params.toString()}`);
+      return this.transformDailyActivity(response);
     } catch (err: any) {
       if (err.status === 404 || err.message.includes('not found')) {
-        return { total_spend: 0, total_tokens: 0, prompt_tokens: 0, completion_tokens: 0, usage_by_model: {}, daily_usage: [] };
+        return this.emptyUsage();
       }
       throw err;
     }
   }
 
   async getTeamUsage(teamId: string, startDate: string, endDate: string): Promise<UsageMetrics> {
-    const params = new URLSearchParams({ start_date: startDate, end_date: endDate, team_id: teamId });
-    return this.request<UsageMetrics>(`/usage/keys?${params.toString()}`);
+    const params = new URLSearchParams({
+      start_date: startDate,
+      end_date: endDate,
+      team_ids: teamId,
+      page_size: '100',
+    });
+    try {
+      const response = await this.request<any>(`/team/daily/activity?${params.toString()}`);
+      return this.transformDailyActivity(response);
+    } catch (err: any) {
+      if (err.status === 404 || err.message.includes('not found')) {
+        return this.emptyUsage();
+      }
+      throw err;
+    }
   }
 }
