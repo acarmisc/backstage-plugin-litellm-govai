@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Paper,
   Table,
@@ -40,12 +40,6 @@ interface KeysTableProps {
   onUpdateKey: (keyId: string, request: UpdateKeyRequest) => Promise<void>;
   onDeleteKey: (keyId: string) => Promise<void>;
 }
-
-const KEY_TYPES: { value: string; label: string }[] = [
-  { value: 'llm_api', label: 'AI API' },
-  { value: 'management', label: 'Management' },
-  { value: 'read_only', label: 'Read Only' },
-];
 
 const maskKey = (key: string): string => {
   if (key.length <= 8) return '***';
@@ -92,6 +86,19 @@ export const KeysTable: React.FC<KeysTableProps> = ({
   const [newKeyValue, setNewKeyValue] = useState<string | null>(null);
   const [formData, setFormData] = useState<GenerateKeyRequest>(emptyForm());
   const [submitting, setSubmitting] = useState(false);
+
+  // Default to the user's first team when the modal opens so users in exactly
+  // one team don't need to pick. Multi-team users see the picker pre-filled
+  // and can change it. Teams are already filtered to the current user upstream.
+  useEffect(() => {
+    if (!generateModalOpen) return;
+    if (!formData.team_id && teams.length > 0) {
+      setFormData(f => ({ ...f, team_id: teams[0].team_id }));
+    }
+  }, [generateModalOpen, teams, formData.team_id]);
+
+  const teamRequired = teams.length > 0;
+  const canGenerate = !teamRequired || !!formData.team_id;
 
   const [editingKey, setEditingKey] = useState<VirtualKey | null>(null);
   const [editForm, setEditForm] = useState<UpdateKeyRequest>({});
@@ -277,17 +284,6 @@ export const KeysTable: React.FC<KeysTableProps> = ({
               />
               <TextField
                 select
-                label="Key Type"
-                value={formData.key_type || 'llm_api'}
-                onChange={(e) => setFormData({ ...formData, key_type: e.target.value })}
-                fullWidth
-              >
-                {KEY_TYPES.map(kt => (
-                  <MenuItem key={kt.value} value={kt.value}>{kt.label}</MenuItem>
-                ))}
-              </TextField>
-              <TextField
-                select
                 label="Duration"
                 value={formData.duration || '30d'}
                 onChange={(e) => setFormData({ ...formData, duration: e.target.value })}
@@ -309,7 +305,18 @@ export const KeysTable: React.FC<KeysTableProps> = ({
                     setFormData({ ...formData, team_id: team?.team_id })
                   }
                   renderInput={params => (
-                    <TextField {...params} label="Team (optional)" fullWidth />
+                    <TextField
+                      {...params}
+                      label="Team"
+                      required
+                      error={teamRequired && !formData.team_id}
+                      helperText={
+                        teamRequired && !formData.team_id
+                          ? 'Pick a team to scope this key'
+                          : undefined
+                      }
+                      fullWidth
+                    />
                   )}
                 />
               )}
@@ -361,7 +368,12 @@ export const KeysTable: React.FC<KeysTableProps> = ({
         <DialogActions>
           <Button onClick={handleCloseModal}>{newKeyValue ? 'Done' : 'Cancel'}</Button>
           {!newKeyValue && (
-            <Button onClick={handleGenerate} variant="contained" color="primary" disabled={submitting}>
+            <Button
+              onClick={handleGenerate}
+              variant="contained"
+              color="primary"
+              disabled={submitting || !canGenerate}
+            >
               {submitting ? <CircularProgress size={24} /> : 'Generate'}
             </Button>
           )}

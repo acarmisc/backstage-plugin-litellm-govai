@@ -47,24 +47,64 @@ export interface ModelInfo {
   supports_vision?: boolean;
 }
 
+export interface UsageModelBreakdown {
+  total_spend: number;
+  total_tokens: number;
+  prompt_tokens: number;
+  completion_tokens: number;
+  api_requests: number;
+  successful_requests: number;
+  failed_requests: number;
+}
+
+export interface UsageKeyBreakdown {
+  key_alias?: string;
+  team_id?: string | null;
+  models: string[];
+  total_spend: number;
+  total_tokens: number;
+  prompt_tokens: number;
+  completion_tokens: number;
+  api_requests: number;
+  successful_requests: number;
+  failed_requests: number;
+}
+
+export interface UsageDailyPoint {
+  date: string;
+  spend: number;
+  total_tokens: number;
+  prompt_tokens: number;
+  completion_tokens: number;
+  api_requests: number;
+  successful_requests: number;
+  failed_requests: number;
+}
+
+export interface UsageDailyModelPoint {
+  date: string;
+  model: string;
+  spend: number;
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
+  api_requests: number;
+  successful_requests: number;
+  failed_requests: number;
+}
+
 export interface UsageMetrics {
   total_spend: number;
   total_tokens: number;
   prompt_tokens: number;
   completion_tokens: number;
-  usage_by_model: Record<string, {
-    total_spend: number;
-    total_tokens: number;
-    prompt_tokens: number;
-    completion_tokens: number;
-  }>;
-  daily_usage: Array<{
-    date: string;
-    spend: number;
-    total_tokens: number;
-    prompt_tokens: number;
-    completion_tokens: number;
-  }>;
+  api_requests: number;
+  successful_requests: number;
+  failed_requests: number;
+  usage_by_model: Record<string, UsageModelBreakdown>;
+  usage_by_key: Record<string, UsageKeyBreakdown>;
+  daily_usage: UsageDailyPoint[];
+  daily_by_model: UsageDailyModelPoint[];
 }
 
 export interface GenerateKeyRequest {

@@ -124,14 +124,27 @@ export class LiteLLMClient {
       total_tokens: 0,
       prompt_tokens: 0,
       completion_tokens: 0,
+      api_requests: 0,
+      successful_requests: 0,
+      failed_requests: 0,
       usage_by_model: {},
+      usage_by_key: {},
       daily_usage: [],
+      daily_by_model: [],
     };
   }
 
   /**
    * Transforms LiteLLM's SpendAnalyticsPaginatedResponse into the flatter
    * UsageMetrics shape consumed by the frontend charts.
+   *
+   * Source shape (per result row):
+   *   { date, metrics, breakdown: { models: { [name]: { metrics, api_key_breakdown: { [keyHash]: { metrics, metadata } } } } } }
+   *
+   * We fan that out into three views the UI consumes:
+   *   - daily_usage     → spend + request trends over time
+   *   - usage_by_model  → which models drove cost / traffic
+   *   - usage_by_key    → which keys drove cost / traffic (with key_alias + team_id from metadata)
    */
   private transformDailyActivity(response: any): UsageMetrics {
     const results: any[] = Array.isArray(response?.results) ? response.results : [];
@@ -144,25 +157,74 @@ export class LiteLLMClient {
         total_tokens: r.metrics?.total_tokens ?? 0,
         prompt_tokens: r.metrics?.prompt_tokens ?? 0,
         completion_tokens: r.metrics?.completion_tokens ?? 0,
+        api_requests: r.metrics?.api_requests ?? 0,
+        successful_requests: r.metrics?.successful_requests ?? 0,
+        failed_requests: r.metrics?.failed_requests ?? 0,
       }))
       .sort((a, b) => a.date.localeCompare(b.date));
 
     const usage_by_model: UsageMetrics['usage_by_model'] = {};
+    const usage_by_key: UsageMetrics['usage_by_key'] = {};
+    const daily_by_model: UsageMetrics['daily_by_model'] = [];
+
+    const emptyModelBucket = () => ({
+      total_spend: 0,
+      total_tokens: 0,
+      prompt_tokens: 0,
+      completion_tokens: 0,
+      api_requests: 0,
+      successful_requests: 0,
+      failed_requests: 0,
+    });
+
     for (const r of results) {
       const models = r.breakdown?.models ?? {};
       for (const [name, entry] of Object.entries<any>(models)) {
         const m = entry?.metrics ?? {};
-        const bucket = usage_by_model[name] ?? {
-          total_spend: 0,
-          total_tokens: 0,
-          prompt_tokens: 0,
-          completion_tokens: 0,
-        };
+        const bucket = usage_by_model[name] ?? emptyModelBucket();
         bucket.total_spend += m.spend ?? 0;
         bucket.total_tokens += m.total_tokens ?? 0;
         bucket.prompt_tokens += m.prompt_tokens ?? 0;
         bucket.completion_tokens += m.completion_tokens ?? 0;
+        bucket.api_requests += m.api_requests ?? 0;
+        bucket.successful_requests += m.successful_requests ?? 0;
+        bucket.failed_requests += m.failed_requests ?? 0;
         usage_by_model[name] = bucket;
+
+        daily_by_model.push({
+          date: r.date,
+          model: name,
+          spend: m.spend ?? 0,
+          prompt_tokens: m.prompt_tokens ?? 0,
+          completion_tokens: m.completion_tokens ?? 0,
+          total_tokens: m.total_tokens ?? 0,
+          api_requests: m.api_requests ?? 0,
+          successful_requests: m.successful_requests ?? 0,
+          failed_requests: m.failed_requests ?? 0,
+        });
+
+        const keyMap = entry?.api_key_breakdown ?? {};
+        for (const [keyHash, keyEntry] of Object.entries<any>(keyMap)) {
+          const km = keyEntry?.metrics ?? {};
+          const kmeta = keyEntry?.metadata ?? {};
+          const kb = usage_by_key[keyHash] ?? {
+            key_alias: kmeta.key_alias,
+            team_id: kmeta.team_id ?? null,
+            models: [] as string[],
+            ...emptyModelBucket(),
+          };
+          if (!kb.key_alias && kmeta.key_alias) kb.key_alias = kmeta.key_alias;
+          if (kb.team_id == null && kmeta.team_id) kb.team_id = kmeta.team_id;
+          if (!kb.models.includes(name)) kb.models.push(name);
+          kb.total_spend += km.spend ?? 0;
+          kb.total_tokens += km.total_tokens ?? 0;
+          kb.prompt_tokens += km.prompt_tokens ?? 0;
+          kb.completion_tokens += km.completion_tokens ?? 0;
+          kb.api_requests += km.api_requests ?? 0;
+          kb.successful_requests += km.successful_requests ?? 0;
+          kb.failed_requests += km.failed_requests ?? 0;
+          usage_by_key[keyHash] = kb;
+        }
       }
     }
 
@@ -171,8 +233,13 @@ export class LiteLLMClient {
       total_tokens: meta.total_tokens ?? 0,
       prompt_tokens: meta.total_prompt_tokens ?? 0,
       completion_tokens: meta.total_completion_tokens ?? 0,
+      api_requests: meta.total_api_requests ?? 0,
+      successful_requests: meta.total_successful_requests ?? 0,
+      failed_requests: meta.total_failed_requests ?? 0,
       usage_by_model,
+      usage_by_key,
       daily_usage,
+      daily_by_model,
     };
   }
 
