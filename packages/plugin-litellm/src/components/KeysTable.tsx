@@ -261,10 +261,14 @@ export const KeysTable: React.FC<KeysTableProps> = ({
                 gap={1}
                 mt={2}
                 p={2}
-                sx={{ backgroundColor: 'action.hover', borderRadius: 1 }}
+                sx={{
+                  backgroundColor: 'grey.100',
+                  borderRadius: 1,
+                }}
               >
                 <Typography
                   component="code"
+                  color="text.primary"
                   sx={{ fontFamily: 'monospace', wordBreak: 'break-all', flex: 1 }}
                 >
                   {newKeyValue}
