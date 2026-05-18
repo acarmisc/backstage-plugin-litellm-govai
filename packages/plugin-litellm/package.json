@@ -1,6 +1,6 @@
 {
   "name": "@acarmisc/backstage-plugin-litellm",
-  "version": "0.1.11",
+  "version": "0.1.12",
   "backstage": {
     "role": "frontend-plugin",
     "pluginId": "litellm",
