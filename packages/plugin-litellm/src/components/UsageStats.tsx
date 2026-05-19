@@ -204,7 +204,9 @@ export const UsageStats: React.FC<UsageStatsProps> = ({
                 <MenuItem value="all">All Models</MenuItem>
                 {models.map(m => (
                   <MenuItem key={m.model_name} value={m.model_name}>
-                    {m.model_name}
+                    <Typography variant="body2" color="text.primary">
+                      {m.model_name}
+                    </Typography>
                   </MenuItem>
                 ))}
               </Select>
