@@ -132,10 +132,28 @@ export const LiteLLMPage: React.FC = () => {
     async (keyId: string) => {
       try {
         await api.deleteKey(keyId);
-        setSnackbar({ message: 'Key revoked successfully', severity: 'success' });
+        setSnackbar({ 
+          message: 'Key revoked successfully', 
+          severity: 'success' 
+        });
         refreshKeys();
       } catch (e: any) {
-        setSnackbar({ message: `Failed to revoke key: ${e.message}`, severity: 'error' });
+        // Handle "already deleted" response gracefully (idempotent)
+        // If backend returns 200 with success=true, it means key was already gone
+        if (e.body?.success && (e.body?.message?.includes('already deleted') || e.body?.message?.includes('never existed'))) {
+          setSnackbar({ 
+            message: 'Key was already deleted', 
+            severity: 'warning' 
+          });
+          refreshKeys();  // Still refresh to ensure UI consistency
+          return;
+        }
+        setSnackbar({ 
+          message: `Failed to revoke key: ${e.message}`, 
+          severity: 'error' 
+        });
+      } finally {
+        refreshKeys();
       }
     },
     [api, refreshKeys],

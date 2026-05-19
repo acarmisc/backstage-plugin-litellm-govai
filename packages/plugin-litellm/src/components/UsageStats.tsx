@@ -74,10 +74,15 @@ export const UsageStats: React.FC<UsageStatsProps> = ({
   const [tab, setTab] = useState<TabKey>('costs');
 
   // Derive selected preset from dateRange to keep it in sync
+  // Check order matters: today (0 days), then 7d (1-7 days), then 30d (8+ days)
   const selectedPreset = useMemo(() => {
-    const diffMs = dateRange.end.getTime() - dateRange.start.getTime();
+    const start = dateRange.start;
+    const end = dateRange.end;
+    // Same day = exactly 'today' (diffDays = 0)
+    // If user picks 1 day range (yesterday-today, etc.), that's a 7-day period
+    if (start.toDateString() === end.toDateString()) return 'today';
+    const diffMs = end.getTime() - start.getTime();
     const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
-    if (diffDays <= 1) return 'today';
     if (diffDays <= 7) return '7d';
     return '30d';
   }, [dateRange]);

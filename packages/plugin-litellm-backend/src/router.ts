@@ -174,6 +174,15 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
       await client.deleteKeys({ keys: [keyId] });
       res.json({ success: true });
     } catch (error: any) {
+      // Handle 404 as "already deleted" (idempotent operation)
+      if (error.status === 404 || error.message.includes('404')) {
+        logger.warn(`Key ${keyId} not found (already deleted or never existed)`);
+        res.status(200).json({ 
+          success: true, 
+          message: 'Key was already deleted or never existed' 
+        });
+        return;
+      }
       logger.error('Failed to delete key', error);
       res.status(500).json({ error: error.message });
     }

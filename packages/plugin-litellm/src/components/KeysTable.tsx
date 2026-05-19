@@ -208,7 +208,21 @@ export const KeysTable: React.FC<KeysTableProps> = ({
                     <TableCell>{key.key_alias || '-'}</TableCell>
                     <TableCell>
                       <Box display="flex" alignItems="center" gap={0.5}>
-                        <Typography variant="body2" component="code" color="text.primary" sx={{ fontFamily: 'monospace', backgroundColor: 'background.default', px: 1, py: 0.5, borderRadius: 1 }}>
+                        <Typography 
+                          variant="body2" 
+                          component="code" 
+                          color="primary"
+                          sx={{ 
+                            fontFamily: 'monospace', 
+                            backgroundColor: 'background.default', 
+                            px: 1, 
+                            py: 0.5, 
+                            borderRadius: 1,
+                            maxWidth: '250px',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                          }}
+                        >
                           {showKeyValue === key.key ? key.key : maskKey(key.key)}
                         </Typography>
                         <IconButton
