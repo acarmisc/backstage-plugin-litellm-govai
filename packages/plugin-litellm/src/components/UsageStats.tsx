@@ -70,12 +70,19 @@ export const UsageStats: React.FC<UsageStatsProps> = ({
   onDateRangeChange,
   loading,
 }) => {
-  const [selectedPreset, setSelectedPreset] = useState<DatePreset>('7d');
   const [selectedModel, setSelectedModel] = useState<string>('all');
   const [tab, setTab] = useState<TabKey>('costs');
 
+  // Derive selected preset from dateRange to keep it in sync
+  const selectedPreset = useMemo(() => {
+    const diffMs = dateRange.end.getTime() - dateRange.start.getTime();
+    const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+    if (diffDays <= 1) return 'today';
+    if (diffDays <= 7) return '7d';
+    return '30d';
+  }, [dateRange]);
+
   const handlePresetChange = (preset: DatePreset) => {
-    setSelectedPreset(preset);
     const end = new Date();
     const start = new Date();
     if (preset === 'today') start.setHours(0, 0, 0, 0);
