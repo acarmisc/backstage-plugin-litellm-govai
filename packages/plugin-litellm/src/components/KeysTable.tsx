@@ -115,6 +115,11 @@ export const KeysTable: React.FC<KeysTableProps> = ({
       const response = await onGenerateKey(formData);
       setNewKeyValue(response.key);
       setFormData(emptyForm());
+      // Close dialog after showing the generated key
+      setTimeout(() => {
+        setGenerateModalOpen(false);
+        setNewKeyValue(null);
+      }, 1500);
     } catch (error) {
       console.error('Failed to generate key:', error);
     } finally {
@@ -379,6 +384,11 @@ export const KeysTable: React.FC<KeysTableProps> = ({
               disabled={submitting || !canGenerate}
             >
               {submitting ? <CircularProgress size={24} /> : 'Generate'}
+            </Button>
+          )}
+          {newKeyValue && (
+            <Button onClick={handleCloseModal} variant="contained" color="success">
+              Done
             </Button>
           )}
         </DialogActions>
