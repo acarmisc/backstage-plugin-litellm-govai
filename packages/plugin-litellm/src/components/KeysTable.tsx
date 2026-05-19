@@ -97,8 +97,8 @@ export const KeysTable: React.FC<KeysTableProps> = ({
     }
   }, [generateModalOpen, teams, formData.team_id]);
 
-  const teamRequired = teams.length > 0;
-  const canGenerate = !teamRequired || !!formData.team_id;
+  const teamRequired = false; // Team selection is now optional
+  const canGenerate = true; // Always allow generation regardless of team selection
 
   const [editingKey, setEditingKey] = useState<VirtualKey | null>(null);
   const [editForm, setEditForm] = useState<UpdateKeyRequest>({});
@@ -317,13 +317,7 @@ export const KeysTable: React.FC<KeysTableProps> = ({
                     <TextField
                       {...params}
                       label="Team"
-                      required
-                      error={teamRequired && !formData.team_id}
-                      helperText={
-                        teamRequired && !formData.team_id
-                          ? 'Pick a team to scope this key'
-                          : undefined
-                      }
+                      helperText="Optional: bind this key to a specific team for scoped access"
                       fullWidth
                     />
                   )}
