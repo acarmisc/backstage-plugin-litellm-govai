@@ -115,6 +115,11 @@ export const KeysTable: React.FC<KeysTableProps> = ({
       const response = await onGenerateKey(formData);
       setNewKeyValue(response.key);
       setFormData(emptyForm());
+      // Close dialog after showing the generated key
+      setTimeout(() => {
+        setGenerateModalOpen(false);
+        setNewKeyValue(null);
+      }, 1500);
     } catch (error) {
       console.error('Failed to generate key:', error);
     } finally {
@@ -203,7 +208,7 @@ export const KeysTable: React.FC<KeysTableProps> = ({
                     <TableCell>{key.key_alias || '-'}</TableCell>
                     <TableCell>
                       <Box display="flex" alignItems="center" gap={0.5}>
-                        <Typography variant="body2" component="code" sx={{ fontFamily: 'monospace' }}>
+                        <Typography variant="body2" component="code" color="text.primary" sx={{ fontFamily: 'monospace', backgroundColor: 'background.default', px: 1, py: 0.5, borderRadius: 1 }}>
                           {showKeyValue === key.key ? key.key : maskKey(key.key)}
                         </Typography>
                         <IconButton
@@ -261,10 +266,14 @@ export const KeysTable: React.FC<KeysTableProps> = ({
                 gap={1}
                 mt={2}
                 p={2}
-                sx={{ backgroundColor: 'action.hover', borderRadius: 1 }}
+                sx={{
+                  backgroundColor: 'grey.100',
+                  borderRadius: 1,
+                }}
               >
                 <Typography
                   component="code"
+                  color="text.primary"
                   sx={{ fontFamily: 'monospace', wordBreak: 'break-all', flex: 1 }}
                 >
                   {newKeyValue}
@@ -377,6 +386,11 @@ export const KeysTable: React.FC<KeysTableProps> = ({
               {submitting ? <CircularProgress size={24} /> : 'Generate'}
             </Button>
           )}
+          {newKeyValue && (
+            <Button onClick={handleCloseModal} variant="contained" color="success">
+              Done
+            </Button>
+          )}
         </DialogActions>
       </Dialog>
 
@@ -386,7 +400,7 @@ export const KeysTable: React.FC<KeysTableProps> = ({
           {editingKey && (
             <Box display="flex" flexDirection="column" gap={2} mt={1}>
               <Typography variant="body2" color="text.secondary">
-                <code style={{ fontFamily: 'monospace' }}>{maskKey(editingKey.key)}</code>
+                <code style={{ fontFamily: 'monospace', color: 'inherit' }}>{maskKey(editingKey.key)}</code>
               </Typography>
               <TextField
                 label="Alias"
