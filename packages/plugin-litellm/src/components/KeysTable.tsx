@@ -342,9 +342,11 @@ export const KeysTable: React.FC<KeysTableProps> = ({
                   }
                   renderOption={(props, m) => (
                     <li {...props}>
-                      {m.model_name}
-                      {m.supports_function_calling && ' 🔧'}
-                      {m.supports_vision && ' 👁️'}
+                      <Typography variant="body2" color="text.primary">
+                        {m.model_name}
+                      </Typography>
+                      {m.supports_function_calling && <Typography variant="body2" color="text.secondary"> 🔧</Typography>}
+                      {m.supports_vision && <Typography variant="body2" color="text.secondary"> 👁️</Typography>}
                     </li>
                   )}
                   renderInput={params => (
