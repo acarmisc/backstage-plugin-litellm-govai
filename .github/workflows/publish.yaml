@@ -67,7 +67,11 @@ jobs:
 
       - name: Publish
         run: |
-          cd packages/${{ steps.pkg.outputs.package }}
+          if [ "${{ steps.pkg.outputs.package }}" == "litellm" ]; then
+            cd packages/plugin-litellm
+          else
+            cd packages/plugin-litellm-backend
+          fi
           npm publish --access public --tag latest
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPMJS_TOKEN }}
