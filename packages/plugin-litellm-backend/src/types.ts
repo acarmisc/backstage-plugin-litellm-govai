@@ -182,6 +182,7 @@ export interface CreateUserRequest {
   tpm_limit?: number;
   rpm_limit?: number;
   metadata?: Record<string, string>;
+  auto_create_key?: boolean;
 }
 
 export interface CreateUserResponse {

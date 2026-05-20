@@ -201,6 +201,7 @@ export async function provisionUser(
     ...(defaults.tpmLimit !== undefined && { tpm_limit: defaults.tpmLimit }),
     ...(defaults.rpmLimit !== undefined && { rpm_limit: defaults.rpmLimit }),
     ...(defaults.userRole && { user_role: defaults.userRole }),
+    auto_create_key: false,
     metadata: {
       ...defaults.metadata,
       provisioned_by: 'backstage',

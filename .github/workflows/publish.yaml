@@ -49,6 +49,9 @@ jobs:
       - name: Install dependencies
         run: yarn install --immutable || npm install
 
+      - name: Install package-specific build deps
+        run: cd packages/${{ steps.pkg.outputs.package }} && npm install
+
       - name: Build package
         run: |
           if [ "${{ steps.pkg.outputs.package }}" == "litellm" ]; then
