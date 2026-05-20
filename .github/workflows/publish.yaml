@@ -1,6 +1,10 @@
 name: Publish to npm
 
 on:
+  push:
+    tags:
+      - 'litellm-backend-v*'
+      - 'litellm-v*'
   workflow_dispatch:
     inputs:
       package:
@@ -20,6 +24,23 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Determine package
+        id: pkg
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            echo "package=${{ github.event.inputs.package }}" >> "$GITHUB_OUTPUT"
+          else
+            TAG="${GITHUB_REF#refs/tags/}"
+            if [[ "$TAG" == litellm-backend-v* ]]; then
+              echo "package=litellm-backend" >> "$GITHUB_OUTPUT"
+            elif [[ "$TAG" == litellm-v* ]]; then
+              echo "package=litellm" >> "$GITHUB_OUTPUT"
+            else
+              echo "Unknown tag format: $TAG"
+              exit 1
+            fi
+          fi
+
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
@@ -30,7 +51,7 @@ jobs:
 
       - name: Build package
         run: |
-          if [ "${{ github.event.inputs.package }}" == "litellm" ]; then
+          if [ "${{ steps.pkg.outputs.package }}" == "litellm" ]; then
             cd packages/plugin-litellm && npm run build
           else
             cd packages/plugin-litellm-backend && node build.js
@@ -38,7 +59,7 @@ jobs:
 
       - name: Publish
         run: |
-          cd packages/${{ github.event.inputs.package }}
+          cd packages/${{ steps.pkg.outputs.package }}
           npm publish --access public --tag latest
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPMJS_TOKEN }}
