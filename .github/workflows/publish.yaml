@@ -41,4 +41,4 @@ jobs:
           cd packages/${{ github.event.inputs.package }}
           npm publish --access public --tag latest
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPMJS_TOKEN }}
