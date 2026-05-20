@@ -2,6 +2,8 @@ const esbuild = require('esbuild');
 
 const external = [
   '@backstage/backend-plugin-api',
+  '@backstage/catalog-client',
+  '@backstage/catalog-model',
   '@backstage/config',
   '@backstage/types',
   'express',
