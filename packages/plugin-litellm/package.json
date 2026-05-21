@@ -1,6 +1,6 @@
 {
   "name": "@acarmisc/backstage-plugin-litellm",
-  "version": "0.1.13",
+  "version": "0.2.0",
   "backstage": {
     "role": "frontend-plugin",
     "pluginId": "litellm",
@@ -24,39 +24,39 @@
     "postpack": ""
   },
   "dependencies": {
-    "@backstage/core-components": "^0.14.10",
-    "@backstage/core-plugin-api": "^1.9.3",
-    "@backstage/frontend-plugin-api": "^0.7.0",
-    "@backstage/plugin-catalog-react": "^1.13.0",
-    "@backstage/theme": "^0.5.6",
-    "@backstage/types": "^1.1.0",
+    "@backstage/core-components": "^0.18.10",
+    "@backstage/core-plugin-api": "^1.12.6",
+    "@backstage/frontend-plugin-api": "^0.17.0",
+    "@backstage/plugin-catalog-react": "^1.15.0",
+    "@backstage/theme": "^0.6.0",
+    "@backstage/types": "^1.2.0",
     "@emotion/react": "^11.11.0",
     "@emotion/styled": "^11.11.0",
     "@mui/icons-material": "^5.18.0",
     "@mui/material": "^5.16.0",
-    "react": "^17.0.0 || ^18.0.0",
+    "react": "^18.0.0",
     "react-use": "^17.2.4",
     "recharts": "^2.15.4",
     "zod": "^3.22.4"
   },
   "devDependencies": {
-    "@backstage/cli": "^0.28.0",
-    "@backstage/core-app-api": "^0.1.1",
-    "@backstage/dev-utils": "^0.2.18",
-    "@backstage/frontend-test-utils": "^0.1.0",
-    "@backstage/test-utils": "^0.1.0",
+    "@backstage/cli": "^0.36.2",
+    "@backstage/core-app-api": "^1.16.0",
+    "@backstage/dev-utils": "^1.2.0",
+    "@backstage/frontend-test-utils": "^0.6.0",
+    "@backstage/test-utils": "^1.7.0",
     "@testing-library/dom": "^10.0.0",
     "@testing-library/jest-dom": "^6.0.0",
     "@testing-library/react": "^16.0.0",
     "@testing-library/user-event": "^14.0.0",
     "@types/react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "react-router-dom": "^6.20.0"
+    "react-router-dom": "^6.30.0"
   },
   "peerDependencies": {
-    "@types/react": "^17.0.0 || ^18.0.0",
-    "react": "^17.0.0 || ^18.0.0",
-    "react-dom": "^17.0.0 || ^18.0.0",
+    "@types/react": "^18.0.0",
+    "react": "^18.0.0",
+    "react-dom": "^18.0.0",
     "react-router-dom": "^6.20.0"
   }
 }
