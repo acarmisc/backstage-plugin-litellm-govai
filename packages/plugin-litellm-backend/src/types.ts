@@ -29,6 +29,7 @@ export interface TeamInfo {
 
 export interface VirtualKey {
   key: string;
+  token: string;
   key_alias?: string;
   created_at: string;
   expires_at?: string;
@@ -38,6 +39,27 @@ export interface VirtualKey {
   rpm_limit?: number;
   models?: string[];
   user_id?: string;
+}
+
+/**
+ * Shape of a single entry inside LiteLLM's `/user/info` `keys` array.
+ * Differs from VirtualKey: uses `expires` (not `expires_at`), exposes
+ * both a hashed `token` and a masked `key_name`, and fields are nullable
+ * rather than optional.
+ */
+export interface LiteLLMUserKey {
+  token: string;
+  key_name?: string;
+  key_alias?: string | null;
+  spend?: number;
+  expires?: string | null;
+  models?: string[];
+  tpm_limit?: number | null;
+  rpm_limit?: number | null;
+  max_budget?: number | null;
+  user_id?: string | null;
+  team_id?: string | null;
+  created_at: string;
 }
 
 export interface ModelInfo {
@@ -119,6 +141,7 @@ export interface GenerateKeyRequest {
   user_id?: string;
   team_id?: string;
   key_type?: string;
+  metadata?: Record<string, string>;
 }
 
 export interface UpdateKeyRequest {
@@ -158,6 +181,13 @@ export interface ProvisioningDefaults {
   teams: string[];
   tpmLimit?: number;
   rpmLimit?: number;
+  /**
+   * LiteLLM user role applied on /user/new. Defaults to "internal_user"
+   * which grants self-service Create/Delete/View on the user's own keys.
+   * Valid values: proxy_admin, proxy_admin_viewer, internal_user,
+   * internal_user_viewer, team.
+   */
+  userRole?: string;
   metadata: Record<string, string>;
 }
 
@@ -169,12 +199,15 @@ export interface RoleConfig {
   teams?: string[];
   tpmLimit?: number;
   rpmLimit?: number;
+  userRole?: string;
   metadata?: Record<string, string>;
 }
 
 export interface CreateUserRequest {
   user_id: string;
   user_email?: string;
+  user_alias?: string;
+  user_role?: string;
   max_budget?: number;
   budget_duration?: string;
   models?: string[];
@@ -182,6 +215,7 @@ export interface CreateUserRequest {
   tpm_limit?: number;
   rpm_limit?: number;
   metadata?: Record<string, string>;
+  auto_create_key?: boolean;
 }
 
 export interface CreateUserResponse {

@@ -2,6 +2,7 @@ import {
   LiteLLMConfig,
   UserInfo,
   VirtualKey,
+  LiteLLMUserKey,
   ModelInfo,
   UsageMetrics,
   TeamInfo,
@@ -26,7 +27,10 @@ export class LiteLLMClient {
     this.timeout = timeout;
   }
 
-  private async request<T>(path: string, options: RequestInit = {}): Promise<T> {
+  private async request<T>(
+    path: string,
+    options: RequestInit = {},
+  ): Promise<T> {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), this.timeout);
 
@@ -36,14 +40,16 @@ export class LiteLLMClient {
         signal: controller.signal,
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${this.masterKey}`,
+          Authorization: `Bearer ${this.masterKey}`,
           ...options.headers,
         },
       });
 
       if (!response.ok) {
         const errorBody = await response.text();
-        const err = new Error(`LiteLLM API error: ${response.status} ${response.statusText} - ${errorBody}`);
+        const err = new Error(
+          `LiteLLM API error: ${response.status} ${response.statusText} - ${errorBody}`,
+        );
         (err as any).status = response.status;
         throw err;
       }
@@ -75,11 +81,39 @@ export class LiteLLMClient {
     });
   }
 
+  /**
+   * Updates an existing LiteLLM user record. Used as a defensive follow-up
+   * after /user/new because the upsert path of /user/new has been observed
+   * to silently drop fields like user_role under concurrent inserts.
+   */
+  async updateUser(
+    payload: Partial<CreateUserRequest> & { user_id: string },
+  ): Promise<unknown> {
+    return this.request<unknown>('/user/update', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  }
+
+  /**
+   * Returns the keys belonging to a user.
+   *
+   * Implementation note: LiteLLM's `/key/info` endpoint requires a `key`
+   * hash and returns 404 when only `user_id` is passed. The correct way
+   * to enumerate a user's keys is `/user/info?user_id=X`, which embeds
+   * a `keys` array with per-key metadata. We unwrap that array and
+   * normalise field names to match the frontend VirtualKey shape
+   * (LiteLLM exposes `key_name` for the masked display value and
+   * `expires` instead of `expires_at`).
+   */
   async listKeys(userId?: string): Promise<VirtualKey[]> {
-    const query = userId ? `?user_id=${encodeURIComponent(userId)}` : '';
+    if (!userId) return [];
     try {
-      const response = await this.request<{ info: VirtualKey[] } | VirtualKey[]>(`/key/info${query}`);
-      return Array.isArray(response) ? response : (response.info ?? []);
+      const response = await this.request<{ keys?: LiteLLMUserKey[] }>(
+        `/user/info?user_id=${encodeURIComponent(userId)}`,
+      );
+      const rawKeys = response.keys ?? [];
+      return rawKeys.map(this.toVirtualKey);
     } catch (err: any) {
       if (err.status === 404 || err.message.includes('not found')) {
         return [];
@@ -88,10 +122,45 @@ export class LiteLLMClient {
     }
   }
 
+  private toVirtualKey(k: LiteLLMUserKey): VirtualKey {
+    return {
+      // The hashed `token` never leaves LiteLLM in a usable form; the
+      // masked `key_name` ("sk-...XXXX") is what the UI displays. Fall
+      // back to `token` only when `key_name` is missing.
+      key: k.key_name ?? k.token,
+      token: k.token,
+      key_alias: k.key_alias ?? undefined,
+      created_at: k.created_at,
+      expires_at: k.expires ?? undefined,
+      spend: k.spend ?? 0,
+      max_budget: k.max_budget ?? undefined,
+      tpm_limit: k.tpm_limit ?? undefined,
+      rpm_limit: k.rpm_limit ?? undefined,
+      models: k.models ?? [],
+      user_id: k.user_id ?? undefined,
+    };
+  }
+
+  /**
+   * Creates a new virtual key on the LiteLLM proxy.
+   *
+   * Implementation notes — both required to avoid silently-empty keys:
+   *   1. The body must be the plain payload. An earlier version wrapped
+   *      it as `{ json: request }`; LiteLLM doesn't unwrap that envelope
+   *      and treats the request as having no fields, returning a key
+   *      with null alias / models / budget / limits.
+   *   2. LiteLLM expects `key_alias`, not `alias`. Without the rename,
+   *      the alias the user typed is dropped on the floor.
+   */
   async generateKey(request: GenerateKeyRequest): Promise<GenerateKeyResponse> {
+    const { alias, ...rest } = request;
+    const payload = {
+      ...rest,
+      ...(alias && { key_alias: alias }),
+    };
     return this.request<GenerateKeyResponse>('/key/generate', {
       method: 'POST',
-      body: JSON.stringify({ json: request }),
+      body: JSON.stringify(payload),
     });
   }
 
@@ -110,12 +179,16 @@ export class LiteLLMClient {
   }
 
   async listModels(): Promise<ModelInfo[]> {
-    const response = await this.request<{ data: ModelInfo[] } | ModelInfo[]>('/models');
-    return Array.isArray(response) ? response : (response.data ?? []);
+    const response = await this.request<{ data: ModelInfo[] } | ModelInfo[]>(
+      '/models',
+    );
+    return Array.isArray(response) ? response : response.data ?? [];
   }
 
   async getTeamInfo(teamId: string): Promise<TeamInfo> {
-    return this.request<TeamInfo>(`/team/info?team_id=${encodeURIComponent(teamId)}`);
+    return this.request<TeamInfo>(
+      `/team/info?team_id=${encodeURIComponent(teamId)}`,
+    );
   }
 
   private emptyUsage(): UsageMetrics {
@@ -147,7 +220,9 @@ export class LiteLLMClient {
    *   - usage_by_key    → which keys drove cost / traffic (with key_alias + team_id from metadata)
    */
   private transformDailyActivity(response: any): UsageMetrics {
-    const results: any[] = Array.isArray(response?.results) ? response.results : [];
+    const results: any[] = Array.isArray(response?.results)
+      ? response.results
+      : [];
     const meta = response?.metadata ?? {};
 
     const daily_usage = results
@@ -243,7 +318,12 @@ export class LiteLLMClient {
     };
   }
 
-  async getUsage(startDate: string, endDate: string, userId?: string, _groupBy?: string): Promise<UsageMetrics> {
+  async getUsage(
+    startDate: string,
+    endDate: string,
+    userId?: string,
+    _groupBy?: string,
+  ): Promise<UsageMetrics> {
     const params = new URLSearchParams({
       start_date: startDate,
       end_date: endDate,
@@ -251,7 +331,9 @@ export class LiteLLMClient {
     });
     if (userId) params.append('user_id', userId);
     try {
-      const response = await this.request<any>(`/user/daily/activity?${params.toString()}`);
+      const response = await this.request<any>(
+        `/user/daily/activity?${params.toString()}`,
+      );
       return this.transformDailyActivity(response);
     } catch (err: any) {
       if (err.status === 404 || err.message.includes('not found')) {
@@ -261,7 +343,11 @@ export class LiteLLMClient {
     }
   }
 
-  async getTeamUsage(teamId: string, startDate: string, endDate: string): Promise<UsageMetrics> {
+  async getTeamUsage(
+    teamId: string,
+    startDate: string,
+    endDate: string,
+  ): Promise<UsageMetrics> {
     const params = new URLSearchParams({
       start_date: startDate,
       end_date: endDate,
@@ -269,7 +355,9 @@ export class LiteLLMClient {
       page_size: '100',
     });
     try {
-      const response = await this.request<any>(`/team/daily/activity?${params.toString()}`);
+      const response = await this.request<any>(
+        `/team/daily/activity?${params.toString()}`,
+      );
       return this.transformDailyActivity(response);
     } catch (err: any) {
       if (err.status === 404 || err.message.includes('not found')) {

@@ -1,4 +1,4 @@
-import { Router, Request, Response } from 'express';
+import express, { Router, Request, Response } from 'express';
 import { Config } from '@backstage/config';
 import { AuthService, DiscoveryService } from '@backstage/backend-plugin-api';
 import { CatalogClient } from '@backstage/catalog-client';
@@ -15,6 +15,7 @@ import {
 import {
   toLiteLLMUserId,
   resolveUserId,
+  resolveUserProfile,
   getOrProvisionUser,
   readProvisioningDefaults,
   readRoleConfigs,
@@ -37,17 +38,28 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
   const masterKey = config.getString('litellm.masterKey');
   const userIdDomain = config.getOptionalString('litellm.userIdDomain');
   const client = new LiteLLMClient({ baseUrl, masterKey });
-  const { enabled: provisioningEnabled, defaults: provisioningDefaults } = readProvisioningDefaults(config);
+  const { enabled: provisioningEnabled, defaults: provisioningDefaults } =
+    readProvisioningDefaults(config);
   const roleConfigs = readRoleConfigs(config);
   const catalogClient = new CatalogClient({ discoveryApi: discovery });
 
   if (provisioningEnabled) {
     logger.info(
-      `LiteLLM auto-provisioning enabled — defaults: budget=$${provisioningDefaults.maxBudget}/${provisioningDefaults.budgetDuration}, models=${provisioningDefaults.models.length ? provisioningDefaults.models.join(',') : 'all'}, teams=[${provisioningDefaults.teams.join(',')}]`,
+      `LiteLLM auto-provisioning enabled — defaults: budget=$${
+        provisioningDefaults.maxBudget
+      }/${provisioningDefaults.budgetDuration}, models=${
+        provisioningDefaults.models.length
+          ? provisioningDefaults.models.join(',')
+          : 'all'
+      }, teams=[${provisioningDefaults.teams.join(',')}]`,
     );
   }
 
   const router = Router();
+  // JSON body parser. Without this, every POST/PUT endpoint sees an empty
+  // req.body. Backstage's httpRouter does not apply a body parser at the
+  // plugin-router level, so each plugin must attach its own.
+  router.use(express.json());
 
   router.get('/health', (_req: Request, res: Response) => {
     res.json({ status: 'ok', provisioning: provisioningEnabled });
@@ -115,8 +127,28 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
 
   router.post('/keys/generate', async (req: Request, res: Response) => {
     try {
+      // Only alias + max_budget are required. An empty models array is
+      // intentional — in LiteLLM `models: []` means "all models the user
+      // can access" which is the desired default. Forcing a selection
+      // up front is too restrictive for the common case.
+      const body = (req.body ?? {}) as GenerateKeyRequest;
+      const missing: string[] = [];
+      if (!body.alias?.trim()) missing.push('alias');
+      if (typeof body.max_budget !== 'number' || body.max_budget <= 0) {
+        missing.push('max_budget (positive number)');
+      }
+      if (missing.length) {
+        res.status(400).json({
+          error: 'Missing required fields',
+          hint: `Required: ${missing.join(', ')}`,
+        });
+        return;
+      }
+
       const tokenEntityRef = await resolveUserId(req, auth);
-      const resolvedUserId = tokenEntityRef ? toLiteLLMUserId(tokenEntityRef, userIdDomain) : undefined;
+      const resolvedUserId = tokenEntityRef
+        ? toLiteLLMUserId(tokenEntityRef, userIdDomain)
+        : undefined;
 
       if (resolvedUserId) {
         await getOrProvisionUser(
@@ -132,8 +164,28 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
         );
       }
 
+      // Stamp ownership into LiteLLM key metadata. LiteLLM's native
+      // `created_by` column is only populated when the caller authenticates
+      // via JWT/SSO; we always call with the master key, so that column
+      // stays null. Enriching `metadata` makes the owner identity visible
+      // in LiteLLM's UI and queryable via API.
+      const profile = tokenEntityRef
+        ? await resolveUserProfile(tokenEntityRef, catalogClient, auth, logger)
+        : {};
+      const enrichedMetadata = {
+        ...(body.metadata ?? {}),
+        created_by_backstage_user: tokenEntityRef ?? 'unknown',
+        ...(profile.email && { created_by_email: profile.email }),
+        ...(profile.displayName && {
+          created_by_display_name: profile.displayName,
+        }),
+        created_via: 'backstage',
+        created_at_iso: new Date().toISOString(),
+      };
+
       const request: GenerateKeyRequest = {
-        ...req.body,
+        ...body,
+        metadata: enrichedMetadata,
         ...(resolvedUserId && { user_id: resolvedUserId }),
       };
       const result: GenerateKeyResponse = await client.generateKey(request);
@@ -174,15 +226,6 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
       await client.deleteKeys({ keys: [keyId] });
       res.json({ success: true });
     } catch (error: any) {
-      // Handle 404 as "already deleted" (idempotent operation)
-      if (error.status === 404 || error.message.includes('404')) {
-        logger.warn(`Key ${keyId} not found (already deleted or never existed)`);
-        res.status(200).json({ 
-          success: true, 
-          message: 'Key was already deleted or never existed' 
-        });
-        return;
-      }
       logger.error('Failed to delete key', error);
       res.status(500).json({ error: error.message });
     }
