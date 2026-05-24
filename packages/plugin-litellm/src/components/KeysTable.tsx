@@ -97,7 +97,6 @@ export const KeysTable: React.FC<KeysTableProps> = ({
     }
   }, [generateModalOpen, teams, formData.team_id]);
 
-  const teamRequired = false; // Team selection is now optional
   const canGenerate = true; // Always allow generation regardless of team selection
 
   const [editingKey, setEditingKey] = useState<VirtualKey | null>(null);

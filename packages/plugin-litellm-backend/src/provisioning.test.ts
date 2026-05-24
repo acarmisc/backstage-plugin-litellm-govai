@@ -214,7 +214,7 @@ describe('getOrProvisionUser', () => {
     const created = { user_id: 'bob', spend: 0 };
     let creationCalled = false;
     const client = mockClient({
-      getUserInfo: (userId: any) => {
+      getUserInfo: (_userId: any) => {
         getUserCallCount++;
         // First call -> missing; subsequent call (after createUser) -> exists
         return Promise.resolve(getUserCallCount === 1 ? null : created);
@@ -298,7 +298,7 @@ describe('getOrProvisionUser', () => {
     let getUserCallCount = 0;
     let creationPayload: any;
     const client = mockClient({
-      getUserInfo: (userId: any) => {
+      getUserInfo: (_userId: any) => {
         getUserCallCount++;
         // First call returns null (missing), second call returns created user
         return Promise.resolve(getUserCallCount === 1 ? null : { user_id: 'eve', spend: 0 });
