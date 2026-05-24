@@ -19,7 +19,7 @@ export const LiteLLMPage: React.FC = () => {
     return { start, end };
   });
 
-  const [snackbar, setSnackbar] = useState<{ message: string; severity: 'success' | 'error' } | null>(null);
+  const [snackbar, setSnackbar] = useState<{ message: string; severity: 'success' | 'warning' | 'error' } | null>(null);
 
   // Team usage cache: teamId -> UsageMetrics
   const [teamUsageCache, setTeamUsageCache] = useState<Record<string, UsageMetrics | null>>({});

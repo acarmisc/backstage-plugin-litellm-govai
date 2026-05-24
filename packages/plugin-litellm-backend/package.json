@@ -23,8 +23,8 @@
     "config.d.ts"
   ],
   "scripts": {
-    "build": "echo 'Build dist/ from Backstage monorepo: backstage-cli package build'",
-    "prepack": "echo 'Dist files must be built in Backstage monorepo and copied here'",
+    "build": "node build.js && tsc -p tsconfig.json",
+    "prepack": "npm run build",
     "postpack": ""
   },
   "dependencies": {
