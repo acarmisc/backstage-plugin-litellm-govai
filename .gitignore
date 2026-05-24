@@ -2,6 +2,8 @@
 node_modules
 .pnp
 .pnp.js
+.pnp.cjs
+.yarn/
 
 # Lock files (Backstage uses yarn)
 package-lock.json
@@ -17,3 +19,32 @@ coverage
 .DS_Store
 *.log
 *.local
+
+# IDE and editor configs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Local cache and MCP artifacts
+.claude/settings.local.json
+.playwright-mcp/
+
+# Environment and secrets
+.env
+.env.local
+
+# Agent-generated and scratch files
+AGENTS.md
+FIXES_APPLIED.md
+ISSUES_SUMMARY.md
+WORK_COMPLETE.md
+LITELLM_MIGRATION_HANDOFF.md
+all_fixes.patch
+e2e-test-config.yaml
+e2e-tests.sh
+fix_*.md
+
+# Stray scratch
+null
