@@ -30,6 +30,6 @@ const liteLlmPage = PageBlueprint.make({
 });
 
 export const litellmPlugin = createFrontendPlugin({
-  id: 'litellm',
+  pluginId: 'litellm',
   extensions: [liteLlmApi, liteLlmPage],
 });
