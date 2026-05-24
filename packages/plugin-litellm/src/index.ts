@@ -4,6 +4,8 @@ export { DashboardHeader } from './components/DashboardHeader';
 export { KeysTable } from './components/KeysTable';
 export { UsageStats } from './components/UsageStats';
 export { TeamUsage } from './components/TeamUsage';
+export { LiteLLMHomeWidget } from './components/LiteLLMHomeWidget';
+export type { LiteLLMHomeWidgetProps } from './components/LiteLLMHomeWidget';
 export { LiteLlmApi, liteLlmApiRef } from './api';
 export type { LiteLlmApiInterface } from './api';
 export * from './types';

@@ -162,6 +162,28 @@ import { litellmPlugin, LiteLLMPage } from '@acarmisc/backstage-plugin-litellm';
 
 You can also register it as a plugin extension using the New Frontend System.
 
+### Home Widget
+
+`LiteLLMHomeWidget` is a compact card you can drop onto any Backstage homepage. It shows **the signed-in user's** data — identity is resolved server-side from the Backstage Bearer token, so no `userId` prop is required and no additional backend endpoint is needed.
+
+**KPIs displayed:** USD spent · Tokens in · Tokens out · Key count, plus a daily-spend sparkline (hidden when there is no daily data). A small period selector (`Today` / `7d` / `30d`) lives in the card header.
+
+```tsx
+import { LiteLLMHomeWidget } from '@acarmisc/backstage-plugin-litellm';
+
+// In your HomePage composition:
+<LiteLLMHomeWidget defaultPeriod="7d" />
+```
+
+**Props:**
+
+| Prop | Type | Default | Description |
+|------|------|---------|-------------|
+| `defaultPeriod` | `'today' \| '7d' \| '30d'` | `'7d'` | Period shown on first render |
+| `title` | `string` | `'LiteLLM Usage'` | Card title override |
+
+The widget requires the same backend setup as the full `LiteLLMPage` (backend plugin configured and the user provisioned in LiteLLM).
+
 ### Autoprovisioning
 
 When `litellm.provisioning.enabled` is `true`, the backend automatically creates a LiteLLM user the first time a Backstage user hits any plugin endpoint (user info, keys, teams, or usage). The flow is:
