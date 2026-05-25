@@ -1,63 +1,156 @@
 name: Publish to npm
 
 on:
+  push:
+    tags:
+      - 'litellm@*'
+      - 'litellm-backend@*'
   workflow_dispatch:
     inputs:
       package:
         description: 'Package to publish (litellm or litellm-backend)'
         required: true
+        type: choice
+        options:
+          - litellm
+          - litellm-backend
         default: 'litellm'
-      version:
-        description: 'Version tag (e.g., 0.0.1)'
-        required: true
+      ref:
+        description: 'Tag or sha to check out (optional; defaults to the branch you dispatched from)'
+        required: false
+        default: ''
+
+concurrency:
+  group: publish-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
-  publish:
+  resolve:
+    name: Resolve target package
+    runs-on: ubuntu-latest
+    outputs:
+      short_name: ${{ steps.parse.outputs.short_name }}
+      pkg_name: ${{ steps.parse.outputs.pkg_name }}
+      pkg_dir: ${{ steps.parse.outputs.pkg_dir }}
+      version: ${{ steps.parse.outputs.version }}
+      ref: ${{ steps.parse.outputs.ref }}
+    steps:
+      - name: Parse trigger
+        id: parse
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
+          INPUT_PACKAGE: ${{ github.event.inputs.package }}
+          INPUT_REF: ${{ github.event.inputs.ref }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT_NAME" = "push" ]; then
+            # Tag form: <short>@<version>, where <short> is litellm or litellm-backend.
+            tag="$REF_NAME"
+            short="${tag%@*}"
+            version="${tag#*@}"
+            ref="$tag"
+          else
+            short="$INPUT_PACKAGE"
+            version=""  # will be read from package.json after checkout
+            ref="${INPUT_REF:-${{ github.ref }}}"
+          fi
+
+          case "$short" in
+            litellm)
+              pkg_name="@acarmisc/backstage-plugin-litellm"
+              pkg_dir="packages/plugin-litellm"
+              ;;
+            litellm-backend)
+              pkg_name="@acarmisc/backstage-plugin-litellm-backend"
+              pkg_dir="packages/plugin-litellm-backend"
+              ;;
+            *)
+              echo "::error::Unrecognized package short name: '$short'"
+              exit 1
+              ;;
+          esac
+
+          echo "short_name=$short" >> "$GITHUB_OUTPUT"
+          echo "pkg_name=$pkg_name" >> "$GITHUB_OUTPUT"
+          echo "pkg_dir=$pkg_dir" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "ref=$ref" >> "$GITHUB_OUTPUT"
+
+          echo "Resolved: short=$short pkg=$pkg_name dir=$pkg_dir version=${version:-<from package.json>} ref=$ref"
+
+  publish-npm:
+    name: Publish ${{ needs.resolve.outputs.short_name }} to npm
+    needs: resolve
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      packages: write
+    outputs:
+      version: ${{ steps.verify.outputs.version }}
     steps:
       - uses: actions/checkout@v4
-      
-      - name: Check for workspace context
-        id: check_workspace
-        run: |
-          if [ -f "../../package.json" ] && grep -q '"workspaces"' ../../package.json 2>/dev/null; then
-            echo "in_workspace=true" >> $GITHUB_OUTPUT
-          else
-            echo "in_workspace=false" >> $GITHUB_OUTPUT
-          fi
-          cat $GITHUB_OUTPUT
-      
-      - name: Error if not in workspace
-        if: steps.check_workspace.outputs.in_workspace == 'false'
-        run: |
-          echo "::error::This plugin requires being in a Backstage monorepo to publish."
-          echo "The plugin uses workspace dependencies (workspace:^) that only resolve within a Backstage monorepo."
-          echo "To publish: copy these packages into a Backstage monorepo's plugins/ directory, then run this workflow."
-          exit 1
-      
+        with:
+          ref: ${{ needs.resolve.outputs.ref }}
+          fetch-depth: 0
+
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
           registry-url: 'https://registry.npmjs.org'
-          token: ${{ secrets.NPM_TOKEN }}
-      
-      - name: Install dependencies
-        run: yarn install --immutable
-      
-      - name: Build package
+
+      - name: Verify tag version matches package.json
+        id: verify
+        env:
+          PKG_DIR: ${{ needs.resolve.outputs.pkg_dir }}
+          TAG_VERSION: ${{ needs.resolve.outputs.version }}
         run: |
-          if [ "${{ github.event.inputs.package }}" == "litellm" ]; then
-            yarn workspace @govai/backstage-plugin-litellm build
-          else
-            yarn workspace @govai/backstage-plugin-litellm-backend build
+          set -euo pipefail
+          pkg_version=$(node -p "require('./$PKG_DIR/package.json').version")
+          echo "package.json version: $pkg_version"
+          echo "tag version:          ${TAG_VERSION:-<workflow_dispatch, skipping match check>}"
+
+          if [ -n "$TAG_VERSION" ] && [ "$TAG_VERSION" != "$pkg_version" ]; then
+            echo "::error::Tag version ($TAG_VERSION) does not match package.json version ($pkg_version) in $PKG_DIR. Aborting to avoid publishing the wrong version."
+            exit 1
           fi
-      
-      - name: Publish
-        run: |
-          cd packages/${{ github.event.inputs.package }}
-          npm publish --access public --tag latest
+
+          echo "version=$pkg_version" >> "$GITHUB_OUTPUT"
+
+      - name: Install dependencies
+        working-directory: ${{ needs.resolve.outputs.pkg_dir }}
+        run: npm install --no-audit --no-fund
+
+      - name: Build
+        working-directory: ${{ needs.resolve.outputs.pkg_dir }}
+        run: npm run build
+
+      - name: Publish to npm
+        working-directory: ${{ needs.resolve.outputs.pkg_dir }}
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --access public
+
+  github-release:
+    name: Create GitHub Release
+    needs: [resolve, publish-npm]
+    runs-on: ubuntu-latest
+    # Only auto-create a release when the workflow was triggered by a tag push;
+    # workflow_dispatch runs are typically reruns or ad-hoc publishes and
+    # should not (re)create a Release.
+    if: github.event_name == 'push'
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.resolve.outputs.ref }}
+          fetch-depth: 0
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: ${{ needs.resolve.outputs.short_name }} v${{ needs.publish-npm.outputs.version }}
+          generate_release_notes: true
+          make_latest: 'true'
+          fail_on_unmatched_files: false
