@@ -63,11 +63,34 @@ export class LiteLLMClient {
   /**
    * Returns null when the user is not found in LiteLLM (404).
    * Throws on all other errors so callers know something went wrong.
+   *
+   * LiteLLM's `/user/info` wraps the user row inside `user_info` and returns
+   * `teams` as an array of full team objects, not team_id strings. We flatten
+   * `user_info` onto the top level and reduce `teams` to a string[] of ids so
+   * the rest of the code can rely on the UserInfo contract.
    */
   async getUserInfo(userId?: string): Promise<UserInfo | null> {
     const query = userId ? `?user_id=${encodeURIComponent(userId)}` : '';
     try {
-      return await this.request<UserInfo>(`/user/info${query}`);
+      const raw = await this.request<any>(`/user/info${query}`);
+      const inner = raw?.user_info ?? {};
+      const teamIds: string[] = Array.isArray(raw?.teams)
+        ? raw.teams
+            .map((t: any) => (typeof t === 'string' ? t : t?.team_id))
+            .filter((t: unknown): t is string => typeof t === 'string')
+        : [];
+      return {
+        user_id: raw?.user_id ?? inner.user_id ?? userId ?? '',
+        user_email: inner.user_email ?? raw?.user_email,
+        email: inner.email ?? raw?.email,
+        teams: teamIds,
+        models: inner.models ?? raw?.models,
+        max_budget: inner.max_budget ?? raw?.max_budget,
+        spend: inner.spend ?? raw?.spend,
+        current_spend: inner.current_spend ?? raw?.current_spend,
+        soft_limit: inner.soft_limit ?? raw?.soft_limit,
+        hard_limit: inner.hard_limit ?? raw?.hard_limit,
+      };
     } catch (err: any) {
       if (err.status === 404) return null;
       throw err;
@@ -178,11 +201,54 @@ export class LiteLLMClient {
     });
   }
 
+  /**
+   * Returns the proxy's model catalogue normalised to the ModelInfo shape.
+   *
+   * Prefers `/model/info` which exposes `model_name`, `mode`, capability flags
+   * and per-token costs. Falls back to OpenAI-compatible `/models` (which only
+   * returns `{id}`) so the dropdown still works on installs where `/model/info`
+   * isn't reachable. Without this normalisation the UI saw blank labels and
+   * a single "other" group because `/models` doesn't populate `model_name`
+   * or `mode`.
+   */
   async listModels(): Promise<ModelInfo[]> {
-    const response = await this.request<{ data: ModelInfo[] } | ModelInfo[]>(
-      '/models',
-    );
-    return Array.isArray(response) ? response : response.data ?? [];
+    try {
+      const response = await this.request<{ data?: any[] }>('/model/info');
+      const data = Array.isArray(response?.data) ? response.data : [];
+      const normalised = data.map((m: any) => {
+        const info = m.model_info ?? {};
+        const params = m.litellm_params ?? {};
+        return {
+          model_name: m.model_name ?? params.model ?? info.id ?? '',
+          mode: info.mode ?? m.mode ?? 'chat',
+          supports_function_calling:
+            info.supports_function_calling ?? m.supports_function_calling,
+          supports_vision: info.supports_vision ?? m.supports_vision,
+          input_cost_per_token:
+            info.input_cost_per_token ?? params.input_cost_per_token,
+          output_cost_per_token:
+            info.output_cost_per_token ?? params.output_cost_per_token,
+        } as ModelInfo;
+      });
+      const filtered = normalised.filter(m => m.model_name);
+      if (filtered.length) return filtered;
+    } catch {
+      // fall through to /models
+    }
+    const fallback = await this.request<{ data?: any[] } | any[]>('/models');
+    const data = Array.isArray(fallback)
+      ? fallback
+      : Array.isArray(fallback?.data)
+      ? fallback!.data!
+      : [];
+    return data
+      .map((m: any) => ({
+        model_name: m.model_name ?? m.id ?? '',
+        mode: m.mode ?? 'chat',
+        supports_function_calling: m.supports_function_calling,
+        supports_vision: m.supports_vision,
+      }))
+      .filter((m: ModelInfo) => m.model_name);
   }
 
   async getTeamInfo(teamId: string): Promise<TeamInfo> {

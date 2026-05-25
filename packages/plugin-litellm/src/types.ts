@@ -29,6 +29,7 @@ export interface TeamInfo {
 
 export interface VirtualKey {
   key: string;
+  token?: string;
   key_alias?: string;
   created_at: string;
   expires_at?: string;

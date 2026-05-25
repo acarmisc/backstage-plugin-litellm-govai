@@ -21,7 +21,7 @@ import {
   CircularProgress,
   Autocomplete,
 } from '@mui/material';
-import { ContentCopy, Delete, Add, Edit, Visibility, VisibilityOff } from '@mui/icons-material';
+import { ContentCopy, Delete, Add, Edit } from '@mui/icons-material';
 import {
   VirtualKey,
   ModelInfo,
@@ -44,6 +44,14 @@ interface KeysTableProps {
 const maskKey = (key: string): string => {
   if (key.length <= 8) return '***';
   return `${key.slice(0, 4)}...${key.slice(-4)}`;
+};
+
+// The Key ID is the hashed `token` LiteLLM uses internally to identify a key.
+// We display a short prefix so the row stays compact, but copy the full hash.
+const shortKeyId = (token: string): string => {
+  if (!token) return '-';
+  if (token.length <= 16) return token;
+  return `${token.slice(0, 12)}…`;
 };
 
 const formatDate = (dateStr: string): string => {
@@ -82,7 +90,6 @@ export const KeysTable: React.FC<KeysTableProps> = ({
   onDeleteKey,
 }) => {
   const [generateModalOpen, setGenerateModalOpen] = useState(false);
-  const [showKeyValue, setShowKeyValue] = useState<string | null>(null);
   const [newKeyValue, setNewKeyValue] = useState<string | null>(null);
   const [formData, setFormData] = useState<GenerateKeyRequest>(emptyForm());
   const [submitting, setSubmitting] = useState(false);
@@ -179,7 +186,7 @@ export const KeysTable: React.FC<KeysTableProps> = ({
             <TableHead>
               <TableRow>
                 <TableCell>Alias</TableCell>
-                <TableCell>Key</TableCell>
+                <TableCell>Key ID</TableCell>
                 <TableCell>Created</TableCell>
                 <TableCell>Spend</TableCell>
                 <TableCell>Budget</TableCell>
@@ -202,35 +209,29 @@ export const KeysTable: React.FC<KeysTableProps> = ({
                   </TableCell>
                 </TableRow>
               ) : (
-                keys.map((key) => (
-                  <TableRow key={key.key}>
+                keys.map((key) => {
+                  const keyId = key.token ?? key.key;
+                  return (
+                  <TableRow key={keyId}>
                     <TableCell>{key.key_alias || '-'}</TableCell>
                     <TableCell>
                       <Box display="flex" alignItems="center" gap={0.5}>
-                        <Typography 
-                          variant="body2" 
-                          component="code" 
-                          color="primary"
-                          sx={{ 
-                            fontFamily: 'monospace', 
-                            backgroundColor: 'background.default', 
-                            px: 1, 
-                            py: 0.5, 
+                        <Typography
+                          variant="body2"
+                          component="code"
+                          color="text.secondary"
+                          title={keyId}
+                          sx={{
+                            fontFamily: 'monospace',
+                            backgroundColor: 'background.default',
+                            px: 1,
+                            py: 0.5,
                             borderRadius: 1,
-                            maxWidth: '250px',
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
                           }}
                         >
-                          {showKeyValue === key.key ? key.key : maskKey(key.key)}
+                          {shortKeyId(keyId)}
                         </Typography>
-                        <IconButton
-                          size="small"
-                          onClick={() => setShowKeyValue(showKeyValue === key.key ? null : key.key)}
-                        >
-                          {showKeyValue === key.key ? <VisibilityOff /> : <Visibility />}
-                        </IconButton>
-                        <IconButton size="small" onClick={() => copyToClipboard(key.key)}>
+                        <IconButton size="small" onClick={() => copyToClipboard(keyId)} title="Copy Key ID">
                           <ContentCopy fontSize="small" />
                         </IconButton>
                       </Box>
@@ -258,7 +259,8 @@ export const KeysTable: React.FC<KeysTableProps> = ({
                       </IconButton>
                     </TableCell>
                   </TableRow>
-                ))
+                  );
+                })
               )}
             </TableBody>
           </Table>
