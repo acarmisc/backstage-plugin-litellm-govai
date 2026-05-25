@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import {
   Paper,
   Table,
@@ -66,7 +66,7 @@ const emptyForm = (): GenerateKeyRequest => ({
   alias: '',
   models: [],
   duration: '30d',
-  max_budget: undefined,
+  max_budget: 100,
   tpm_limit: undefined,
   team_id: undefined,
   key_type: 'llm_api',
@@ -94,16 +94,6 @@ export const KeysTable: React.FC<KeysTableProps> = ({
   const [formData, setFormData] = useState<GenerateKeyRequest>(emptyForm());
   const [submitting, setSubmitting] = useState(false);
 
-  // Default to the user's first team when the modal opens so users in exactly
-  // one team don't need to pick. Multi-team users see the picker pre-filled
-  // and can change it. Teams are already filtered to the current user upstream.
-  useEffect(() => {
-    if (!generateModalOpen) return;
-    if (!formData.team_id && teams.length > 0) {
-      setFormData(f => ({ ...f, team_id: teams[0].team_id }));
-    }
-  }, [generateModalOpen, teams, formData.team_id]);
-
   const canGenerate = true; // Always allow generation regardless of team selection
 
   const [editingKey, setEditingKey] = useState<VirtualKey | null>(null);
@@ -121,11 +111,6 @@ export const KeysTable: React.FC<KeysTableProps> = ({
       const response = await onGenerateKey(formData);
       setNewKeyValue(response.key);
       setFormData(emptyForm());
-      // Close dialog after showing the generated key
-      setTimeout(() => {
-        setGenerateModalOpen(false);
-        setNewKeyValue(null);
-      }, 1500);
     } catch (error) {
       console.error('Failed to generate key:', error);
     } finally {
@@ -282,7 +267,9 @@ export const KeysTable: React.FC<KeysTableProps> = ({
                 mt={2}
                 p={2}
                 sx={{
-                  backgroundColor: 'grey.100',
+                  backgroundColor: 'action.hover',
+                  border: '1px solid',
+                  borderColor: 'divider',
                   borderRadius: 1,
                 }}
               >
@@ -304,6 +291,7 @@ export const KeysTable: React.FC<KeysTableProps> = ({
                 label="Alias"
                 value={formData.alias || ''}
                 onChange={(e) => setFormData({ ...formData, alias: e.target.value })}
+                required
                 fullWidth
               />
               <TextField
@@ -357,7 +345,7 @@ export const KeysTable: React.FC<KeysTableProps> = ({
                     </li>
                   )}
                   renderInput={params => (
-                    <TextField {...params} label="Models" fullWidth />
+                    <TextField {...params} label="Models" helperText="Leave empty to allow all models" fullWidth />
                   )}
                 />
               )}
@@ -369,6 +357,7 @@ export const KeysTable: React.FC<KeysTableProps> = ({
                 onChange={(e) =>
                   setFormData({ ...formData, max_budget: e.target.value ? Number(e.target.value) : undefined })
                 }
+                required
                 fullWidth
               />
               <TextField
