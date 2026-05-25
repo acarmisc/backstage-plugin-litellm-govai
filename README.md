@@ -14,8 +14,6 @@ This is a Backstage 1.50+ plugin providing a governance interface for LiteLLM pr
 - `packages/plugin-litellm` - Frontend (`@acarmisc/backstage-plugin-litellm`)
 - `packages/plugin-litellm-backend` - Backend (`@acarmisc/backstage-plugin-litellm-backend`)
 
-**Note:** Packages are published to the `@acarmisc` npm scope. The original `@govai` scope requires organizational membership.
-
 ## Installation
 
 This plugin is designed to be used **within a Backstage monorepo**. It uses workspace dependencies and requires the Backstage CLI to build.
@@ -281,6 +279,23 @@ The backend provides the following endpoints (all prefixed with `/api/litellm`):
 - **Team Context**: Optional team-based key generation and usage tracking
 - **User Info**: Display user quotas and current usage limits
 - **Model Selection**: Browse available LLM models configured in LiteLLM
+
+## Release
+
+Push a tag matching the pattern `<package>@<version>` to trigger automated npm publish + GitHub Release:
+
+```bash
+# Bump the version in package.json
+$EDITOR packages/plugin-litellm/package.json   # or plugin-litellm-backend
+git commit -am "release: litellm vX.Y.Z"
+git push origin main
+
+# Cut and push the tag
+git tag litellm@X.Y.Z              # or litellm-backend@X.Y.Z
+git push origin litellm@X.Y.Z
+```
+
+The CI workflow verifies the tag version matches `package.json`, builds, publishes to npm, and auto-creates a GitHub Release with generated release notes.
 
 ## Troubleshooting
 
