@@ -138,7 +138,7 @@ export const KeysTable: React.FC<KeysTableProps> = ({
     if (!editingKey) return;
     setEditSubmitting(true);
     try {
-      await onUpdateKey(editingKey.key, editForm);
+      await onUpdateKey(editingKey.token ?? editingKey.key, editForm);
       handleCloseEdit();
     } catch (error) {
       console.error('Failed to update key:', error);
@@ -239,7 +239,7 @@ export const KeysTable: React.FC<KeysTableProps> = ({
                       <IconButton onClick={() => handleOpenEdit(key)}>
                         <Edit fontSize="small" />
                       </IconButton>
-                      <IconButton color="error" onClick={() => onDeleteKey(key.key)}>
+                      <IconButton color="error" onClick={() => onDeleteKey(keyId)}>
                         <Delete />
                       </IconButton>
                     </TableCell>
