@@ -118,7 +118,9 @@ jobs:
 
       - name: Install dependencies
         working-directory: ${{ needs.resolve.outputs.pkg_dir }}
-        run: npm install --no-audit --no-fund
+        # Backstage's MUI4 theme has a react@^17 peer dep; --legacy-peer-deps
+        # mirrors local install behaviour and avoids npm@7+ ERESOLVE failures.
+        run: npm install --no-audit --no-fund --legacy-peer-deps
 
       - name: Build
         working-directory: ${{ needs.resolve.outputs.pkg_dir }}
