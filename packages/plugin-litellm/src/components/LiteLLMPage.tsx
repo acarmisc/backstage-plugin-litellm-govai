@@ -9,15 +9,24 @@ import { TeamUsage } from './TeamUsage';
 import { liteLlmApiRef } from '../api';
 import { DateRange, GenerateKeyRequest, GenerateKeyResponse, UpdateKeyRequest, UsageMetrics } from '../types';
 
+const PERIOD_LS_KEY = 'litellm_usage_period';
+
+function initDateRange(): DateRange {
+  let preset = '7d';
+  try { preset = localStorage.getItem(PERIOD_LS_KEY) ?? '7d'; } catch { /* ignore */ }
+  const end = new Date();
+  const start = new Date();
+  if (preset === 'today') start.setHours(0, 0, 0, 0);
+  else if (preset === '24h') start.setHours(start.getHours() - 24);
+  else if (preset === '30d') start.setDate(start.getDate() - 30);
+  else start.setDate(start.getDate() - 7);
+  return { start, end };
+}
+
 export const LiteLLMPage: React.FC = () => {
   const api = useApi(liteLlmApiRef);
 
-  const [dateRange, setDateRange] = useState<DateRange>(() => {
-    const end = new Date();
-    const start = new Date();
-    start.setDate(start.getDate() - 7);
-    return { start, end };
-  });
+  const [dateRange, setDateRange] = useState<DateRange>(initDateRange);
 
   const [snackbar, setSnackbar] = useState<{ message: string; severity: 'success' | 'warning' | 'error' } | null>(null);
 
@@ -233,6 +242,7 @@ export const LiteLLMPage: React.FC = () => {
             dateRange={dateRange}
             onDateRangeChange={setDateRange}
             loading={usageLoading}
+            userInfo={userInfo}
           />
         </Grid>
       </Grid>
