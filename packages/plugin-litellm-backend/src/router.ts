@@ -412,6 +412,7 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
           provisioningEnabled,
           provisioningDefaults,
           logger,
+          userIdDomain,
         );
         res.json(keys);
       } catch (error: any) {
@@ -429,6 +430,7 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
           provisioningDefaults,
           logger,
           (req.body ?? {}) as Partial<GenerateKeyRequest>,
+          userIdDomain,
         );
         res.json(result);
       } catch (error: any) {

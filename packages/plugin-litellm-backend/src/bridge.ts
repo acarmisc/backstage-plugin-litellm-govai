@@ -23,7 +23,7 @@ import {
   UserInfo,
   VirtualKey,
 } from './types';
-import { ProvisioningError, provisionUser } from './provisioning';
+import { ProvisioningError, provisionUser, toLiteLLMUserId } from './provisioning';
 
 /** Claims extracted from a verified Keycloak access token. */
 export interface BridgeClaims {
@@ -137,9 +137,22 @@ export function newDefaultVerifier(cfg: BridgeConfig): TokenVerifier {
   return new KeycloakJWTVerifier({ issuer: cfg.issuer, clientId: cfg.clientId });
 }
 
-/** Picks the LiteLLM user_id from the verified claims (email → username → sub). */
-export function resolveBridgeUserId(claims: BridgeClaims): string {
-  return claims.email ?? claims.preferred_username ?? claims.sub;
+/**
+ * Resolves the LiteLLM user_id from the verified claims, matching exactly how
+ * the UI derives it so the bridge addresses the *same* LiteLLM user (not a
+ * duplicate). The UI uses toLiteLLMUserId(entityRef, userIdDomain) where the
+ * Backstage entity name has been rewritten by the Keycloak user transformer:
+ * because the catalog rejects '@' in entity names, usernames imported as full
+ * emails are stored as their local-part. We replicate that here — strip the
+ * '@domain' off the username, then apply the same userIdDomain rule.
+ */
+export function resolveBridgeUserId(
+  claims: BridgeClaims,
+  userIdDomain?: string,
+): string {
+  const raw = claims.preferred_username ?? claims.email ?? claims.sub;
+  const entityName = raw.includes('@') ? raw.split('@')[0] : raw;
+  return toLiteLLMUserId(entityName, userIdDomain);
 }
 
 /**
@@ -154,8 +167,9 @@ export async function getOrProvisionUserFromClaims(
   provisioningEnabled: boolean,
   provisioningDefaults: ProvisioningDefaults,
   logger: { info: (...args: unknown[]) => void },
+  userIdDomain?: string,
 ): Promise<UserInfo> {
-  const userId = resolveBridgeUserId(claims);
+  const userId = resolveBridgeUserId(claims, userIdDomain);
   const existing = await client.getUserInfo(userId);
   if (existing) return existing;
 
@@ -197,6 +211,7 @@ export async function bridgeListKeys(
   provisioningEnabled: boolean,
   provisioningDefaults: ProvisioningDefaults,
   logger: { info: (...args: unknown[]) => void },
+  userIdDomain?: string,
 ): Promise<VirtualKey[]> {
   await getOrProvisionUserFromClaims(
     client,
@@ -204,8 +219,9 @@ export async function bridgeListKeys(
     provisioningEnabled,
     provisioningDefaults,
     logger,
+    userIdDomain,
   );
-  return client.listKeys(resolveBridgeUserId(claims));
+  return client.listKeys(resolveBridgeUserId(claims, userIdDomain));
 }
 
 /** Mints a new virtual key for the caller (provisioning the user first if needed). */
@@ -216,6 +232,7 @@ export async function bridgeGenerateKey(
   provisioningDefaults: ProvisioningDefaults,
   logger: { info: (...args: unknown[]) => void },
   request: Partial<GenerateKeyRequest>,
+  userIdDomain?: string,
 ): Promise<GenerateKeyResponse> {
   await getOrProvisionUserFromClaims(
     client,
@@ -223,8 +240,9 @@ export async function bridgeGenerateKey(
     provisioningEnabled,
     provisioningDefaults,
     logger,
+    userIdDomain,
   );
-  const userId = resolveBridgeUserId(claims);
+  const userId = resolveBridgeUserId(claims, userIdDomain);
   const enriched: GenerateKeyRequest = {
     ...request,
     user_id: userId,

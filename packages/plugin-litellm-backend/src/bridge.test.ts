@@ -99,20 +99,35 @@ function mockClient(opts: {
 // ---------------------------------------------------------------------------
 
 describe('resolveBridgeUserId', () => {
-  test('prefers email over username over sub', () => {
+  test('mirrors the catalog transformer: prefers username, strips @domain', () => {
+    // Username already a bare name → used as-is (matches UI entity name).
     assert.equal(
       resolveBridgeUserId({
         sub: 's1',
-        email: 'a@b.it',
+        email: 'alice@abstract.it',
         preferred_username: 'alice',
       }),
-      'a@b.it',
-    );
-    assert.equal(
-      resolveBridgeUserId({ sub: 's1', preferred_username: 'alice' }),
       'alice',
     );
+    // Username imported as a full email → rewritten to the local-part, like
+    // the Keycloak user transformer does to the Backstage entity name.
+    assert.equal(
+      resolveBridgeUserId({ sub: 's1', preferred_username: 'alice@abstract.it' }),
+      'alice',
+    );
+    // No username → falls back to email (also stripped), then sub.
+    assert.equal(resolveBridgeUserId({ sub: 's1', email: 'bob@x.it' }), 'bob');
     assert.equal(resolveBridgeUserId({ sub: 's1' }), 's1');
+  });
+
+  test('applies userIdDomain to the bare name (matches toLiteLLMUserId)', () => {
+    assert.equal(
+      resolveBridgeUserId(
+        { sub: 's1', preferred_username: 'alice@keycloak.local' },
+        'abstract.it',
+      ),
+      'alice@abstract.it',
+    );
   });
 });
 
@@ -129,7 +144,8 @@ describe('getOrProvisionUserFromClaims', () => {
   };
 
   test('returns the existing user without provisioning', async () => {
-    const c = mockClient({ userInfo: { user_id: 'alice@abstract.it' } });
+    // user_id is the transformer-rewritten local-part, not the full email.
+    const c = mockClient({ userInfo: { user_id: 'alice' } });
     const u = await getOrProvisionUserFromClaims(
       c,
       claims,
@@ -137,7 +153,7 @@ describe('getOrProvisionUserFromClaims', () => {
       defaults,
       silentLogger(),
     );
-    assert.equal(u.user_id, 'alice@abstract.it');
+    assert.equal(u.user_id, 'alice');
     assert.equal(c.calls.createUser.length, 0);
   });
 
@@ -164,7 +180,7 @@ describe('getOrProvisionUserFromClaims', () => {
     const c = mockClient({
       userInfo: [
         null,
-        { user_id: 'alice@abstract.it', user_email: 'alice@abstract.it' },
+        { user_id: 'alice', user_email: 'alice@abstract.it' },
       ],
     });
     const u = await getOrProvisionUserFromClaims(
@@ -174,11 +190,12 @@ describe('getOrProvisionUserFromClaims', () => {
       defaults,
       silentLogger(),
     );
-    assert.equal(u.user_id, 'alice@abstract.it');
+    assert.equal(u.user_id, 'alice');
     assert.equal(c.calls.createUser.length, 1);
-    // The provision payload carries the email from the JWT claims.
+    // The provision payload uses the rewritten user_id but carries the full
+    // email from the JWT claims as user_email.
     assert.equal(c.calls.createUser[0].user_email, 'alice@abstract.it');
-    assert.equal(c.calls.createUser[0].user_id, 'alice@abstract.it');
+    assert.equal(c.calls.createUser[0].user_id, 'alice');
   });
 });
 
@@ -189,7 +206,7 @@ describe('getOrProvisionUserFromClaims', () => {
 describe('bridgeListKeys', () => {
   test('provisions then lists keys for the resolved user', async () => {
     const c = mockClient({
-      userInfo: { user_id: 'alice@abstract.it' },
+      userInfo: { user_id: 'alice' },
       listKeys: (uid: string) =>
         Promise.resolve([
           { key: 'sk-...1234', token: 'sk-full', user_id: uid },
@@ -203,7 +220,7 @@ describe('bridgeListKeys', () => {
       silentLogger(),
     );
     assert.equal(keys.length, 1);
-    assert.equal(keys[0].user_id, 'alice@abstract.it');
+    assert.equal(keys[0].user_id, 'alice');
   });
 });
 
@@ -211,7 +228,7 @@ describe('bridgeGenerateKey', () => {
   test('provisions then mints a key stamped with ownership metadata', async () => {
     let captured: any;
     const c = mockClient({
-      userInfo: { user_id: 'alice@abstract.it' },
+      userInfo: { user_id: 'alice' },
       generateKey: (r: any) => {
         captured = r;
         return Promise.resolve({ key: 'sk-new' });
@@ -229,11 +246,11 @@ describe('bridgeGenerateKey', () => {
     // The bridge owns: resolving user_id, passing alias through (the real
     // LiteLLMClient renames alias -> key_alias), and stamping ownership
     // metadata. Verify all three.
-    assert.equal(captured.user_id, 'alice@abstract.it');
+    assert.equal(captured.user_id, 'alice');
     assert.equal(captured.alias, 'abby-laptop');
     assert.deepEqual(captured.models, ['glm-5.2:cloud']);
     assert.equal(captured.metadata.created_via, 'abby-cli');
-    assert.equal(captured.metadata.created_by, 'alice@abstract.it');
+    assert.equal(captured.metadata.created_by, 'alice');
   });
 });
 
