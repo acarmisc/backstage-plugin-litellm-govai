@@ -252,6 +252,54 @@ The backend provides the following endpoints (all prefixed with `/api/litellm`):
 | `/models` | GET | List available LLM models |
 | `/usage` | GET | Get usage metrics and analytics |
 
+The UI endpoints above authenticate via the Backstage identity system. The
+**CLI bridge** endpoints below are gated behind `litellm.bridge.enabled` and
+authenticate with a raw Keycloak access token instead (see [CLI Bridge](#cli-bridge-abby)):
+
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/bridge/health` | GET | Bridge health + configured `clientId` (no auth) |
+| `/bridge/keys` | GET | List the caller's virtual keys |
+| `/bridge/keys` | POST | Mint a virtual key for the caller |
+| `/bridge/models` | GET | List available LLM models |
+
+## CLI Bridge (Abby)
+
+The bridge lets CLI clients (the **Abby** CLI) list and mint LiteLLM virtual
+keys **without ever holding the LiteLLM master key**. The Backstage backend
+keeps the master key (as it already does for the UI); the CLI authenticates
+with its Keycloak access token — the same realm Backstage uses.
+
+Request flow for `/api/litellm/bridge/*`:
+
+1. CLI sends `Authorization: Bearer <keycloak-access-token>`.
+2. The bridge verifies the JWT against the realm JWKS (`createRemoteJWKSet`),
+   checking the issuer and that the token was issued for the configured
+   `clientId` (via `azp`, falling back to `aud`). Failure → `401`.
+3. The caller is resolved to a LiteLLM `user_id` (email → preferred_username →
+   sub) and ensured to exist — provisioned from the JWT claims if
+   `litellm.provisioning.enabled`, otherwise `404` (log in to Backstage once
+   first).
+4. Keys are listed/minted via the existing master-key-authed client. Minted
+   keys are stamped with ownership metadata (`created_via: abby-cli`,
+   `created_by`, `created_at_iso`).
+
+Unlike the UI routes, bridge routes do **not** call Backstage's
+`auth.authenticate` — they verify the raw Keycloak JWT themselves.
+
+Configuration (`app-config.yaml`):
+
+```yaml
+litellm:
+  bridge:
+    enabled: true                                   # default false
+    issuer: https://auth.ces.abssrv.it/realms/solution-innovation  # required when enabled
+    clientId: abby-cli                              # default abby-cli
+```
+
+When `enabled` is true but `issuer` is missing the backend fails fast at
+startup; the bridge routes are not mounted otherwise.
+
 ## Architecture
 
 ### Frontend

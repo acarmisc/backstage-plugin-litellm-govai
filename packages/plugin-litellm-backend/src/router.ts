@@ -21,6 +21,15 @@ import {
   readRoleConfigs,
   ProvisioningError,
 } from './provisioning';
+import {
+  BridgeAuthError,
+  BridgeClaims,
+  TokenVerifier,
+  bridgeGenerateKey,
+  bridgeListKeys,
+  newDefaultVerifier,
+  readBridgeConfig,
+} from './bridge';
 
 export { ProvisioningError };
 
@@ -29,6 +38,10 @@ export interface RouterOptions {
   logger: any;
   auth: AuthService;
   discovery: DiscoveryService;
+  /** Override the LiteLLM client (tests). Defaults to one built from config. */
+  client?: LiteLLMClient;
+  /** Override the bridge token verifier (tests). Defaults to a Keycloak JWKS verifier. */
+  tokenVerifier?: TokenVerifier;
 }
 
 export async function createRouter(options: RouterOptions): Promise<Router> {
@@ -37,7 +50,7 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
   const baseUrl = config.getString('litellm.baseUrl');
   const masterKey = config.getString('litellm.masterKey');
   const userIdDomain = config.getOptionalString('litellm.userIdDomain');
-  const client = new LiteLLMClient({ baseUrl, masterKey });
+  const client = options.client ?? new LiteLLMClient({ baseUrl, masterKey });
   const { enabled: provisioningEnabled, defaults: provisioningDefaults } =
     readProvisioningDefaults(config);
   const roleConfigs = readRoleConfigs(config);
@@ -346,6 +359,97 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
       res.status(500).json({ error: error.message });
     }
   });
+
+  // ---------------------------------------------------------------------------
+  // Bridge endpoints (CLI / Abby)
+  //
+  // Authenticated by a Keycloak access token (JWKS-verified), NOT by Backstage's
+  // own auth. Lets CLI clients list/mint virtual keys without holding the master
+  // key. Gated by litellm.bridge.enabled; the verifier needs litellm.bridge.issuer.
+  const bridgeCfg = readBridgeConfig(config);
+  let tokenVerifier: TokenVerifier | undefined = options.tokenVerifier;
+  if (bridgeCfg.enabled && !tokenVerifier) {
+    try {
+      tokenVerifier = newDefaultVerifier(bridgeCfg);
+    } catch (e) {
+      logger.error(
+        `LiteLLM bridge enabled but misconfigured: ${(e as Error).message}`,
+      );
+    }
+  }
+
+  if (bridgeCfg.enabled && tokenVerifier) {
+    const requireClaims = async (req: Request): Promise<BridgeClaims> => {
+      const header = req.headers.authorization ?? '';
+      const token = header.startsWith('Bearer ') ? header.slice(7) : '';
+      if (!token) throw new BridgeAuthError('missing Bearer token');
+      return tokenVerifier!.verify(token);
+    };
+
+    const handleBridgeError = (error: any, res: Response) => {
+      if (error instanceof BridgeAuthError) {
+        res.status(401).json({ error: 'unauthorized', hint: error.message });
+        return;
+      }
+      if (error instanceof ProvisioningError) {
+        res.status(error.status).json(error.body);
+        return;
+      }
+      logger.error('Bridge request failed', error);
+      res.status(500).json({ error: error.message });
+    };
+
+    router.get('/bridge/health', (_req: Request, res: Response) => {
+      res.json({ status: 'ok', bridge: true, clientId: bridgeCfg.clientId });
+    });
+
+    router.get('/bridge/keys', async (req: Request, res: Response) => {
+      try {
+        const claims = await requireClaims(req);
+        const keys = await bridgeListKeys(
+          client,
+          claims,
+          provisioningEnabled,
+          provisioningDefaults,
+          logger,
+        );
+        res.json(keys);
+      } catch (error: any) {
+        handleBridgeError(error, res);
+      }
+    });
+
+    router.post('/bridge/keys', async (req: Request, res: Response) => {
+      try {
+        const claims = await requireClaims(req);
+        const result = await bridgeGenerateKey(
+          client,
+          claims,
+          provisioningEnabled,
+          provisioningDefaults,
+          logger,
+          (req.body ?? {}) as Partial<GenerateKeyRequest>,
+        );
+        res.json(result);
+      } catch (error: any) {
+        handleBridgeError(error, res);
+      }
+    });
+
+    router.get('/bridge/models', async (req: Request, res: Response) => {
+      try {
+        await requireClaims(req); // authenticate only
+        const models = await client.listModels();
+        res.json(models);
+      } catch (error: any) {
+        handleBridgeError(error, res);
+      }
+    });
+  } else if (bridgeCfg.enabled) {
+    logger.warn(
+      'litellm.bridge.enabled is true but no verifier could be built — bridge endpoints not mounted',
+    );
+  }
 
   return router;
 }

@@ -97,5 +97,34 @@ export interface Config {
         metadata?: Record<string, string>;
       }>;
     };
+
+    /**
+     * CLI bridge — exposes /api/litellm/bridge/* for CLI clients (Abby) that
+     * authenticate with a Keycloak access token (JWKS-verified). Lets them
+     * list/mint virtual keys without holding the master key. Disabled by
+     * default; enable explicitly when the CLI is in use.
+     */
+    bridge?: {
+      /**
+       * When true, mount the /bridge/keys, /bridge/keys (POST), /bridge/models
+       * routes and verify caller JWTs against the Keycloak realm JWKS.
+       * @default false
+       */
+      enabled?: boolean;
+
+      /**
+       * Keycloak realm issuer used to fetch JWKS and verify the token issuer,
+       * e.g. https://auth.ces.abssrv.it/realms/solution-innovation.
+       * Required when enabled.
+       */
+      issuer?: string;
+
+      /**
+       * OIDC public client the CLI uses (default "abby-cli"). The token's
+       * azp (or aud) must equal this.
+       * @default "abby-cli"
+       */
+      clientId?: string;
+    };
   };
 }
