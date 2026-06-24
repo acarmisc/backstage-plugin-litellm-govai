@@ -255,3 +255,41 @@ export async function bridgeGenerateKey(
   };
   return client.generateKey(enriched);
 }
+
+/**
+ * Rotates the caller's key identified by alias, returning a fresh secret. The
+ * bridge can't recover a usable secret from a listing (it's masked), so a CLI
+ * that lost its cached key but whose stable alias still exists uses this to
+ * rotate in place instead of minting a duplicate. Throws 404 when no key with
+ * that alias exists for the caller — the CLI then mints one.
+ */
+export async function bridgeRegenerateKey(
+  client: LiteLLMClient,
+  claims: BridgeClaims,
+  provisioningEnabled: boolean,
+  provisioningDefaults: ProvisioningDefaults,
+  logger: { info: (...args: unknown[]) => void },
+  alias: string,
+  userIdDomain?: string,
+): Promise<GenerateKeyResponse> {
+  await getOrProvisionUserFromClaims(
+    client,
+    claims,
+    provisioningEnabled,
+    provisioningDefaults,
+    logger,
+    userIdDomain,
+  );
+  const userId = resolveBridgeUserId(claims, userIdDomain);
+  const keys = await client.listKeys(userId);
+  const match = keys.find(k => k.key_alias === alias);
+  if (!match) {
+    throw new ProvisioningError(
+      'Key not found',
+      `No key with alias "${alias}" for this identity; mint one first.`,
+      false,
+      404,
+    );
+  }
+  return client.regenerateKey(match.token);
+}

@@ -13,6 +13,7 @@ import {
   getOrProvisionUserFromClaims,
   bridgeListKeys,
   bridgeGenerateKey,
+  bridgeRegenerateKey,
 } from './bridge';
 import { ProvisioningError } from './provisioning';
 
@@ -56,6 +57,7 @@ function mockClient(opts: {
   createUser?: (p: any) => Promise<any>;
   listKeys?: (uid: string) => Promise<any[]>;
   generateKey?: (r: any) => Promise<any>;
+  regenerateKey?: (token: string) => Promise<any>;
 }): any {
   const calls: Record<string, any[]> = {
     createUser: [],
@@ -91,6 +93,10 @@ function mockClient(opts: {
       opts.generateKey
         ? opts.generateKey(r)
         : Promise.resolve({ key: 'sk-test', key_alias: r.key_alias, ...r }),
+    regenerateKey: (token: string) =>
+      opts.regenerateKey
+        ? opts.regenerateKey(token)
+        : Promise.resolve({ key: 'sk-rotated' }),
   };
 }
 
@@ -251,6 +257,52 @@ describe('bridgeGenerateKey', () => {
     assert.deepEqual(captured.models, ['glm-5.2:cloud']);
     assert.equal(captured.metadata.created_via, 'abby-cli');
     assert.equal(captured.metadata.created_by, 'alice');
+  });
+});
+
+describe('bridgeRegenerateKey', () => {
+  test('rotates the key whose alias matches, using its hashed token', async () => {
+    let regenToken: string | undefined;
+    const c = mockClient({
+      userInfo: { user_id: 'alice' },
+      listKeys: (uid: string) =>
+        Promise.resolve([
+          { key: 'sk-...aaaa', token: 'hash-other', key_alias: 'abby-other', user_id: uid },
+          { key: 'sk-...bbbb', token: 'hash-laptop', key_alias: 'abby-laptop', user_id: uid },
+        ]),
+      regenerateKey: (token: string) => {
+        regenToken = token;
+        return Promise.resolve({ key: 'sk-rotated', key_alias: 'abby-laptop' });
+      },
+    });
+    const res = await bridgeRegenerateKey(
+      c,
+      { sub: 's1', email: 'alice@abstract.it', azp: 'abby-cli' },
+      true,
+      defaults,
+      silentLogger(),
+      'abby-laptop',
+    );
+    assert.equal(res.key, 'sk-rotated');
+    assert.equal(regenToken, 'hash-laptop');
+  });
+
+  test('throws 404 when no key has the requested alias', async () => {
+    const c = mockClient({
+      userInfo: { user_id: 'alice' },
+      listKeys: () => Promise.resolve([]),
+    });
+    await assert.rejects(
+      bridgeRegenerateKey(
+        c,
+        { sub: 's1', email: 'alice@abstract.it', azp: 'abby-cli' },
+        true,
+        defaults,
+        silentLogger(),
+        'abby-laptop',
+      ),
+      (err: any) => err instanceof ProvisioningError && err.status === 404,
+    );
   });
 });
 

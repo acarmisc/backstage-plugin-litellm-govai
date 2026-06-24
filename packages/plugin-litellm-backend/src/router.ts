@@ -27,6 +27,7 @@ import {
   TokenVerifier,
   bridgeGenerateKey,
   bridgeListKeys,
+  bridgeRegenerateKey,
   newDefaultVerifier,
   readBridgeConfig,
 } from './bridge';
@@ -430,6 +431,29 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
           provisioningDefaults,
           logger,
           (req.body ?? {}) as Partial<GenerateKeyRequest>,
+          userIdDomain,
+        );
+        res.json(result);
+      } catch (error: any) {
+        handleBridgeError(error, res);
+      }
+    });
+
+    router.post('/bridge/keys/regenerate', async (req: Request, res: Response) => {
+      try {
+        const claims = await requireClaims(req);
+        const alias = ((req.body ?? {}) as { alias?: string }).alias?.trim();
+        if (!alias) {
+          res.status(400).json({ error: 'alias is required' });
+          return;
+        }
+        const result = await bridgeRegenerateKey(
+          client,
+          claims,
+          provisioningEnabled,
+          provisioningDefaults,
+          logger,
+          alias,
           userIdDomain,
         );
         res.json(result);

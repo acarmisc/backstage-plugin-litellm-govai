@@ -202,6 +202,19 @@ export class LiteLLMClient {
   }
 
   /**
+   * Rotates an existing key in place, returning a fresh `sk-` secret while
+   * keeping the same alias/budget/limits. `token` is the hashed token LiteLLM
+   * stores (the same value used for delete/update) — passed in the path because
+   * it isn't an `sk-` prefixed secret, so LiteLLM matches it without re-hashing.
+   */
+  async regenerateKey(token: string): Promise<GenerateKeyResponse> {
+    return this.request<GenerateKeyResponse>(
+      `/key/${encodeURIComponent(token)}/regenerate`,
+      { method: 'POST', body: JSON.stringify({}) },
+    );
+  }
+
+  /**
    * Returns the proxy's model catalogue normalised to the ModelInfo shape.
    *
    * Prefers `/model/info` which exposes `model_name`, `mode`, capability flags
