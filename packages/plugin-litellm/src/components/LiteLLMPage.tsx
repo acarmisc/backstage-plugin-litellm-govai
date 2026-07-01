@@ -224,6 +224,17 @@ export const LiteLLMPage: React.FC = () => {
         </Grid>
 
         <Grid item xs={12}>
+          <UsageStats
+            usage={usage ?? null}
+            models={allModels ?? []}
+            dateRange={dateRange}
+            onDateRangeChange={setDateRange}
+            loading={usageLoading}
+            userInfo={userInfo}
+          />
+        </Grid>
+
+        <Grid item xs={12}>
           <KeysTable
             keys={keys ?? []}
             models={allowedModels}
@@ -232,17 +243,6 @@ export const LiteLLMPage: React.FC = () => {
             onGenerateKey={handleGenerateKey}
             onUpdateKey={handleUpdateKey}
             onDeleteKey={handleDeleteKey}
-          />
-        </Grid>
-
-        <Grid item xs={12}>
-          <UsageStats
-            usage={usage ?? null}
-            models={allModels ?? []}
-            dateRange={dateRange}
-            onDateRangeChange={setDateRange}
-            loading={usageLoading}
-            userInfo={userInfo}
           />
         </Grid>
       </Grid>
