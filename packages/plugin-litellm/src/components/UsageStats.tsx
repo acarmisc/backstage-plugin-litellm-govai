@@ -43,6 +43,7 @@ import {
   UsageModelBreakdown,
   UsageKeyBreakdown,
 } from '../types';
+import { fmtUsd, fmtInt } from '../format';
 
 interface UsageStatsProps {
   usage: UsageMetrics | null;
@@ -71,8 +72,6 @@ function modelColor(model: string): string {
   return MODEL_COLORS[h % MODEL_COLORS.length];
 }
 
-const fmtUsd = (n: number) => `$${(n ?? 0).toFixed(n < 1 ? 4 : 2)}`;
-const fmtInt = (n: number) => (n ?? 0).toLocaleString();
 const fmtPct = (n: number) => `${(n * 100).toFixed(1)}%`;
 
 const KpiCard: React.FC<{ label: string; value: string; hint?: string }> = ({ label, value, hint }) => (

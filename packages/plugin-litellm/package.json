@@ -1,6 +1,6 @@
 {
   "name": "@acarmisc/backstage-plugin-litellm",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "backstage": {
     "role": "frontend-plugin",
     "pluginId": "litellm",
@@ -28,6 +28,7 @@
   ],
   "scripts": {
     "build": "node build.js && tsc -p tsconfig.json",
+    "test": "tsc -p tsconfig.test.json && node --test dist-test/**/*.test.js dist-test/*.test.js",
     "prepack": "npm run build",
     "postpack": ""
   },
@@ -57,6 +58,7 @@
     "@testing-library/jest-dom": "^6.0.0",
     "@testing-library/react": "^16.0.0",
     "@testing-library/user-event": "^14.0.0",
+    "@types/node": "^20.19.43",
     "@types/react": "^18.2.0",
     "esbuild": "^0.28.0",
     "react-dom": "^18.2.0",

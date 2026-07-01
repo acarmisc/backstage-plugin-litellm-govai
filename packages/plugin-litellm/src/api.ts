@@ -32,6 +32,7 @@ export interface LiteLlmApiInterface {
   blockKey(keyId: string): Promise<void>;
   unblockKey(keyId: string): Promise<void>;
   resetKeySpend(keyId: string): Promise<void>;
+  pruneExpiredKeys(): Promise<{ pruned: number }>;
   listModels(): Promise<ModelInfo[]>;
   getTeams(): Promise<TeamInfo[]>;
   getUsage(startDate: string, endDate: string): Promise<UsageMetrics>;
@@ -42,6 +43,17 @@ export interface LiteLlmApiInterface {
 export const liteLlmApiRef = createApiRef<LiteLlmApiInterface>({
   id: 'plugin.litellm.api',
 });
+
+export type ExpiryStatus = 'expired' | 'soon' | 'ok';
+
+export function expiryStatus(expiresAt?: string): ExpiryStatus | null {
+  if (!expiresAt) return null;
+  const diff = new Date(expiresAt).getTime() - Date.now();
+  const days = diff / (1000 * 60 * 60 * 24);
+  if (days < 0) return 'expired';
+  if (days < 7) return 'soon';
+  return 'ok';
+}
 
 export class LiteLlmApi implements LiteLlmApiInterface {
   private fetchApi: FetchApi;
@@ -125,6 +137,20 @@ export class LiteLlmApi implements LiteLlmApiInterface {
 
   async resetKeySpend(keyId: string): Promise<void> {
     await this.post(`/keys/${encodeURIComponent(keyId)}/reset_spend`, {});
+  }
+
+  async pruneExpiredKeys(): Promise<{ pruned: number }> {
+    const keys = await this.get<VirtualKey[]>('/keys');
+    const expired = keys.filter(k => expiryStatus(k.expires_at) === 'expired');
+    if (expired.length === 0) return { pruned: 0 };
+    for (const key of expired) {
+      try {
+        await this.del(`/keys/${encodeURIComponent(key.token ?? key.key)}`);
+      } catch (err) {
+        console.warn(`Failed to delete expired key ${key.token ?? key.key}:`, err);
+      }
+    }
+    return { pruned: expired.length };
   }
 
   async getAuditLogs(params: AuditLogsParams): Promise<PaginatedAuditLogs> {

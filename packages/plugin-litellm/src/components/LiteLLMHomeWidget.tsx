@@ -14,6 +14,7 @@ import { AreaChart, Area, ResponsiveContainer } from 'recharts';
 import { useApi } from '@backstage/core-plugin-api';
 import { liteLlmApiRef } from '../api';
 import { UsageMetrics, VirtualKey } from '../types';
+import { fmtUsd, fmtInt } from '../format';
 
 export interface LiteLLMHomeWidgetProps {
   /** Default period when the widget mounts. Defaults to '7d'. */
@@ -24,8 +25,6 @@ export interface LiteLLMHomeWidgetProps {
 
 type DatePreset = 'today' | '7d' | '30d';
 
-const fmtUsd = (n: number) => `$${(n ?? 0).toFixed(n < 1 ? 4 : 2)}`;
-const fmtInt = (n: number) => (n ?? 0).toLocaleString();
 
 function presetToDateRange(preset: DatePreset): { start: Date; end: Date } {
   const end = new Date();

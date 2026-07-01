@@ -24,6 +24,7 @@ import {
   InputAdornment,
 } from '@mui/material';
 import { ContentCopy, Delete, Add, Edit, Autorenew, Search, Warning, Lock, LockOpen } from '@mui/icons-material';
+import { expiryStatus } from '../api';
 import {
   VirtualKey,
   ModelInfo,
@@ -45,6 +46,7 @@ interface KeysTableProps {
   onUnblockKey: (keyId: string) => Promise<void>;
   onResetKeySpend: (keyId: string) => Promise<void>;
   onDeleteKey: (keyId: string) => Promise<void>;
+  onPruneExpiredKeys: () => Promise<{ pruned: number }>;
 }
 
 const maskKey = (key: string): string => {
@@ -65,17 +67,6 @@ const formatDate = (dateStr: string): string => {
     return dateStr;
   }
 };
-
-type ExpiryStatus = 'expired' | 'soon' | 'ok';
-
-function expiryStatus(expiresAt?: string): ExpiryStatus | null {
-  if (!expiresAt) return null;
-  const diff = new Date(expiresAt).getTime() - Date.now();
-  const days = diff / (1000 * 60 * 60 * 24);
-  if (days < 0) return 'expired';
-  if (days < 7) return 'soon';
-  return 'ok';
-}
 
 function ExpiryChip({ expiresAt }: { expiresAt?: string }) {
   const status = expiryStatus(expiresAt);
@@ -138,6 +129,7 @@ export const KeysTable: React.FC<KeysTableProps> = ({
   onUnblockKey,
   onResetKeySpend,
   onDeleteKey,
+  onPruneExpiredKeys,
 }) => {
   const [generateModalOpen, setGenerateModalOpen] = useState(false);
   const [newKeyValue, setNewKeyValue] = useState<string | null>(null);
@@ -275,6 +267,27 @@ export const KeysTable: React.FC<KeysTableProps> = ({
     navigator.clipboard.writeText(text);
   };
 
+  // Prune expired keys
+  const [pruneConfirmCount, setPruneConfirmCount] = useState<number | null>(null);
+  const [pruneSubmitting, setPruneSubmitting] = useState(false);
+
+  const expiredKeys = useMemo(() => {
+    return keys.filter(k => expiryStatus(k.expires_at) === 'expired');
+  }, [keys]);
+
+  const handlePruneExpired = async () => {
+    if (pruneConfirmCount === null || pruneConfirmCount === 0) return;
+    setPruneSubmitting(true);
+    try {
+      await onPruneExpiredKeys();
+    } catch (error) {
+      console.error('Failed to prune expired keys:', error);
+    } finally {
+      setPruneSubmitting(false);
+      setPruneConfirmCount(null);
+    }
+  };
+
   const modelOption = (m: ModelInfo) => {
     const inCost = fmtCost(m.input_cost_per_token);
     const outCost = fmtCost(m.output_cost_per_token);
@@ -312,6 +325,16 @@ export const KeysTable: React.FC<KeysTableProps> = ({
                 ),
               }}
             />
+            {expiredKeys.length > 0 && (
+              <Button
+                variant="outlined"
+                color="error"
+                startIcon={<Autorenew />}
+                onClick={() => setPruneConfirmCount(expiredKeys.length)}
+              >
+                Prune expired ({expiredKeys.length})
+              </Button>
+            )}
             <Button
               variant="contained"
               color="primary"
@@ -744,6 +767,30 @@ export const KeysTable: React.FC<KeysTableProps> = ({
             disabled={deleteSubmitting}
           >
             {deleteSubmitting ? <CircularProgress size={20} /> : 'Revoke'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Prune expired keys confirmation dialog */}
+      <Dialog open={pruneConfirmCount !== null} onClose={() => setPruneConfirmCount(null)} maxWidth="xs" fullWidth>
+        <DialogTitle>Prune Expired Keys?</DialogTitle>
+        <DialogContent>
+          <Typography>
+            This will permanently delete {pruneConfirmCount} expired key{pruneConfirmCount !== 1 ? 's' : ''} from LiteLLM.
+            Any integrations using them will stop working immediately.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setPruneConfirmCount(null)} disabled={pruneSubmitting}>
+            Cancel
+          </Button>
+          <Button
+            onClick={handlePruneExpired}
+            variant="contained"
+            color="error"
+            disabled={pruneSubmitting}
+          >
+            {pruneSubmitting ? <CircularProgress size={20} /> : 'Prune'}
           </Button>
         </DialogActions>
       </Dialog>

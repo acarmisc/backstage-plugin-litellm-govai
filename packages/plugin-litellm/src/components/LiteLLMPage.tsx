@@ -213,6 +213,20 @@ export const LiteLLMPage: React.FC = () => {
     [api, refreshKeys],
   );
 
+  const handlePruneExpiredKeys = useCallback(
+    async () => {
+      try {
+        const result = await api.pruneExpiredKeys();
+        setSnackbar({ message: `Pruned ${result.pruned} expired key${result.pruned !== 1 ? 's' : ''}`, severity: 'success' });
+        refreshKeys();
+      } catch (e: any) {
+        setSnackbar({ message: `Failed to prune expired keys: ${e.message}`, severity: 'error' });
+      }
+      return { pruned: 0 };
+    },
+    [api, refreshKeys],
+  ) as () => Promise<{ pruned: number }>;
+
   const isInitialLoading = userLoading && !userInfo;
 
   if (isInitialLoading) {
@@ -289,6 +303,7 @@ export const LiteLLMPage: React.FC = () => {
           onUnblockKey={handleUnblockKey}
           onResetKeySpend={handleResetKeySpend}
           onDeleteKey={handleDeleteKey}
+          onPruneExpiredKeys={handlePruneExpiredKeys}
         />
       )}
 
