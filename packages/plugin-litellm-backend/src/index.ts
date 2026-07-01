@@ -4,6 +4,19 @@ export { createRouter } from './router';
 export * from './types';
 export { LiteLLMClient } from './client';
 export {
+  resolveUserId,
+  resolveUserProfile,
+  toLiteLLMUserId,
+  getOrProvisionUser,
+  provisionUser,
+  readProvisioningDefaults,
+  readRoleConfigs,
+  applyRoleOverrides,
+  resolveUserRole,
+  ProvisioningError,
+} from './provisioning';
+export type { BackstageUserProfile } from './provisioning';
+export {
   KeycloakJWTVerifier,
   newDefaultVerifier,
   readBridgeConfig,
