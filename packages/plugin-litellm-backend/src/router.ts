@@ -19,6 +19,7 @@ import {
   getOrProvisionUser,
   readProvisioningDefaults,
   readRoleConfigs,
+  isUserMemberOfGroup,
   ProvisioningError,
 } from './provisioning';
 import {
@@ -55,6 +56,7 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
   const { enabled: provisioningEnabled, defaults: provisioningDefaults } =
     readProvisioningDefaults(config);
   const roleConfigs = readRoleConfigs(config);
+  const auditGroup = config.getOptionalString('litellm.audit.group');
   const catalogClient = new CatalogClient({ discoveryApi: discovery });
 
   if (provisioningEnabled) {
@@ -97,7 +99,17 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
         auth,
         logger,
       );
-      res.json(userInfo);
+      const canViewAudit =
+        auditGroup && tokenEntityRef
+          ? await isUserMemberOfGroup(
+              tokenEntityRef,
+              auditGroup,
+              catalogClient,
+              auth,
+              logger,
+            )
+          : false;
+      res.json({ ...userInfo, can_view_audit: canViewAudit });
     } catch (error: any) {
       if (error instanceof ProvisioningError) {
         res.status(error.status).json(error.body);
@@ -135,6 +147,23 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
         return;
       }
       logger.error('Failed to list keys', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  router.post('/keys/:keyId/regenerate', async (req: Request, res: Response) => {
+    try {
+      const { keyId } = req.params;
+      if (!keyId) {
+        res.status(400).json({ error: 'keyId is required' });
+        return;
+      }
+      const tokenEntityRef = await resolveUserId(req, auth);
+      const result = await client.regenerateKey(keyId);
+      logger.info({ action: 'key.rotate', userId: tokenEntityRef ?? 'unknown', keyId });
+      res.json(result);
+    } catch (error: any) {
+      logger.error('Failed to rotate key', error);
       res.status(500).json({ error: error.message });
     }
   });
@@ -203,6 +232,7 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
         ...(resolvedUserId && { user_id: resolvedUserId }),
       };
       const result: GenerateKeyResponse = await client.generateKey(request);
+      logger.info({ action: 'key.generate', userId: resolvedUserId ?? 'unknown', keyAlias: body.alias });
       res.json(result);
     } catch (error: any) {
       if (error instanceof ProvisioningError) {
@@ -221,8 +251,10 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
         res.status(400).json({ error: 'keyId is required' });
         return;
       }
+      const tokenEntityRef = await resolveUserId(req, auth);
       const request: UpdateKeyRequest = { ...req.body, key: keyId };
       const result = await client.updateKey(request);
+      logger.info({ action: 'key.update', userId: tokenEntityRef ?? 'unknown', keyId });
       res.json(result);
     } catch (error: any) {
       logger.error('Failed to update key', error);
@@ -237,10 +269,91 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
         res.status(400).json({ error: 'keyId is required' });
         return;
       }
+      const deleteEntityRef = await resolveUserId(req, auth);
       await client.deleteKeys({ keys: [keyId] });
+      logger.info({ action: 'key.delete', userId: deleteEntityRef ?? 'unknown', keyId });
       res.json({ success: true });
     } catch (error: any) {
       logger.error('Failed to delete key', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  router.post('/keys/:keyId/block', async (req: Request, res: Response) => {
+    try {
+      const { keyId } = req.params;
+      const tokenEntityRef = await resolveUserId(req, auth);
+      await client.blockKey(keyId);
+      logger.info({ action: 'key.block', userId: tokenEntityRef ?? 'unknown', keyId });
+      res.json({ success: true });
+    } catch (error: any) {
+      logger.error('Failed to block key', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  router.post('/keys/:keyId/unblock', async (req: Request, res: Response) => {
+    try {
+      const { keyId } = req.params;
+      const tokenEntityRef = await resolveUserId(req, auth);
+      await client.unblockKey(keyId);
+      logger.info({ action: 'key.unblock', userId: tokenEntityRef ?? 'unknown', keyId });
+      res.json({ success: true });
+    } catch (error: any) {
+      logger.error('Failed to unblock key', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  router.post('/keys/:keyId/reset_spend', async (req: Request, res: Response) => {
+    try {
+      const { keyId } = req.params;
+      const tokenEntityRef = await resolveUserId(req, auth);
+      await client.resetKeySpend(keyId);
+      logger.info({ action: 'key.reset_spend', userId: tokenEntityRef ?? 'unknown', keyId });
+      res.json({ success: true });
+    } catch (error: any) {
+      logger.error('Failed to reset key spend', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  router.get('/audit', async (req: Request, res: Response) => {
+    if (!auditGroup) {
+      res.status(403).json({ error: 'Audit log is not configured (litellm.audit.group not set)' });
+      return;
+    }
+    const tokenEntityRef = await resolveUserId(req, auth);
+    if (!tokenEntityRef) {
+      res.status(401).json({ error: 'Authentication required' });
+      return;
+    }
+    const allowed = await isUserMemberOfGroup(
+      tokenEntityRef,
+      auditGroup,
+      catalogClient,
+      auth,
+      logger,
+    );
+    if (!allowed) {
+      res.status(403).json({ error: 'Access denied: not a member of the audit group' });
+      return;
+    }
+    try {
+      const { page, page_size, start_date, end_date, action, table_name, changed_by } =
+        req.query as Record<string, string | undefined>;
+      const result = await client.getAuditLogs({
+        page: page ? Number(page) : undefined,
+        page_size: page_size ? Number(page_size) : 25,
+        start_date,
+        end_date,
+        action,
+        table_name,
+        changed_by,
+      });
+      res.json(result);
+    } catch (error: any) {
+      logger.error('Failed to fetch audit logs', error);
       res.status(500).json({ error: error.message });
     }
   });

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   Paper,
   Table,
@@ -20,8 +20,10 @@ import {
   Chip,
   CircularProgress,
   Autocomplete,
+  LinearProgress,
+  InputAdornment,
 } from '@mui/material';
-import { ContentCopy, Delete, Add, Edit } from '@mui/icons-material';
+import { ContentCopy, Delete, Add, Edit, Autorenew, Search, Warning, Lock, LockOpen } from '@mui/icons-material';
 import {
   VirtualKey,
   ModelInfo,
@@ -38,6 +40,10 @@ interface KeysTableProps {
   loading: boolean;
   onGenerateKey: (request: GenerateKeyRequest) => Promise<GenerateKeyResponse>;
   onUpdateKey: (keyId: string, request: UpdateKeyRequest) => Promise<void>;
+  onRotateKey: (keyId: string) => Promise<GenerateKeyResponse>;
+  onBlockKey: (keyId: string) => Promise<void>;
+  onUnblockKey: (keyId: string) => Promise<void>;
+  onResetKeySpend: (keyId: string) => Promise<void>;
   onDeleteKey: (keyId: string) => Promise<void>;
 }
 
@@ -46,8 +52,6 @@ const maskKey = (key: string): string => {
   return `${key.slice(0, 4)}...${key.slice(-4)}`;
 };
 
-// The Key ID is the hashed `token` LiteLLM uses internally to identify a key.
-// We display a short prefix so the row stays compact, but copy the full hash.
 const shortKeyId = (token: string): string => {
   if (!token) return '-';
   if (token.length <= 16) return token;
@@ -62,12 +66,54 @@ const formatDate = (dateStr: string): string => {
   }
 };
 
+type ExpiryStatus = 'expired' | 'soon' | 'ok';
+
+function expiryStatus(expiresAt?: string): ExpiryStatus | null {
+  if (!expiresAt) return null;
+  const diff = new Date(expiresAt).getTime() - Date.now();
+  const days = diff / (1000 * 60 * 60 * 24);
+  if (days < 0) return 'expired';
+  if (days < 7) return 'soon';
+  return 'ok';
+}
+
+function ExpiryChip({ expiresAt }: { expiresAt?: string }) {
+  const status = expiryStatus(expiresAt);
+  if (!status) return <Typography variant="body2" color="text.secondary">-</Typography>;
+  const label = status === 'expired' ? 'Expired' : status === 'soon' ? `${Math.ceil((new Date(expiresAt!).getTime() - Date.now()) / 86400000)}d left` : formatDate(expiresAt!);
+  const color = status === 'expired' ? 'error' : status === 'soon' ? 'warning' : 'default';
+  const icon = (status === 'expired' || status === 'soon') ? <Warning fontSize="small" /> : undefined;
+  return <Chip label={label} color={color} size="small" icon={icon} />;
+}
+
+function BudgetCell({ spend, maxBudget }: { spend: number; maxBudget?: number }) {
+  if (!maxBudget) return <Typography variant="body2" color="text.secondary">-</Typography>;
+  const pct = Math.min(100, (spend / maxBudget) * 100);
+  const color = pct >= 100 ? 'error' : pct >= 80 ? 'warning' : 'primary';
+  return (
+    <Box minWidth={100}>
+      <Box display="flex" justifyContent="space-between">
+        <Typography variant="caption">${spend.toFixed(2)}</Typography>
+        <Typography variant="caption" color="text.secondary">${maxBudget}</Typography>
+      </Box>
+      <LinearProgress variant="determinate" value={pct} color={color} sx={{ height: 5, borderRadius: 1, mt: 0.25 }} />
+    </Box>
+  );
+}
+
+function fmtCost(perToken?: number): string | null {
+  if (!perToken) return null;
+  const per1k = perToken * 1000;
+  return per1k < 0.01 ? `$${(perToken * 1_000_000).toFixed(2)}/M` : `$${per1k.toFixed(3)}/1K`;
+}
+
 const emptyForm = (): GenerateKeyRequest => ({
   alias: '',
   models: [],
   duration: '30d',
   max_budget: 100,
   tpm_limit: undefined,
+  rpm_limit: undefined,
   team_id: undefined,
   key_type: 'llm_api',
 });
@@ -87,6 +133,10 @@ export const KeysTable: React.FC<KeysTableProps> = ({
   loading,
   onGenerateKey,
   onUpdateKey,
+  onRotateKey,
+  onBlockKey,
+  onUnblockKey,
+  onResetKeySpend,
   onDeleteKey,
 }) => {
   const [generateModalOpen, setGenerateModalOpen] = useState(false);
@@ -94,15 +144,39 @@ export const KeysTable: React.FC<KeysTableProps> = ({
   const [formData, setFormData] = useState<GenerateKeyRequest>(emptyForm());
   const [submitting, setSubmitting] = useState(false);
 
-  const canGenerate = true; // Always allow generation regardless of team selection
-
   const [editingKey, setEditingKey] = useState<VirtualKey | null>(null);
   const [editForm, setEditForm] = useState<UpdateKeyRequest>({});
   const [editSubmitting, setEditSubmitting] = useState(false);
 
+  // Rotation
+  const [rotatingKeyId, setRotatingKeyId] = useState<string | null>(null);
+  const [rotatedKeyValue, setRotatedKeyValue] = useState<string | null>(null);
+
+  // Block/unblock
+  const [blockingKeyId, setBlockingKeyId] = useState<string | null>(null);
+
+  // Delete confirmation
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [deleteSubmitting, setDeleteSubmitting] = useState(false);
+
+  // Reset spend (lives inside edit dialog)
+  const [resetSpendConfirm, setResetSpendConfirm] = useState(false);
+  const [resetSpendSubmitting, setResetSpendSubmitting] = useState(false);
+
+  // Filter
+  const [filterText, setFilterText] = useState('');
+
+  const filteredKeys = useMemo(() => {
+    if (!filterText.trim()) return keys;
+    const q = filterText.toLowerCase();
+    return keys.filter(k =>
+      (k.key_alias ?? '').toLowerCase().includes(q) ||
+      k.models?.some(m => m.toLowerCase().includes(q)),
+    );
+  }, [keys, filterText]);
+
   const selectedModels = models.filter(m => (formData.models || []).includes(m.model_name));
   const selectedTeam = teams.find(t => t.team_id === formData.team_id) ?? null;
-
   const editSelectedModels = models.filter(m => (editForm.models || []).includes(m.model_name));
 
   const handleGenerate = async () => {
@@ -132,6 +206,7 @@ export const KeysTable: React.FC<KeysTableProps> = ({
   const handleCloseEdit = () => {
     setEditingKey(null);
     setEditForm({});
+    setResetSpendConfirm(false);
   };
 
   const handleUpdate = async () => {
@@ -147,23 +222,105 @@ export const KeysTable: React.FC<KeysTableProps> = ({
     }
   };
 
+  const handleRotate = async (keyId: string) => {
+    setRotatingKeyId(keyId);
+    try {
+      const response = await onRotateKey(keyId);
+      setRotatedKeyValue(response.key);
+    } catch (error) {
+      console.error('Failed to rotate key:', error);
+    } finally {
+      setRotatingKeyId(null);
+    }
+  };
+
+  const handleToggleBlock = async (key: VirtualKey) => {
+    const keyId = key.token ?? key.key;
+    setBlockingKeyId(keyId);
+    try {
+      if (key.blocked) {
+        await onUnblockKey(keyId);
+      } else {
+        await onBlockKey(keyId);
+      }
+    } finally {
+      setBlockingKeyId(null);
+    }
+  };
+
+  const handleResetSpend = async () => {
+    if (!editingKey) return;
+    setResetSpendSubmitting(true);
+    try {
+      await onResetKeySpend(editingKey.token ?? editingKey.key);
+      setResetSpendConfirm(false);
+      handleCloseEdit();
+    } finally {
+      setResetSpendSubmitting(false);
+    }
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deleteConfirmId) return;
+    setDeleteSubmitting(true);
+    try {
+      await onDeleteKey(deleteConfirmId);
+    } finally {
+      setDeleteSubmitting(false);
+      setDeleteConfirmId(null);
+    }
+  };
+
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
+  };
+
+  const modelOption = (m: ModelInfo) => {
+    const inCost = fmtCost(m.input_cost_per_token);
+    const outCost = fmtCost(m.output_cost_per_token);
+    return (
+      <Box>
+        <span>{m.model_name}</span>
+        {m.supports_function_calling && ' 🔧'}
+        {m.supports_vision && ' 👁️'}
+        {(inCost || outCost) && (
+          <Typography variant="caption" color="text.secondary" sx={{ ml: 1 }}>
+            {inCost} in · {outCost} out
+          </Typography>
+        )}
+      </Box>
+    );
   };
 
   return (
     <>
       <Paper sx={{ mb: 2 }}>
-        <Box display="flex" justifyContent="space-between" alignItems="center" p={2}>
+        <Box display="flex" justifyContent="space-between" alignItems="center" p={2} gap={2}>
           <Typography variant="h6">Virtual Keys</Typography>
-          <Button
-            variant="contained"
-            color="primary"
-            startIcon={<Add />}
-            onClick={() => setGenerateModalOpen(true)}
-          >
-            Generate New Key
-          </Button>
+          <Box display="flex" gap={1} alignItems="center" flex={1} justifyContent="flex-end">
+            <TextField
+              size="small"
+              placeholder="Filter by alias or model…"
+              value={filterText}
+              onChange={e => setFilterText(e.target.value)}
+              sx={{ minWidth: 240 }}
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <Search fontSize="small" />
+                  </InputAdornment>
+                ),
+              }}
+            />
+            <Button
+              variant="contained"
+              color="primary"
+              startIcon={<Add />}
+              onClick={() => setGenerateModalOpen(true)}
+            >
+              Generate New Key
+            </Button>
+          </Box>
         </Box>
 
         <TableContainer>
@@ -173,9 +330,9 @@ export const KeysTable: React.FC<KeysTableProps> = ({
                 <TableCell>Alias</TableCell>
                 <TableCell>Key ID</TableCell>
                 <TableCell>Created</TableCell>
-                <TableCell>Spend</TableCell>
+                <TableCell>Expires</TableCell>
                 <TableCell>Budget</TableCell>
-                <TableCell>TPM Limit</TableCell>
+                <TableCell>TPM / RPM</TableCell>
                 <TableCell>Models</TableCell>
                 <TableCell align="right">Actions</TableCell>
               </TableRow>
@@ -187,63 +344,97 @@ export const KeysTable: React.FC<KeysTableProps> = ({
                     <CircularProgress size={24} />
                   </TableCell>
                 </TableRow>
-              ) : keys.length === 0 ? (
+              ) : filteredKeys.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={8} align="center">
-                    <Typography color="text.secondary">No keys found</Typography>
+                    <Typography color="text.secondary">
+                      {filterText ? 'No keys match filter' : 'No keys found'}
+                    </Typography>
                   </TableCell>
                 </TableRow>
               ) : (
-                keys.map((key) => {
+                filteredKeys.map((key) => {
                   const keyId = key.token ?? key.key;
+                  const isRotating = rotatingKeyId === keyId;
+                  const isBlocking = blockingKeyId === keyId;
                   return (
-                  <TableRow key={keyId}>
-                    <TableCell>{key.key_alias || '-'}</TableCell>
-                    <TableCell>
-                      <Box display="flex" alignItems="center" gap={0.5}>
-                        <Typography
-                          variant="body2"
-                          component="code"
-                          color="text.secondary"
-                          title={keyId}
-                          sx={{
-                            fontFamily: 'monospace',
-                            backgroundColor: 'background.default',
-                            px: 1,
-                            py: 0.5,
-                            borderRadius: 1,
-                          }}
-                        >
-                          {shortKeyId(keyId)}
-                        </Typography>
-                        <IconButton size="small" onClick={() => copyToClipboard(keyId)} title="Copy Key ID">
-                          <ContentCopy fontSize="small" />
+                    <TableRow key={keyId} sx={key.blocked ? { bgcolor: 'action.disabledBackground' } : undefined}>
+                      <TableCell>
+                        <Box display="flex" alignItems="center" gap={0.5}>
+                          {key.key_alias || '-'}
+                          {key.blocked && <Chip label="Blocked" color="error" size="small" />}
+                        </Box>
+                      </TableCell>
+                      <TableCell>
+                        <Box display="flex" alignItems="center" gap={0.5}>
+                          <Typography
+                            variant="body2"
+                            component="code"
+                            color="text.secondary"
+                            title={keyId}
+                            sx={{
+                              fontFamily: 'monospace',
+                              backgroundColor: 'background.default',
+                              px: 1,
+                              py: 0.5,
+                              borderRadius: 1,
+                            }}
+                          >
+                            {shortKeyId(keyId)}
+                          </Typography>
+                          <IconButton size="small" onClick={() => copyToClipboard(keyId)} title="Copy Key ID">
+                            <ContentCopy fontSize="small" />
+                          </IconButton>
+                        </Box>
+                      </TableCell>
+                      <TableCell>{formatDate(key.created_at)}</TableCell>
+                      <TableCell>
+                        <ExpiryChip expiresAt={key.expires_at} />
+                      </TableCell>
+                      <TableCell>
+                        <BudgetCell spend={key.spend ?? 0} maxBudget={key.max_budget} />
+                      </TableCell>
+                      <TableCell>
+                        <Typography variant="body2">{key.tpm_limit ?? '-'} / {key.rpm_limit ?? '-'}</Typography>
+                      </TableCell>
+                      <TableCell>
+                        <Box display="flex" gap={0.5} flexWrap="wrap">
+                          {key.models?.slice(0, 2).map((model) => (
+                            <Chip key={model} label={model} size="small" />
+                          ))}
+                          {(key.models?.length || 0) > 2 && (
+                            <Chip label={`+${(key.models?.length || 0) - 2}`} size="small" variant="outlined" />
+                          )}
+                        </Box>
+                      </TableCell>
+                      <TableCell align="right">
+                        <IconButton onClick={() => handleOpenEdit(key)} title="Edit key">
+                          <Edit fontSize="small" />
                         </IconButton>
-                      </Box>
-                    </TableCell>
-                    <TableCell>{formatDate(key.created_at)}</TableCell>
-                    <TableCell>${key.spend?.toFixed(4) || '0.00'}</TableCell>
-                    <TableCell>{key.max_budget ? `$${key.max_budget}` : '-'}</TableCell>
-                    <TableCell>{key.tpm_limit || '-'}</TableCell>
-                    <TableCell>
-                      <Box display="flex" gap={0.5} flexWrap="wrap">
-                        {key.models?.slice(0, 2).map((model) => (
-                          <Chip key={model} label={model} size="small" />
-                        ))}
-                        {(key.models?.length || 0) > 2 && (
-                          <Chip label={`+${(key.models?.length || 0) - 2}`} size="small" variant="outlined" />
-                        )}
-                      </Box>
-                    </TableCell>
-                    <TableCell align="right">
-                      <IconButton onClick={() => handleOpenEdit(key)}>
-                        <Edit fontSize="small" />
-                      </IconButton>
-                      <IconButton color="error" onClick={() => onDeleteKey(keyId)}>
-                        <Delete />
-                      </IconButton>
-                    </TableCell>
-                  </TableRow>
+                        <IconButton
+                          onClick={() => handleRotate(keyId)}
+                          disabled={isRotating}
+                          title="Rotate key — generates a new secret, same settings"
+                        >
+                          {isRotating ? <CircularProgress size={18} /> : <Autorenew fontSize="small" />}
+                        </IconButton>
+                        <IconButton
+                          onClick={() => handleToggleBlock(key)}
+                          disabled={isBlocking}
+                          color={key.blocked ? 'warning' : 'default'}
+                          title={key.blocked ? 'Unblock key' : 'Block key — suspends without revoking'}
+                        >
+                          {isBlocking ? <CircularProgress size={18} /> : key.blocked ? <LockOpen fontSize="small" /> : <Lock fontSize="small" />}
+                        </IconButton>
+                        <IconButton
+                          color="error"
+                          onClick={() => setDeleteConfirmId(keyId)}
+                          title="Revoke key"
+                        >
+                          <Delete />
+                        </IconButton>
+                      </TableCell>
+                    </TableRow>
                   );
                 })
               )}
@@ -252,6 +443,7 @@ export const KeysTable: React.FC<KeysTableProps> = ({
         </TableContainer>
       </Paper>
 
+      {/* Generate dialog */}
       <Dialog open={generateModalOpen} onClose={handleCloseModal} maxWidth="sm" fullWidth>
         <DialogTitle>{newKeyValue ? 'Key Generated' : 'Generate New Key'}</DialogTitle>
         <DialogContent>
@@ -337,13 +529,7 @@ export const KeysTable: React.FC<KeysTableProps> = ({
                   onChange={(_e, selected) =>
                     setFormData({ ...formData, models: selected.map(m => m.model_name) })
                   }
-                  renderOption={(props, m) => (
-                    <li {...props}>
-                      {m.model_name}
-                      {m.supports_function_calling && ' 🔧'}
-                      {m.supports_vision && ' 👁️'}
-                    </li>
-                  )}
+                  renderOption={(props, m) => <li {...props}>{modelOption(m)}</li>}
                   renderInput={params => (
                     <TextField {...params} label="Models" helperText="Leave empty to allow all models" fullWidth />
                   )}
@@ -369,6 +555,15 @@ export const KeysTable: React.FC<KeysTableProps> = ({
                 }
                 fullWidth
               />
+              <TextField
+                label="RPM Limit"
+                type="number"
+                value={formData.rpm_limit ?? ''}
+                onChange={(e) =>
+                  setFormData({ ...formData, rpm_limit: e.target.value ? Number(e.target.value) : undefined })
+                }
+                fullWidth
+              />
             </Box>
           )}
         </DialogContent>
@@ -379,7 +574,7 @@ export const KeysTable: React.FC<KeysTableProps> = ({
               onClick={handleGenerate}
               variant="contained"
               color="primary"
-              disabled={submitting || !canGenerate}
+              disabled={submitting}
             >
               {submitting ? <CircularProgress size={24} /> : 'Generate'}
             </Button>
@@ -392,6 +587,7 @@ export const KeysTable: React.FC<KeysTableProps> = ({
         </DialogActions>
       </Dialog>
 
+      {/* Edit dialog */}
       <Dialog open={!!editingKey} onClose={handleCloseEdit} maxWidth="sm" fullWidth>
         <DialogTitle>Edit Key</DialogTitle>
         <DialogContent>
@@ -417,6 +613,7 @@ export const KeysTable: React.FC<KeysTableProps> = ({
                   onChange={(_e, selected) =>
                     setEditForm({ ...editForm, models: selected.map(m => m.model_name) })
                   }
+                  renderOption={(props, m) => <li {...props}>{modelOption(m)}</li>}
                   renderInput={params => (
                     <TextField {...params} label="Models" fullWidth />
                   )}
@@ -450,6 +647,40 @@ export const KeysTable: React.FC<KeysTableProps> = ({
                 }
                 fullWidth
               />
+
+              <Box mt={1} pt={2} borderTop="1px solid" sx={{ borderColor: 'divider' }}>
+                <Typography variant="caption" color="text.secondary" display="block" mb={1}>
+                  Danger Zone
+                </Typography>
+                {!resetSpendConfirm ? (
+                  <Button
+                    size="small"
+                    color="warning"
+                    variant="outlined"
+                    onClick={() => setResetSpendConfirm(true)}
+                  >
+                    Reset Spend to $0
+                  </Button>
+                ) : (
+                  <Box display="flex" alignItems="center" gap={1} flexWrap="wrap">
+                    <Typography variant="body2" color="warning.main">
+                      Zero out spend counter?
+                    </Typography>
+                    <Button
+                      size="small"
+                      color="warning"
+                      variant="contained"
+                      disabled={resetSpendSubmitting}
+                      onClick={handleResetSpend}
+                    >
+                      {resetSpendSubmitting ? <CircularProgress size={16} /> : 'Confirm'}
+                    </Button>
+                    <Button size="small" onClick={() => setResetSpendConfirm(false)}>
+                      Cancel
+                    </Button>
+                  </Box>
+                )}
+              </Box>
             </Box>
           )}
         </DialogContent>
@@ -457,6 +688,62 @@ export const KeysTable: React.FC<KeysTableProps> = ({
           <Button onClick={handleCloseEdit}>Cancel</Button>
           <Button onClick={handleUpdate} variant="contained" color="primary" disabled={editSubmitting}>
             {editSubmitting ? <CircularProgress size={24} /> : 'Save'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Rotate result dialog */}
+      <Dialog open={!!rotatedKeyValue} onClose={() => setRotatedKeyValue(null)} maxWidth="sm" fullWidth>
+        <DialogTitle>Key Rotated</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary" gutterBottom>
+            The old secret is now invalid. Copy the new one — you won't see it again.
+          </Typography>
+          <Box
+            display="flex"
+            alignItems="center"
+            gap={1}
+            mt={2}
+            p={2}
+            sx={{ backgroundColor: 'action.hover', border: '1px solid', borderColor: 'divider', borderRadius: 1 }}
+          >
+            <Typography
+              component="code"
+              sx={{ fontFamily: 'monospace', wordBreak: 'break-all', flex: 1 }}
+            >
+              {rotatedKeyValue}
+            </Typography>
+            <IconButton onClick={() => copyToClipboard(rotatedKeyValue!)}>
+              <ContentCopy />
+            </IconButton>
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setRotatedKeyValue(null)} variant="contained" color="success">
+            Done
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Delete confirmation dialog */}
+      <Dialog open={!!deleteConfirmId} onClose={() => setDeleteConfirmId(null)} maxWidth="xs" fullWidth>
+        <DialogTitle>Revoke Key?</DialogTitle>
+        <DialogContent>
+          <Typography>
+            This will permanently revoke the key. Any integrations using it will stop working immediately.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleteConfirmId(null)} disabled={deleteSubmitting}>
+            Cancel
+          </Button>
+          <Button
+            onClick={handleConfirmDelete}
+            variant="contained"
+            color="error"
+            disabled={deleteSubmitting}
+          >
+            {deleteSubmitting ? <CircularProgress size={20} /> : 'Revoke'}
           </Button>
         </DialogActions>
       </Dialog>

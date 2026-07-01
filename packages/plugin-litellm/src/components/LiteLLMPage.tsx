@@ -1,11 +1,12 @@
 import React, { useState, useCallback, useMemo } from 'react';
-import { Grid, Box, Snackbar, Alert, CircularProgress, Typography, Paper } from '@mui/material';
+import { Grid, Box, Snackbar, Alert, CircularProgress, Typography, Paper, Tabs, Tab } from '@mui/material';
 import { useAsync, useAsyncRetry } from 'react-use';
 import { useApi } from '@backstage/core-plugin-api';
 import { DashboardHeader } from './DashboardHeader';
 import { KeysTable } from './KeysTable';
 import { UsageStats } from './UsageStats';
 import { TeamUsage } from './TeamUsage';
+import { AuditLog } from './AuditLog';
 import { liteLlmApiRef } from '../api';
 import { DateRange, GenerateKeyRequest, GenerateKeyResponse, UpdateKeyRequest, UsageMetrics } from '../types';
 
@@ -27,6 +28,7 @@ export const LiteLLMPage: React.FC = () => {
   const api = useApi(liteLlmApiRef);
 
   const [dateRange, setDateRange] = useState<DateRange>(initDateRange);
+  const [activeTab, setActiveTab] = useState<'overview' | 'audit'>('overview');
 
   const [snackbar, setSnackbar] = useState<{ message: string; severity: 'success' | 'warning' | 'error' } | null>(null);
 
@@ -80,6 +82,13 @@ export const LiteLLMPage: React.FC = () => {
     const endDate = dateRange.end.toISOString().split('T')[0];
     return api.getUsage(startDate, endDate);
   }, [api, dateRange]);
+
+  // Invalidate team usage cache when date range changes so stale data isn't shown
+  const handleDateRangeChange = useCallback((range: DateRange) => {
+    setDateRange(range);
+    setTeamUsageCache({});
+    setTeamUsageLoading({});
+  }, [setDateRange]);
 
   // Fetch team usage on demand when a team card is expanded
   const loadTeamUsage = useCallback(async (teamId: string) => {
@@ -137,32 +146,68 @@ export const LiteLLMPage: React.FC = () => {
     [api, refreshKeys],
   );
 
+  const handleBlockKey = useCallback(
+    async (keyId: string) => {
+      try {
+        await api.blockKey(keyId);
+        setSnackbar({ message: 'Key blocked — requests will be rejected until unblocked', severity: 'warning' });
+        refreshKeys();
+      } catch (e: any) {
+        setSnackbar({ message: `Failed to block key: ${e.message}`, severity: 'error' });
+      }
+    },
+    [api, refreshKeys],
+  );
+
+  const handleUnblockKey = useCallback(
+    async (keyId: string) => {
+      try {
+        await api.unblockKey(keyId);
+        setSnackbar({ message: 'Key unblocked', severity: 'success' });
+        refreshKeys();
+      } catch (e: any) {
+        setSnackbar({ message: `Failed to unblock key: ${e.message}`, severity: 'error' });
+      }
+    },
+    [api, refreshKeys],
+  );
+
+  const handleResetKeySpend = useCallback(
+    async (keyId: string) => {
+      try {
+        await api.resetKeySpend(keyId);
+        setSnackbar({ message: 'Spend counter reset to $0', severity: 'success' });
+        refreshKeys();
+      } catch (e: any) {
+        setSnackbar({ message: `Failed to reset spend: ${e.message}`, severity: 'error' });
+      }
+    },
+    [api, refreshKeys],
+  );
+
+  const handleRotateKey = useCallback(
+    async (keyId: string): Promise<GenerateKeyResponse> => {
+      const response = await api.rotateKey(keyId);
+      setSnackbar({ message: 'Key rotated — copy the new secret now', severity: 'success' });
+      refreshKeys();
+      return response;
+    },
+    [api, refreshKeys],
+  );
+
   const handleDeleteKey = useCallback(
     async (keyId: string) => {
       try {
         await api.deleteKey(keyId);
-        setSnackbar({ 
-          message: 'Key revoked successfully', 
-          severity: 'success' 
-        });
+        setSnackbar({ message: 'Key revoked successfully', severity: 'success' });
         refreshKeys();
       } catch (e: any) {
-        // Handle "already deleted" response gracefully (idempotent)
-        // If backend returns 200 with success=true, it means key was already gone
         if (e.body?.success && (e.body?.message?.includes('already deleted') || e.body?.message?.includes('never existed'))) {
-          setSnackbar({ 
-            message: 'Key was already deleted', 
-            severity: 'warning' 
-          });
-          refreshKeys();  // Still refresh to ensure UI consistency
+          setSnackbar({ message: 'Key was already deleted', severity: 'warning' });
+          refreshKeys();
           return;
         }
-        setSnackbar({ 
-          message: `Failed to revoke key: ${e.message}`, 
-          severity: 'error' 
-        });
-      } finally {
-        refreshKeys();
+        setSnackbar({ message: `Failed to revoke key: ${e.message}`, severity: 'error' });
       }
     },
     [api, refreshKeys],
@@ -205,6 +250,20 @@ export const LiteLLMPage: React.FC = () => {
 
   return (
     <Box p={3}>
+      {userInfo.can_view_audit && (
+        <Tabs
+          value={activeTab}
+          onChange={(_, v) => setActiveTab(v)}
+          sx={{ mb: 2, borderBottom: 1, borderColor: 'divider' }}
+        >
+          <Tab label="Overview" value="overview" />
+          <Tab label="Audit Log" value="audit" />
+        </Tabs>
+      )}
+
+      {activeTab === 'audit' ? (
+        <AuditLog api={api} />
+      ) : (
       <Grid container spacing={2}>
         <Grid item xs={12}>
           <DashboardHeader userInfo={userInfo} teams={teams ?? []} loading={userLoading || teamsLoading} />
@@ -228,7 +287,7 @@ export const LiteLLMPage: React.FC = () => {
             usage={usage ?? null}
             models={allModels ?? []}
             dateRange={dateRange}
-            onDateRangeChange={setDateRange}
+            onDateRangeChange={handleDateRangeChange}
             loading={usageLoading}
             userInfo={userInfo}
           />
@@ -242,10 +301,15 @@ export const LiteLLMPage: React.FC = () => {
             loading={keysLoading || modelsLoading}
             onGenerateKey={handleGenerateKey}
             onUpdateKey={handleUpdateKey}
+            onRotateKey={handleRotateKey}
+            onBlockKey={handleBlockKey}
+            onUnblockKey={handleUnblockKey}
+            onResetKeySpend={handleResetKeySpend}
             onDeleteKey={handleDeleteKey}
           />
         </Grid>
       </Grid>
+      )}
 
       <Snackbar
         open={!!snackbar}

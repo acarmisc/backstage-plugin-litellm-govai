@@ -104,6 +104,21 @@ export interface Config {
      * list/mint virtual keys without holding the master key. Disabled by
      * default; enable explicitly when the CLI is in use.
      */
+    /**
+     * Audit log access control. When set, the /audit tab in the plugin is
+     * only visible to members of the specified Backstage group.
+     */
+    audit?: {
+      /**
+       * Backstage group entity ref whose members can view the audit log.
+       * The plugin ships a ready-made group at catalog/litellm-admins.yaml —
+       * register the root catalog-info.yaml and set this to
+       * "group:default/litellm-admins", then add members there.
+       * When omitted the audit tab is hidden for all users.
+       */
+      group?: string;
+    };
+
     bridge?: {
       /**
        * When true, mount the /bridge/keys, /bridge/keys (POST), /bridge/models

@@ -1,0 +1,13 @@
+apiVersion: backstage.io/v1alpha1
+kind: Location
+metadata:
+  name: backstage-plugin-litellm-govai
+  description: >
+    Root catalog location for the backstage-plugin-litellm-govai plugin.
+    Register this URL in your Backstage catalog to import the plugin components
+    and the bundled litellm-admins group.
+spec:
+  targets:
+    - ./packages/plugin-litellm/catalog-info.yaml
+    - ./packages/plugin-litellm-backend/catalog-info.yaml
+    - ./catalog/litellm-admins.yaml

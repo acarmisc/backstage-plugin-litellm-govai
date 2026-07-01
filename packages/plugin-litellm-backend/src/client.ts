@@ -12,6 +12,8 @@ import {
   DeleteKeyRequest,
   CreateUserRequest,
   CreateUserResponse,
+  AuditLogsParams,
+  PaginatedAuditLogs,
 } from './types';
 
 const DEFAULT_TIMEOUT = 30000;
@@ -147,9 +149,6 @@ export class LiteLLMClient {
 
   private toVirtualKey(k: LiteLLMUserKey): VirtualKey {
     return {
-      // The hashed `token` never leaves LiteLLM in a usable form; the
-      // masked `key_name` ("sk-...XXXX") is what the UI displays. Fall
-      // back to `token` only when `key_name` is missing.
       key: k.key_name ?? k.token,
       token: k.token,
       key_alias: k.key_alias ?? undefined,
@@ -161,6 +160,7 @@ export class LiteLLMClient {
       rpm_limit: k.rpm_limit ?? undefined,
       models: k.models ?? [],
       user_id: k.user_id ?? undefined,
+      blocked: k.blocked ?? undefined,
     };
   }
 
@@ -199,6 +199,41 @@ export class LiteLLMClient {
       method: 'POST',
       body: JSON.stringify(request),
     });
+  }
+
+  async blockKey(key: string): Promise<unknown> {
+    return this.request('/key/block', {
+      method: 'POST',
+      body: JSON.stringify({ key }),
+    });
+  }
+
+  async unblockKey(key: string): Promise<unknown> {
+    return this.request('/key/unblock', {
+      method: 'POST',
+      body: JSON.stringify({ key }),
+    });
+  }
+
+  async resetKeySpend(key: string): Promise<unknown> {
+    return this.request(`/key/${encodeURIComponent(key)}/reset_spend`, {
+      method: 'POST',
+      body: JSON.stringify({ reset_to: 0 }),
+    });
+  }
+
+  async getAuditLogs(params: AuditLogsParams): Promise<PaginatedAuditLogs> {
+    const query = new URLSearchParams();
+    if (params.page !== undefined) query.set('page', String(params.page));
+    if (params.page_size !== undefined) query.set('page_size', String(params.page_size));
+    if (params.start_date) query.set('start_date', params.start_date);
+    if (params.end_date) query.set('end_date', params.end_date);
+    if (params.action) query.set('action', params.action);
+    if (params.table_name) query.set('table_name', params.table_name);
+    if (params.changed_by) query.set('changed_by', params.changed_by);
+    if (params.sort_by) query.set('sort_by', params.sort_by);
+    if (params.sort_order) query.set('sort_order', params.sort_order);
+    return this.request<PaginatedAuditLogs>(`/audit?${query.toString()}`);
   }
 
   /**

@@ -420,6 +420,33 @@ export async function getOrProvisionUser(
 }
 
 /**
+ * Returns true when the user is a member of the given Backstage group entity ref.
+ * Used for RBAC gates (e.g. audit log visibility) without the role-config machinery.
+ */
+export async function isUserMemberOfGroup(
+  userEntityRef: string,
+  group: string,
+  catalogClient: CatalogClient,
+  auth: AuthService,
+  logger: any,
+): Promise<boolean> {
+  try {
+    const { token } = await auth.getPluginRequestToken({
+      onBehalfOf: await auth.getOwnServiceCredentials(),
+      targetPluginId: 'catalog',
+    });
+    const entity = await catalogClient.getEntityByRef(userEntityRef, { token });
+    const groups = (entity?.relations ?? [])
+      .filter(r => r.type === 'memberOf')
+      .map(r => r.targetRef);
+    return groups.includes(group);
+  } catch (err: any) {
+    logger.warn(`Could not check group membership for ${userEntityRef}: ${err.message}`);
+    return false;
+  }
+}
+
+/**
  * Fetches the user's Backstage group memberships and returns the first matching
  * role config (priority order), or undefined when no role matches.
  */

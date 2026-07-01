@@ -1,0 +1,23 @@
+apiVersion: backstage.io/v1alpha1
+kind: Group
+metadata:
+  name: litellm-admins
+  namespace: default
+  description: >
+    LiteLLM administrators. Members of this group can view the audit log
+    inside the Backstage LiteLLM plugin. Add users to this group to grant
+    audit access without giving them the LiteLLM master key.
+  annotations:
+    backstage.io/managed-by-location: "url:https://github.com/your-org/backstage-plugin-litellm-govai/blob/main/catalog/litellm-admins.yaml"
+  links:
+    - url: https://docs.litellm.ai/docs/proxy/audit_logs
+      title: LiteLLM Audit Logs docs
+spec:
+  type: team
+  profile:
+    displayName: LiteLLM Admins
+  children: []
+  # Default: the Backstage guest/admin user included so the audit tab is
+  # accessible out of the box. Replace or extend with your actual admin users.
+  members:
+    - user:default/guest

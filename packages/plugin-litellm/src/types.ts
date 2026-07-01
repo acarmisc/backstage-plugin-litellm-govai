@@ -9,6 +9,8 @@ export interface UserInfo {
   current_spend?: number;
   soft_limit?: number;
   hard_limit?: number;
+  /** Backstage-computed: true when the user belongs to litellm.audit.group */
+  can_view_audit?: boolean;
 }
 
 export interface TeamMember {
@@ -39,6 +41,7 @@ export interface VirtualKey {
   rpm_limit?: number;
   models?: string[];
   user_id?: string;
+  blocked?: boolean;
 }
 
 export interface ModelInfo {
@@ -46,6 +49,8 @@ export interface ModelInfo {
   mode: string;
   supports_function_calling?: boolean;
   supports_vision?: boolean;
+  input_cost_per_token?: number;
+  output_cost_per_token?: number;
 }
 
 export interface UsageModelBreakdown {
@@ -139,4 +144,34 @@ export interface GenerateKeyResponse {
 export interface DateRange {
   start: Date;
   end: Date;
+}
+
+export interface AuditLogEntry {
+  id: string;
+  updated_at: string;
+  changed_by?: string;
+  changed_by_api_key?: string;
+  action?: string;
+  table_name?: string;
+  object_id?: string;
+  before_value?: Record<string, unknown> | null;
+  updated_values?: Record<string, unknown> | null;
+}
+
+export interface PaginatedAuditLogs {
+  audit_logs: AuditLogEntry[];
+  total: number;
+  page: number;
+  page_size: number;
+  total_pages: number;
+}
+
+export interface AuditLogsParams {
+  page?: number;
+  page_size?: number;
+  start_date?: string;
+  end_date?: string;
+  action?: string;
+  table_name?: string;
+  changed_by?: string;
 }

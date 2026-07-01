@@ -8,6 +8,8 @@ import {
   GenerateKeyRequest,
   GenerateKeyResponse,
   UpdateKeyRequest,
+  AuditLogsParams,
+  PaginatedAuditLogs,
 } from './types';
 
 class ApiError extends Error {
@@ -26,10 +28,15 @@ export interface LiteLlmApiInterface {
   generateKey(request: GenerateKeyRequest): Promise<GenerateKeyResponse>;
   updateKey(keyId: string, request: UpdateKeyRequest): Promise<VirtualKey>;
   deleteKey(keyId: string): Promise<{ success: boolean }>;
+  rotateKey(keyId: string): Promise<GenerateKeyResponse>;
+  blockKey(keyId: string): Promise<void>;
+  unblockKey(keyId: string): Promise<void>;
+  resetKeySpend(keyId: string): Promise<void>;
   listModels(): Promise<ModelInfo[]>;
   getTeams(): Promise<TeamInfo[]>;
   getUsage(startDate: string, endDate: string): Promise<UsageMetrics>;
   getTeamUsage(teamId: string, startDate: string, endDate: string): Promise<UsageMetrics>;
+  getAuditLogs(params: AuditLogsParams): Promise<PaginatedAuditLogs>;
 }
 
 export const liteLlmApiRef = createApiRef<LiteLlmApiInterface>({
@@ -102,6 +109,34 @@ export class LiteLlmApi implements LiteLlmApiInterface {
 
   async deleteKey(keyId: string): Promise<{ success: boolean }> {
     return this.del<{ success: boolean }>(`/keys/${encodeURIComponent(keyId)}`);
+  }
+
+  async rotateKey(keyId: string): Promise<GenerateKeyResponse> {
+    return this.post<GenerateKeyResponse>(`/keys/${encodeURIComponent(keyId)}/regenerate`, {});
+  }
+
+  async blockKey(keyId: string): Promise<void> {
+    await this.post(`/keys/${encodeURIComponent(keyId)}/block`, {});
+  }
+
+  async unblockKey(keyId: string): Promise<void> {
+    await this.post(`/keys/${encodeURIComponent(keyId)}/unblock`, {});
+  }
+
+  async resetKeySpend(keyId: string): Promise<void> {
+    await this.post(`/keys/${encodeURIComponent(keyId)}/reset_spend`, {});
+  }
+
+  async getAuditLogs(params: AuditLogsParams): Promise<PaginatedAuditLogs> {
+    const strParams: Record<string, string> = {};
+    if (params.page !== undefined) strParams.page = String(params.page);
+    if (params.page_size !== undefined) strParams.page_size = String(params.page_size);
+    if (params.start_date) strParams.start_date = params.start_date;
+    if (params.end_date) strParams.end_date = params.end_date;
+    if (params.action) strParams.action = params.action;
+    if (params.table_name) strParams.table_name = params.table_name;
+    if (params.changed_by) strParams.changed_by = params.changed_by;
+    return this.get<PaginatedAuditLogs>('/audit', strParams);
   }
 
   async listModels(): Promise<ModelInfo[]> {
