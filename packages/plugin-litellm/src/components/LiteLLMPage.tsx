@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useMemo } from 'react';
-import { Grid, Box, Snackbar, Alert, CircularProgress, Typography, Paper, Tabs, Tab } from '@mui/material';
+import { Box, Snackbar, Alert, CircularProgress, Typography, Paper, Tabs, Tab } from '@mui/material';
 import { useAsync, useAsyncRetry } from 'react-use';
 import { useApi } from '@backstage/core-plugin-api';
 import { DashboardHeader } from './DashboardHeader';
@@ -28,7 +28,7 @@ export const LiteLLMPage: React.FC = () => {
   const api = useApi(liteLlmApiRef);
 
   const [dateRange, setDateRange] = useState<DateRange>(initDateRange);
-  const [activeTab, setActiveTab] = useState<'overview' | 'audit'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'keys' | 'teams' | 'audit'>('overview');
 
   const [snackbar, setSnackbar] = useState<{ message: string; severity: 'success' | 'warning' | 'error' } | null>(null);
 
@@ -250,66 +250,62 @@ export const LiteLLMPage: React.FC = () => {
 
   return (
     <Box p={3}>
-      {userInfo.can_view_audit && (
-        <Tabs
-          value={activeTab}
-          onChange={(_, v) => setActiveTab(v)}
-          sx={{ mb: 2, borderBottom: 1, borderColor: 'divider' }}
-        >
-          <Tab label="Overview" value="overview" />
-          <Tab label="Audit Log" value="audit" />
-        </Tabs>
+      <Box mb={2}>
+        <DashboardHeader userInfo={userInfo} teams={teams ?? []} loading={userLoading || teamsLoading} />
+      </Box>
+
+      <Tabs
+        value={activeTab}
+        onChange={(_, v) => setActiveTab(v)}
+        sx={{ mb: 2, borderBottom: 1, borderColor: 'divider' }}
+      >
+        <Tab label="Overview" value="overview" />
+        <Tab label="Keys" value="keys" />
+        <Tab label="Teams" value="teams" />
+        {userInfo.can_view_audit && <Tab label="Audit Log" value="audit" />}
+      </Tabs>
+
+      {activeTab === 'overview' && (
+        <UsageStats
+          usage={usage ?? null}
+          models={allModels ?? []}
+          dateRange={dateRange}
+          onDateRangeChange={handleDateRangeChange}
+          loading={usageLoading}
+          userInfo={userInfo}
+        />
       )}
 
-      {activeTab === 'audit' ? (
-        <AuditLog api={api} />
-      ) : (
-      <Grid container spacing={2}>
-        <Grid item xs={12}>
-          <DashboardHeader userInfo={userInfo} teams={teams ?? []} loading={userLoading || teamsLoading} />
-        </Grid>
-
-        <Grid item xs={12}>
-          <TeamUsage
-            teams={teams ?? []}
-            loading={teamsLoading}
-            dateRange={dateRange}
-            getTeamUsage={teamId => {
-              if (teamUsageCache[teamId] === undefined) loadTeamUsage(teamId);
-              return teamUsageCache[teamId] ?? null;
-            }}
-            getTeamUsageLoading={teamId => teamUsageLoading[teamId] ?? false}
-          />
-        </Grid>
-
-        <Grid item xs={12}>
-          <UsageStats
-            usage={usage ?? null}
-            models={allModels ?? []}
-            dateRange={dateRange}
-            onDateRangeChange={handleDateRangeChange}
-            loading={usageLoading}
-            userInfo={userInfo}
-          />
-        </Grid>
-
-        <Grid item xs={12}>
-          <KeysTable
-            keys={keys ?? []}
-            models={allowedModels}
-            teams={teams ?? []}
-            loading={keysLoading || modelsLoading}
-            onGenerateKey={handleGenerateKey}
-            onUpdateKey={handleUpdateKey}
-            onRotateKey={handleRotateKey}
-            onBlockKey={handleBlockKey}
-            onUnblockKey={handleUnblockKey}
-            onResetKeySpend={handleResetKeySpend}
-            onDeleteKey={handleDeleteKey}
-          />
-        </Grid>
-      </Grid>
+      {activeTab === 'keys' && (
+        <KeysTable
+          keys={keys ?? []}
+          models={allowedModels}
+          teams={teams ?? []}
+          loading={keysLoading || modelsLoading}
+          onGenerateKey={handleGenerateKey}
+          onUpdateKey={handleUpdateKey}
+          onRotateKey={handleRotateKey}
+          onBlockKey={handleBlockKey}
+          onUnblockKey={handleUnblockKey}
+          onResetKeySpend={handleResetKeySpend}
+          onDeleteKey={handleDeleteKey}
+        />
       )}
+
+      {activeTab === 'teams' && (
+        <TeamUsage
+          teams={teams ?? []}
+          loading={teamsLoading}
+          dateRange={dateRange}
+          getTeamUsage={teamId => {
+            if (teamUsageCache[teamId] === undefined) loadTeamUsage(teamId);
+            return teamUsageCache[teamId] ?? null;
+          }}
+          getTeamUsageLoading={teamId => teamUsageLoading[teamId] ?? false}
+        />
+      )}
+
+      {activeTab === 'audit' && userInfo.can_view_audit && <AuditLog api={api} />}
 
       <Snackbar
         open={!!snackbar}
