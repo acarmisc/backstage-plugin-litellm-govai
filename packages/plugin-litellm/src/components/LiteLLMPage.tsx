@@ -311,7 +311,6 @@ export const LiteLLMPage: React.FC = () => {
         <TeamUsage
           teams={teams ?? []}
           loading={teamsLoading}
-          dateRange={dateRange}
           getTeamUsage={teamId => {
             if (teamUsageCache[teamId] === undefined) loadTeamUsage(teamId);
             return teamUsageCache[teamId] ?? null;

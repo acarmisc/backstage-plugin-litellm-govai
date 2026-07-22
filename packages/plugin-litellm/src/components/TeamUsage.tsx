@@ -5,6 +5,8 @@ import {
   Typography,
   LinearProgress,
   Chip,
+  Divider,
+  Stack,
   Table,
   TableBody,
   TableCell,
@@ -15,7 +17,7 @@ import {
   IconButton,
   CircularProgress,
 } from '@mui/material';
-import { ExpandMore, ExpandLess, Group } from '@mui/icons-material';
+import { ExpandMore, ExpandLess, Group, Speed, Memory } from '@mui/icons-material';
 import {
   AreaChart,
   Area,
@@ -25,7 +27,18 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from 'recharts';
-import { TeamInfo, UsageMetrics, DateRange } from '../types';
+import { TeamInfo, UsageMetrics } from '../types';
+
+const Stat: React.FC<{ label: string; value: string }> = ({ label, value }) => (
+  <Box>
+    <Typography variant="caption" color="text.secondary" display="block">
+      {label}
+    </Typography>
+    <Typography variant="body2" fontWeight={600} sx={{ fontFamily: 'monospace' }}>
+      {value}
+    </Typography>
+  </Box>
+);
 
 interface TeamCardProps {
   team: TeamInfo;
@@ -50,22 +63,49 @@ const TeamCard: React.FC<TeamCardProps> = ({ team, usage, usageLoading }) => {
         <Group color="action" />
         <Box flexGrow={1}>
           <Typography variant="subtitle1" fontWeight={600}>
-            {team.team_alias ?? team.team_id}
+            {team.team_alias || 'Untitled team'}
           </Typography>
-          {team.models?.length ? (
-            <Box display="flex" gap={0.5} flexWrap="wrap" mt={0.5}>
-              {team.models.map(m => (
-                <Chip key={m} label={m} size="small" variant="outlined" />
-              ))}
-            </Box>
-          ) : (
-            <Typography variant="caption" color="text.secondary">All models</Typography>
-          )}
+          <Typography variant="caption" color="text.secondary" sx={{ fontFamily: 'monospace' }}>
+            {team.team_id}
+          </Typography>
         </Box>
-        <IconButton size="small" onClick={() => setExpanded(e => !e)}>
+        <IconButton size="small" onClick={() => setExpanded(e => !e)} aria-label="toggle details">
           {expanded ? <ExpandLess /> : <ExpandMore />}
         </IconButton>
       </Box>
+
+      <Stack direction="row" spacing={3} mt={1.5} flexWrap="wrap" useFlexGap gap={1.5}>
+        <Stat
+          label="Members"
+          value={
+            team.members_with_roles?.length
+              ? String(team.members_with_roles.length)
+              : '—'
+          }
+        />
+        <Stat
+          label="Models"
+          value={
+            team.models?.length ? String(team.models.length) : 'All'
+          }
+        />
+        <Stat
+          label="Budget"
+          value={budget > 0 ? `$${budget.toFixed(2)}` : 'Unlimited'}
+        />
+        <Stat
+          label="Spend"
+          value={`$${spend.toFixed(2)}`}
+        />
+        <Stat
+          label="TPM"
+          value={team.tpm_limit != null && team.tpm_limit > 0 ? String(team.tpm_limit) : '—'}
+        />
+        <Stat
+          label="RPM"
+          value={team.rpm_limit != null && team.rpm_limit > 0 ? String(team.rpm_limit) : '—'}
+        />
+      </Stack>
 
       {budget > 0 && (
         <Box mt={1.5}>
@@ -87,6 +127,37 @@ const TeamCard: React.FC<TeamCardProps> = ({ team, usage, usageLoading }) => {
 
       <Collapse in={expanded}>
         <Box mt={2}>
+          <Box display="flex" alignItems="center" gap={1} mb={1}>
+            <Speed fontSize="small" color="action" />
+            <Typography variant="subtitle2" color="text.secondary">
+              Rate limits
+            </Typography>
+          </Box>
+          <Stack direction="row" spacing={3} flexWrap="wrap" useFlexGap gap={1.5} mb={2}>
+            <Stat label="TPM limit" value={team.tpm_limit != null && team.tpm_limit > 0 ? String(team.tpm_limit) : 'Unlimited'} />
+            <Stat label="RPM limit" value={team.rpm_limit != null && team.rpm_limit > 0 ? String(team.rpm_limit) : 'Unlimited'} />
+            <Stat label="Max budget" value={budget > 0 ? `$${budget.toFixed(2)}` : 'Unlimited'} />
+          </Stack>
+
+          <Divider sx={{ mb: 2 }} />
+
+          <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+            Models
+          </Typography>
+          {team.models?.length ? (
+            <Box display="flex" gap={0.5} flexWrap="wrap" mb={2}>
+              {team.models.map(m => (
+                <Chip key={m} label={m} size="small" variant="outlined" />
+              ))}
+            </Box>
+          ) : (
+            <Typography variant="body2" color="text.secondary" mb={2}>
+              All models allowed
+            </Typography>
+          )}
+
+          <Divider sx={{ mb: 2 }} />
+
           {usageLoading ? (
             <Box display="flex" justifyContent="center" p={2}>
               <CircularProgress size={24} />
@@ -96,7 +167,7 @@ const TeamCard: React.FC<TeamCardProps> = ({ team, usage, usageLoading }) => {
               <Typography variant="subtitle2" color="text.secondary" gutterBottom>
                 Daily Spend
               </Typography>
-              <Box height={160}>
+              <Box height={160} mb={2}>
                 <ResponsiveContainer width="100%" height="100%">
                   <AreaChart data={dailyData}>
                     <CartesianGrid strokeDasharray="3 3" />
@@ -107,40 +178,46 @@ const TeamCard: React.FC<TeamCardProps> = ({ team, usage, usageLoading }) => {
                   </AreaChart>
                 </ResponsiveContainer>
               </Box>
+              <Divider sx={{ mb: 2 }} />
             </>
           ) : null}
 
+          <Box display="flex" alignItems="center" gap={1} mb={1}>
+            <Memory fontSize="small" color="action" />
+            <Typography variant="subtitle2" color="text.secondary">
+              Members
+            </Typography>
+          </Box>
           {team.members_with_roles?.length ? (
-            <Box mt={2}>
-              <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                Members
-              </Typography>
-              <TableContainer>
-                <Table size="small">
-                  <TableHead>
-                    <TableRow>
-                      <TableCell>User</TableCell>
-                      <TableCell>Role</TableCell>
+            <TableContainer>
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell>User</TableCell>
+                    <TableCell>Role</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {team.members_with_roles.map(m => (
+                    <TableRow key={m.user_id}>
+                      <TableCell sx={{ fontFamily: 'monospace', fontSize: 12 }}>{m.user_id}</TableCell>
+                      <TableCell>
+                        <Chip
+                          label={m.role}
+                          size="small"
+                          color={m.role === 'admin' ? 'primary' : 'default'}
+                        />
+                      </TableCell>
                     </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {team.members_with_roles.map(m => (
-                      <TableRow key={m.user_id}>
-                        <TableCell sx={{ fontFamily: 'monospace', fontSize: 12 }}>{m.user_id}</TableCell>
-                        <TableCell>
-                          <Chip
-                            label={m.role}
-                            size="small"
-                            color={m.role === 'admin' ? 'primary' : 'default'}
-                          />
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </TableContainer>
-            </Box>
-          ) : null}
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          ) : (
+            <Typography variant="body2" color="text.secondary">
+              No members assigned.
+            </Typography>
+          )}
         </Box>
       </Collapse>
     </Paper>
@@ -150,7 +227,6 @@ const TeamCard: React.FC<TeamCardProps> = ({ team, usage, usageLoading }) => {
 interface TeamUsageProps {
   teams: TeamInfo[];
   loading: boolean;
-  dateRange: DateRange;
   getTeamUsage: (teamId: string) => UsageMetrics | null;
   getTeamUsageLoading: (teamId: string) => boolean;
 }
