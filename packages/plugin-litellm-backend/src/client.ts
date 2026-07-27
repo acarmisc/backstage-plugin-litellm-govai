@@ -299,10 +299,29 @@ export class LiteLLMClient {
       .filter((m: ModelInfo) => m.model_name);
   }
 
+  /**
+   * LiteLLM's `/team/info` wraps the team row inside `team_info` (alongside
+   * sibling `keys` / `team_memberships` arrays), the same shape as
+   * `/user/info` wrapping the user row inside `user_info`. Without unwrapping,
+   * `team_alias`, `members_with_roles`, `models`, budgets and limits are all
+   * undefined, so the UI fell back to displaying the raw team_id / "Untitled
+   * team".
+   */
   async getTeamInfo(teamId: string): Promise<TeamInfo> {
-    return this.request<TeamInfo>(
+    const raw = await this.request<any>(
       `/team/info?team_id=${encodeURIComponent(teamId)}`,
     );
+    const inner = raw?.team_info ?? {};
+    return {
+      team_id: raw?.team_id ?? inner.team_id ?? teamId,
+      team_alias: inner.team_alias ?? raw?.team_alias,
+      max_budget: inner.max_budget ?? raw?.max_budget,
+      spend: inner.spend ?? raw?.spend ?? 0,
+      members_with_roles: inner.members_with_roles ?? raw?.members_with_roles,
+      models: inner.models ?? raw?.models,
+      tpm_limit: inner.tpm_limit ?? raw?.tpm_limit,
+      rpm_limit: inner.rpm_limit ?? raw?.rpm_limit,
+    };
   }
 
   private emptyUsage(): UsageMetrics {
