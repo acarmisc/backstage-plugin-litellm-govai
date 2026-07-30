@@ -12,6 +12,11 @@
   "publishConfig": {
     "access": "public"
   },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/acarmisc/backstage-plugin-litellm-govai"
+  },
+  "homepage": "https://github.com/acarmisc/backstage-plugin-litellm-govai#readme",
   "license": "Apache-2.0",
   "exports": {
     ".": "./dist/index.cjs.js"
