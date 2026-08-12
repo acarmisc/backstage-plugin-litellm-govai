@@ -77,6 +77,41 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
   // plugin-router level, so each plugin must attach its own.
   router.use(express.json());
 
+  /**
+   * Guards every key-mutation route (rotate/update/block/unblock/reset_spend/
+   * delete). These all act on a caller-supplied `keyId` via the master-key
+   * client, which has no concept of "whose key is this" on its own — without
+   * this check any authenticated user who learned another user's key token
+   * (e.g. from an audit-log row) could revoke, block, rotate or zero the
+   * spend on a key they don't own. Mirrors the ownership check the CLI
+   * bridge already does in bridge.ts (bridgeRegenerateKey), just resolved by
+   * token/key instead of alias since the UI addresses keys directly.
+   *
+   * Writes the response and returns undefined when the caller isn't
+   * authenticated or doesn't own the key; callers must return immediately
+   * when that happens. Returns the caller's entity ref otherwise.
+   */
+  const requireOwnedKey = async (
+    req: Request,
+    res: Response,
+    keyId: string,
+  ): Promise<string | undefined> => {
+    const tokenEntityRef = await resolveUserId(req, auth);
+    if (!tokenEntityRef) {
+      res.status(401).json({ error: 'Authentication required' });
+      return undefined;
+    }
+    const userId = toLiteLLMUserId(tokenEntityRef, userIdDomain);
+    const ownKeys = await client.listKeys(userId);
+    const owns = ownKeys.some(k => k.token === keyId || k.key === keyId);
+    if (!owns) {
+      // 404 rather than 403 — don't confirm to a non-owner that the key exists.
+      res.status(404).json({ error: 'Key not found' });
+      return undefined;
+    }
+    return tokenEntityRef;
+  };
+
   router.get('/health', (_req: Request, res: Response) => {
     res.json({ status: 'ok', provisioning: provisioningEnabled });
   });
@@ -158,9 +193,10 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
         res.status(400).json({ error: 'keyId is required' });
         return;
       }
-      const tokenEntityRef = await resolveUserId(req, auth);
+      const tokenEntityRef = await requireOwnedKey(req, res, keyId);
+      if (!tokenEntityRef) return;
       const result = await client.regenerateKey(keyId);
-      logger.info({ action: 'key.rotate', userId: tokenEntityRef ?? 'unknown', keyId });
+      logger.info({ action: 'key.rotate', userId: tokenEntityRef, keyId });
       res.json(result);
     } catch (error: any) {
       logger.error('Failed to rotate key', error);
@@ -251,10 +287,11 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
         res.status(400).json({ error: 'keyId is required' });
         return;
       }
-      const tokenEntityRef = await resolveUserId(req, auth);
+      const tokenEntityRef = await requireOwnedKey(req, res, keyId);
+      if (!tokenEntityRef) return;
       const request: UpdateKeyRequest = { ...req.body, key: keyId };
       const result = await client.updateKey(request);
-      logger.info({ action: 'key.update', userId: tokenEntityRef ?? 'unknown', keyId });
+      logger.info({ action: 'key.update', userId: tokenEntityRef, keyId });
       res.json(result);
     } catch (error: any) {
       logger.error('Failed to update key', error);
@@ -269,9 +306,10 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
         res.status(400).json({ error: 'keyId is required' });
         return;
       }
-      const deleteEntityRef = await resolveUserId(req, auth);
+      const deleteEntityRef = await requireOwnedKey(req, res, keyId);
+      if (!deleteEntityRef) return;
       await client.deleteKeys({ keys: [keyId] });
-      logger.info({ action: 'key.delete', userId: deleteEntityRef ?? 'unknown', keyId });
+      logger.info({ action: 'key.delete', userId: deleteEntityRef, keyId });
       res.json({ success: true });
     } catch (error: any) {
       logger.error('Failed to delete key', error);
@@ -282,9 +320,14 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
   router.post('/keys/:keyId/block', async (req: Request, res: Response) => {
     try {
       const { keyId } = req.params;
-      const tokenEntityRef = await resolveUserId(req, auth);
+      if (!keyId) {
+        res.status(400).json({ error: 'keyId is required' });
+        return;
+      }
+      const tokenEntityRef = await requireOwnedKey(req, res, keyId);
+      if (!tokenEntityRef) return;
       await client.blockKey(keyId);
-      logger.info({ action: 'key.block', userId: tokenEntityRef ?? 'unknown', keyId });
+      logger.info({ action: 'key.block', userId: tokenEntityRef, keyId });
       res.json({ success: true });
     } catch (error: any) {
       logger.error('Failed to block key', error);
@@ -295,9 +338,14 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
   router.post('/keys/:keyId/unblock', async (req: Request, res: Response) => {
     try {
       const { keyId } = req.params;
-      const tokenEntityRef = await resolveUserId(req, auth);
+      if (!keyId) {
+        res.status(400).json({ error: 'keyId is required' });
+        return;
+      }
+      const tokenEntityRef = await requireOwnedKey(req, res, keyId);
+      if (!tokenEntityRef) return;
       await client.unblockKey(keyId);
-      logger.info({ action: 'key.unblock', userId: tokenEntityRef ?? 'unknown', keyId });
+      logger.info({ action: 'key.unblock', userId: tokenEntityRef, keyId });
       res.json({ success: true });
     } catch (error: any) {
       logger.error('Failed to unblock key', error);
@@ -308,9 +356,14 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
   router.post('/keys/:keyId/reset_spend', async (req: Request, res: Response) => {
     try {
       const { keyId } = req.params;
-      const tokenEntityRef = await resolveUserId(req, auth);
+      if (!keyId) {
+        res.status(400).json({ error: 'keyId is required' });
+        return;
+      }
+      const tokenEntityRef = await requireOwnedKey(req, res, keyId);
+      if (!tokenEntityRef) return;
       await client.resetKeySpend(keyId);
-      logger.info({ action: 'key.reset_spend', userId: tokenEntityRef ?? 'unknown', keyId });
+      logger.info({ action: 'key.reset_spend', userId: tokenEntityRef, keyId });
       res.json({ success: true });
     } catch (error: any) {
       logger.error('Failed to reset key spend', error);
