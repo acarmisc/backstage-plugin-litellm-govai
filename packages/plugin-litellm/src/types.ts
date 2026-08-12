@@ -118,7 +118,8 @@ export interface GenerateKeyRequest {
   models?: string[];
   team_id?: string;
   duration?: string;
-  max_budget?: number;
+  /** Positive number caps spend; null/undefined means unlimited. */
+  max_budget?: number | null;
   tpm_limit?: number;
   rpm_limit?: number;
   key_type?: string;
@@ -139,6 +140,11 @@ export interface GenerateKeyResponse {
   key_alias?: string;
   expires_at?: string;
   max_budget?: number;
+}
+
+export interface LiteLlmConfig {
+  /** Publicly reachable LiteLLM proxy base URL (for snippet generation). */
+  baseUrl: string;
 }
 
 export interface DateRange {

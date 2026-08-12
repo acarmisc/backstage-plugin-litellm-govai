@@ -52,6 +52,10 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
   const baseUrl = config.getString('litellm.baseUrl');
   const masterKey = config.getString('litellm.masterKey');
   const userIdDomain = config.getOptionalString('litellm.userIdDomain');
+  // Publicly reachable LiteLLM proxy URL, used to build ready-to-paste
+  // snippets in the frontend. Falls back to baseUrl (the internal URL the
+  // backend calls) when the operator has not configured a public one.
+  const publicBaseUrl = config.getOptionalString('litellm.publicBaseUrl') ?? baseUrl;
   const client = options.client ?? new LiteLLMClient({ baseUrl, masterKey });
   const { enabled: provisioningEnabled, defaults: provisioningDefaults } =
     readProvisioningDefaults(config);
@@ -79,6 +83,12 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
 
   router.get('/health', (_req: Request, res: Response) => {
     res.json({ status: 'ok', provisioning: provisioningEnabled });
+  });
+
+  // Exposes the public LiteLLM proxy URL so the frontend can build
+  // ready-to-paste curl / OpenAI-SDK snippets for freshly generated keys.
+  router.get('/config', (_req: Request, res: Response) => {
+    res.json({ baseUrl: publicBaseUrl });
   });
 
   router.get('/user/info', async (req: Request, res: Response) => {
@@ -170,15 +180,21 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
 
   router.post('/keys/generate', async (req: Request, res: Response) => {
     try {
-      // Only alias + max_budget are required. An empty models array is
-      // intentional — in LiteLLM `models: []` means "all models the user
-      // can access" which is the desired default. Forcing a selection
-      // up front is too restrictive for the common case.
+      // Only alias is hard-required. max_budget is optional: a positive
+      // number caps spend, while null/undefined means "unlimited" (LiteLLM
+      // supports null). An empty models array is intentional — in LiteLLM
+      // `models: []` means "all models the user can access" which is the
+      // desired default. Forcing a selection up front is too restrictive for
+      // the common case.
       const body = (req.body ?? {}) as GenerateKeyRequest;
       const missing: string[] = [];
       if (!body.alias?.trim()) missing.push('alias');
-      if (typeof body.max_budget !== 'number' || body.max_budget <= 0) {
-        missing.push('max_budget (positive number)');
+      if (
+        body.max_budget !== null &&
+        body.max_budget !== undefined &&
+        (typeof body.max_budget !== 'number' || body.max_budget <= 0)
+      ) {
+        missing.push('max_budget (positive number, or null for unlimited)');
       }
       if (missing.length) {
         res.status(400).json({

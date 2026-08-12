@@ -22,8 +22,12 @@ import {
   Autocomplete,
   LinearProgress,
   InputAdornment,
+  Checkbox,
+  FormControlLabel,
+  Tabs,
+  Tab,
 } from '@mui/material';
-import { ContentCopy, Delete, Add, Edit, Autorenew, Search, Warning, Lock, LockOpen } from '@mui/icons-material';
+import { ContentCopy, Delete, Add, Edit, Autorenew, Search, Warning, Lock, LockOpen, Code } from '@mui/icons-material';
 import { expiryStatus } from '../api';
 import {
   VirtualKey,
@@ -32,7 +36,9 @@ import {
   GenerateKeyRequest,
   GenerateKeyResponse,
   UpdateKeyRequest,
+  LiteLlmConfig,
 } from '../types';
+import { estimateTokensFromBudget, fmtInt } from '../format';
 
 interface KeysTableProps {
   keys: VirtualKey[];
@@ -47,6 +53,8 @@ interface KeysTableProps {
   onResetKeySpend: (keyId: string) => Promise<void>;
   onDeleteKey: (keyId: string) => Promise<void>;
   onPruneExpiredKeys: () => Promise<{ pruned: number }>;
+  /** Resolve the public LiteLLM proxy URL, used for ready-to-paste snippets. */
+  onGetConfig: () => Promise<LiteLlmConfig>;
 }
 
 const maskKey = (key: string): string => {
@@ -98,6 +106,40 @@ function fmtCost(perToken?: number): string | null {
   return per1k < 0.01 ? `$${(perToken * 1_000_000).toFixed(2)}/M` : `$${per1k.toFixed(3)}/1K`;
 }
 
+function trimSlash(url: string): string {
+  return url.replace(/\/+$/, '');
+}
+
+interface Snippets {
+  curl: string;
+  openai: string;
+}
+
+function buildSnippets(baseUrl: string, key: string, model: string): Snippets {
+  const base = trimSlash(baseUrl);
+  return {
+    curl: `curl ${base}/v1/chat/completions \\
+  -H "Authorization: Bearer ${key}" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "model": "${model}",
+    "messages": [{ "role": "user", "content": "Hello!" }]
+  }'`,
+    openai: `from openai import OpenAI
+
+client = OpenAI(
+  api_key="${key}",
+  base_url="${base}/v1",
+)
+
+response = client.chat.completions.create(
+  model="${model}",
+  messages=[{ "role": "user", "content": "Hello!" }],
+)
+print(response.choices[0].message.content)`,
+  };
+}
+
 const emptyForm = (): GenerateKeyRequest => ({
   alias: '',
   models: [],
@@ -107,9 +149,7 @@ const emptyForm = (): GenerateKeyRequest => ({
   rpm_limit: undefined,
   team_id: undefined,
   key_type: 'llm_api',
-});
-
-const keyToEditForm = (k: VirtualKey): UpdateKeyRequest => ({
+});const keyToEditForm = (k: VirtualKey): UpdateKeyRequest => ({
   key_alias: k.key_alias ?? '',
   models: k.models ?? [],
   max_budget: k.max_budget,
@@ -130,10 +170,14 @@ export const KeysTable: React.FC<KeysTableProps> = ({
   onResetKeySpend,
   onDeleteKey,
   onPruneExpiredKeys,
+  onGetConfig,
 }) => {
   const [generateModalOpen, setGenerateModalOpen] = useState(false);
   const [newKeyValue, setNewKeyValue] = useState<string | null>(null);
+  const [newKeySnippets, setNewKeySnippets] = useState<Snippets | null>(null);
+  const [newKeyModel, setNewKeyModel] = useState<string>('');
   const [formData, setFormData] = useState<GenerateKeyRequest>(emptyForm());
+  const [unlimitedBudget, setUnlimitedBudget] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   const [editingKey, setEditingKey] = useState<VirtualKey | null>(null);
@@ -171,12 +215,46 @@ export const KeysTable: React.FC<KeysTableProps> = ({
   const selectedTeam = teams.find(t => t.team_id === formData.team_id) ?? null;
   const editSelectedModels = models.filter(m => (editForm.models || []).includes(m.model_name));
 
+  // ── Inline form validation (rec #25) ─────────────────────────────────────
+  const aliasError = !(formData.alias || '').trim();
+  const budgetInvalid =
+    !unlimitedBudget &&
+    (formData.max_budget === undefined ||
+      formData.max_budget === null ||
+      formData.max_budget <= 0);
+  const canGenerate = !aliasError && !budgetInvalid && !submitting;
+
+  // ── Budget estimate at the selected model's input rate (rec #27) ────────
+  const budgetEstimate = useMemo(() => {
+    if (unlimitedBudget || budgetInvalid) return null;
+    const inputCosts = selectedModels
+      .map(m => m.input_cost_per_token)
+      .filter((c): c is number => typeof c === 'number' && c > 0);
+    if (inputCosts.length === 0) return null;
+    const pricePerToken = Math.max(...inputCosts);
+    return estimateTokensFromBudget(formData.max_budget ?? 0, pricePerToken);
+  }, [formData.max_budget, selectedModels, unlimitedBudget, budgetInvalid]);
+
   const handleGenerate = async () => {
     setSubmitting(true);
     try {
-      const response = await onGenerateKey(formData);
+      const request: GenerateKeyRequest = {
+        ...formData,
+        max_budget: unlimitedBudget ? null : formData.max_budget,
+      };
+      const response = await onGenerateKey(request);
       setNewKeyValue(response.key);
+      setNewKeyModel(formData.models?.[0] ?? '');
+      setNewKeySnippets(null);
+      try {
+        const config = await onGetConfig();
+        const model = formData.models?.[0] ?? '';
+        setNewKeySnippets(buildSnippets(config.baseUrl, response.key, model));
+      } catch {
+        // Snippets are a nice-to-have; the raw key is still shown.
+      }
       setFormData(emptyForm());
+      setUnlimitedBudget(false);
     } catch (error) {
       console.error('Failed to generate key:', error);
     } finally {
@@ -187,7 +265,9 @@ export const KeysTable: React.FC<KeysTableProps> = ({
   const handleCloseModal = () => {
     setGenerateModalOpen(false);
     setNewKeyValue(null);
+    setNewKeySnippets(null);
     setFormData(emptyForm());
+    setUnlimitedBudget(false);
   };
 
   const handleOpenEdit = (k: VirtualKey) => {
@@ -369,10 +449,25 @@ export const KeysTable: React.FC<KeysTableProps> = ({
                 </TableRow>
               ) : filteredKeys.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} align="center">
-                    <Typography color="text.secondary">
-                      {filterText ? 'No keys match filter' : 'No keys found'}
-                    </Typography>
+                  <TableCell colSpan={8} align="center" sx={{ py: 4 }}>
+                    {filterText ? (
+                      <Typography color="text.secondary">No keys match filter</Typography>
+                    ) : (
+                      <Box>
+                        <Typography color="text.secondary" gutterBottom>
+                          No keys yet — generate your first key to start calling models.
+                        </Typography>
+                        <Button
+                          variant="contained"
+                          color="primary"
+                          size="small"
+                          startIcon={<Add />}
+                          onClick={() => setGenerateModalOpen(true)}
+                        >
+                          Generate Your First Key
+                        </Button>
+                      </Box>
+                    )}
                   </TableCell>
                 </TableRow>
               ) : (
@@ -499,6 +594,18 @@ export const KeysTable: React.FC<KeysTableProps> = ({
                   <ContentCopy />
                 </IconButton>
               </Box>
+
+              {newKeySnippets && (
+                <Box mt={3}>
+                  <Box display="flex" alignItems="center" gap={1} mb={1}>
+                    <Code fontSize="small" color="action" />
+                    <Typography variant="subtitle2">
+                      Start calling the proxy — paste and run
+                    </Typography>
+                  </Box>
+                  <SnippetTabs snippets={newKeySnippets} model={newKeyModel} onCopy={copyToClipboard} />
+                </Box>
+              )}
             </Box>
           ) : (
             <Box display="flex" flexDirection="column" gap={2} mt={1}>
@@ -506,6 +613,8 @@ export const KeysTable: React.FC<KeysTableProps> = ({
                 label="Alias"
                 value={formData.alias || ''}
                 onChange={(e) => setFormData({ ...formData, alias: e.target.value })}
+                error={aliasError}
+                helperText={aliasError ? 'Alias is required' : undefined}
                 required
                 fullWidth
               />
@@ -559,13 +668,38 @@ export const KeysTable: React.FC<KeysTableProps> = ({
                 />
               )}
 
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    checked={unlimitedBudget}
+                    onChange={(e) => {
+                      setUnlimitedBudget(e.target.checked);
+                      if (e.target.checked) {
+                        setFormData({ ...formData, max_budget: null });
+                      } else {
+                        setFormData({ ...formData, max_budget: 100 });
+                      }
+                    }}
+                  />
+                }
+                label="Unlimited budget"
+              />
               <TextField
                 label="Max Budget (USD)"
                 type="number"
-                value={formData.max_budget ?? ''}
+                value={unlimitedBudget ? '' : formData.max_budget ?? ''}
                 onChange={(e) =>
                   setFormData({ ...formData, max_budget: e.target.value ? Number(e.target.value) : undefined })
                 }
+                error={budgetInvalid}
+                helperText={
+                  budgetInvalid
+                    ? 'Enter a positive budget or tick "Unlimited"'
+                    : budgetEstimate !== null
+                      ? `≈ ${fmtInt(budgetEstimate)} tokens at the selected model's rate`
+                      : undefined
+                }
+                disabled={unlimitedBudget}
                 required
                 fullWidth
               />
@@ -597,7 +731,7 @@ export const KeysTable: React.FC<KeysTableProps> = ({
               onClick={handleGenerate}
               variant="contained"
               color="primary"
-              disabled={submitting}
+              disabled={!canGenerate}
             >
               {submitting ? <CircularProgress size={24} /> : 'Generate'}
             </Button>
@@ -795,5 +929,56 @@ export const KeysTable: React.FC<KeysTableProps> = ({
         </DialogActions>
       </Dialog>
     </>
+  );
+};
+
+interface SnippetTabsProps {
+  snippets: Snippets;
+  model: string;
+  onCopy: (text: string) => void;
+}
+
+const SnippetTabs: React.FC<SnippetTabsProps> = ({ snippets, model, onCopy }) => {
+  const [tab, setTab] = useState<'curl' | 'openai'>('curl');
+  const code = tab === 'curl' ? snippets.curl : snippets.openai;
+  return (
+    <Box>
+      <Tabs value={tab} onChange={(_, v) => setTab(v as 'curl' | 'openai')} sx={{ mb: 1 }}>
+        <Tab label="curl" value="curl" />
+        <Tab label="OpenAI SDK" value="openai" />
+      </Tabs>
+      <Box
+        position="relative"
+        p={1.5}
+        sx={{ backgroundColor: 'action.hover', border: '1px solid', borderColor: 'divider', borderRadius: 1 }}
+      >
+        <IconButton
+          size="small"
+          onClick={() => onCopy(code)}
+          title="Copy snippet"
+          sx={{ position: 'absolute', top: 4, right: 4 }}
+        >
+          <ContentCopy fontSize="small" />
+        </IconButton>
+        <Typography
+          component="pre"
+          sx={{
+            fontFamily: 'monospace',
+            fontSize: 12,
+            whiteSpace: 'pre-wrap',
+            wordBreak: 'break-all',
+            mb: 0,
+            pr: 4,
+          }}
+        >
+          {code}
+        </Typography>
+        {model && (
+          <Typography variant="caption" color="text.secondary" display="block" mt={1}>
+            Using model “{model}” — swap it for any model you have access to.
+          </Typography>
+        )}
+      </Box>
+    </Box>
   );
 };

@@ -10,6 +10,7 @@ import {
   UpdateKeyRequest,
   AuditLogsParams,
   PaginatedAuditLogs,
+  LiteLlmConfig,
 } from './types';
 
 class ApiError extends Error {
@@ -38,6 +39,7 @@ export interface LiteLlmApiInterface {
   getUsage(startDate: string, endDate: string): Promise<UsageMetrics>;
   getTeamUsage(teamId: string, startDate: string, endDate: string): Promise<UsageMetrics>;
   getAuditLogs(params: AuditLogsParams): Promise<PaginatedAuditLogs>;
+  getConfig(): Promise<LiteLlmConfig>;
 }
 
 export const liteLlmApiRef = createApiRef<LiteLlmApiInterface>({
@@ -182,5 +184,9 @@ export class LiteLlmApi implements LiteLlmApiInterface {
       start_date: startDate,
       end_date: endDate,
     });
+  }
+
+  async getConfig(): Promise<LiteLlmConfig> {
+    return this.get<LiteLlmConfig>('/config');
   }
 }

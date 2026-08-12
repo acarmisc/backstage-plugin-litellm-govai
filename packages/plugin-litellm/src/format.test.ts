@@ -1,6 +1,6 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert';
-import { fmtUsd, fmtInt } from './format';
+import { fmtUsd, fmtInt, estimateTokensFromBudget } from './format';
 
 describe('fmtUsd', () => {
   test('uses 2 decimal places for amounts >= 1', () => {
@@ -36,5 +36,26 @@ describe('fmtInt', () => {
   test('treats null/undefined as 0', () => {
     assert.strictEqual(fmtInt(null as unknown as number), '0');
     assert.strictEqual(fmtInt(undefined as unknown as number), '0');
+  });
+});
+
+describe('estimateTokensFromBudget', () => {
+  test('divides budget by per-token price', () => {
+    assert.strictEqual(estimateTokensFromBudget(10, 0.00003), 333333);
+  });
+
+  test('rounds down to a whole token count', () => {
+    assert.strictEqual(estimateTokensFromBudget(1, 0.003), 333);
+  });
+
+  test('returns null for missing or non-positive price', () => {
+    assert.strictEqual(estimateTokensFromBudget(10), null);
+    assert.strictEqual(estimateTokensFromBudget(10, 0), null);
+    assert.strictEqual(estimateTokensFromBudget(10, -1), null);
+  });
+
+  test('returns null for missing or non-positive budget', () => {
+    assert.strictEqual(estimateTokensFromBudget(0, 0.00003), null);
+    assert.strictEqual(estimateTokensFromBudget(-5, 0.00003), null);
   });
 });
