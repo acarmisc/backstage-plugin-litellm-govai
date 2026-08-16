@@ -247,18 +247,31 @@ yarn start
 
 ## API Endpoints
 
-The backend provides the following endpoints (all prefixed with `/api/litellm`):
+The backend provides the following endpoints (all prefixed with `/api/litellm`).
+A machine-readable OpenAPI 3.1 contract is served at `/api/litellm/openapi.json`
+— point any OpenAPI-compatible renderer (Stoplight, Swagger UI, Redoc) at it
+instead of maintaining this table by hand.
 
 | Endpoint | Method | Purpose |
 |----------|--------|---------|
 | `/health` | GET | Health check |
 | `/config` | GET | Public LiteLLM proxy base URL (for snippet generation) |
+| `/openapi.json` | GET | OpenAPI 3.1 contract for this backend surface |
 | `/user/info` | GET | Get current user info and quotas |
 | `/keys` | GET | List user's virtual keys |
 | `/keys/generate` | POST | Generate a new virtual key |
-| `/keys/:keyId` | DELETE | Revoke/delete a virtual key |
+| `/keys/:keyId` | DELETE | Revoke/delete a virtual key (caller must own it) |
+| `/keys/:keyId/regenerate` | POST | Rotate a key in place — new secret, same settings (caller must own it) |
+| `/keys/:keyId/update` | POST | Update alias / models / budget / limits (caller must own it) |
+| `/keys/:keyId/block` | POST | Suspend a key without revoking it (caller must own it) |
+| `/keys/:keyId/unblock` | POST | Re-enable a blocked key (caller must own it) |
+| `/keys/:keyId/reset_spend` | POST | Zero out a key's spend counter (caller must own it) |
 | `/models` | GET | List available LLM models |
-| `/usage` | GET | Get usage metrics and analytics |
+| `/teams` | GET | List teams the current user belongs to |
+| `/teams/:teamId/usage` | GET | Usage metrics for a team (`start_date`, `end_date` required) |
+| `/usage` | GET | Get usage metrics and analytics for the current user |
+| `/audit` | GET | Audit logs (gated by `litellm.audit.group` membership) |
+| `/provisioning/preview` | GET | Resolve which role a Backstage group maps to (dry-run, audit-group-gated) |
 
 The UI endpoints above authenticate via the Backstage identity system. The
 **CLI bridge** endpoints below are gated behind `litellm.bridge.enabled` and
@@ -269,6 +282,7 @@ authenticate with a raw Keycloak access token instead (see [CLI Bridge](#cli-bri
 | `/bridge/health` | GET | Bridge health + configured `clientId` (no auth) |
 | `/bridge/keys` | GET | List the caller's virtual keys |
 | `/bridge/keys` | POST | Mint a virtual key for the caller |
+| `/bridge/keys/regenerate` | POST | Rotate the caller's key by alias |
 | `/bridge/models` | GET | List available LLM models |
 
 ## CLI Bridge (Abby)

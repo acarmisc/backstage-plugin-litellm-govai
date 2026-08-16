@@ -106,6 +106,25 @@ function fmtCost(perToken?: number): string | null {
   return per1k < 0.01 ? `$${(perToken * 1_000_000).toFixed(2)}/M` : `$${per1k.toFixed(3)}/1K`;
 }
 
+function formatContextWindow(
+  maxInput?: number,
+  maxOutput?: number,
+): string | null {
+  if (!maxInput && !maxOutput) return null;
+  const fmt = (n?: number) => {
+    if (!n) return null;
+    if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+    if (n >= 1_000) return `${Math.round(n / 1000)}K`;
+    return String(n);
+  };
+  const inPart = fmt(maxInput);
+  const outPart = fmt(maxOutput);
+  if (inPart && outPart) return `ctx ${inPart} in / ${outPart} out`;
+  if (inPart) return `ctx ${inPart}`;
+  if (outPart) return `ctx ${outPart} out`;
+  return null;
+}
+
 function trimSlash(url: string): string {
   return url.replace(/\/+$/, '');
 }
@@ -149,6 +168,8 @@ const emptyForm = (): GenerateKeyRequest => ({
   rpm_limit: undefined,
   team_id: undefined,
   key_type: 'llm_api',
+  auto_rotate: false,
+  rotation_interval_days: undefined,
 });const keyToEditForm = (k: VirtualKey): UpdateKeyRequest => ({
   key_alias: k.key_alias ?? '',
   models: k.models ?? [],
@@ -371,11 +392,17 @@ export const KeysTable: React.FC<KeysTableProps> = ({
   const modelOption = (m: ModelInfo) => {
     const inCost = fmtCost(m.input_cost_per_token);
     const outCost = fmtCost(m.output_cost_per_token);
+    const ctx = formatContextWindow(m.max_input_tokens, m.max_output_tokens);
     return (
       <Box>
         <span>{m.model_name}</span>
         {m.supports_function_calling && ' 🔧'}
         {m.supports_vision && ' 👁️'}
+        {ctx && (
+          <Typography variant="caption" color="text.secondary" sx={{ ml: 1 }}>
+            {ctx}
+          </Typography>
+        )}
         {(inCost || outCost) && (
           <Typography variant="caption" color="text.secondary" sx={{ ml: 1 }}>
             {inCost} in · {outCost} out
@@ -721,6 +748,38 @@ export const KeysTable: React.FC<KeysTableProps> = ({
                 }
                 fullWidth
               />
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    checked={!!formData.auto_rotate}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        auto_rotate: e.target.checked,
+                        rotation_interval_days: e.target.checked
+                          ? formData.rotation_interval_days ?? 90
+                          : undefined,
+                      })
+                    }
+                  />
+                }
+                label="Auto-rotate (LiteLLM rotates the secret on a schedule)"
+              />
+              {formData.auto_rotate && (
+                <TextField
+                  label="Rotate every (days)"
+                  type="number"
+                  value={formData.rotation_interval_days ?? ''}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      rotation_interval_days: e.target.value ? Number(e.target.value) : undefined,
+                    })
+                  }
+                  helperText="LiteLLM enforces this interval server-side; the old secret stops working the moment it rotates."
+                  fullWidth
+                />
+              )}
             </Box>
           )}
         </DialogContent>

@@ -3,6 +3,7 @@ import { Config } from '@backstage/config';
 import { AuthService, DiscoveryService } from '@backstage/backend-plugin-api';
 import { CatalogClient } from '@backstage/catalog-client';
 import { LiteLLMClient } from './client';
+import { openApiSpec } from './openapi';
 import {
   VirtualKey,
   ModelInfo,
@@ -19,6 +20,7 @@ import {
   getOrProvisionUser,
   readProvisioningDefaults,
   readRoleConfigs,
+  applyRoleOverrides,
   isUserMemberOfGroup,
   ProvisioningError,
 } from './provisioning';
@@ -91,6 +93,67 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
     res.json({ baseUrl: publicBaseUrl });
   });
 
+  // Self-hosted OpenAPI 3.1 contract — lets integrators read a spec instead
+  // of router.ts. No swagger-ui dependency; serve the JSON and point external
+  // renderers (Stoplight, Swagger UI hosted elsewhere) at this endpoint.
+  router.get('/openapi.json', (_req: Request, res: Response) => {
+    res.json(openApiSpec);
+  });
+
+  // Provisioning dry-run: resolves which role a Backstage group maps to and
+  // echoes the effective defaults, collapsing the config → deploy → test loop
+  // into one request. Admin-gated by the audit group (same RBAC as /audit).
+  router.get('/provisioning/preview', async (req: Request, res: Response) => {
+    if (!auditGroup) {
+      res.status(403).json({ error: 'Preview is not configured (litellm.audit.group not set)' });
+      return;
+    }
+    const tokenEntityRef = await resolveUserId(req, auth);
+    if (!tokenEntityRef) {
+      res.status(401).json({ error: 'Authentication required' });
+      return;
+    }
+    const allowed = await isUserMemberOfGroup(
+      tokenEntityRef,
+      auditGroup,
+      catalogClient,
+      auth,
+      logger,
+    );
+    if (!allowed) {
+      res.status(403).json({ error: 'Access denied: not a member of the audit group' });
+      return;
+    }
+    const group = (req.query.group as string | undefined)?.trim();
+    if (!group) {
+      res.status(400).json({ error: 'group query parameter is required (e.g. group=group:default/ai-platform)' });
+      return;
+    }
+    if (!roleConfigs.length) {
+      res.json({
+        group,
+        matched_role: null,
+        effective_defaults: provisioningDefaults,
+        note: 'No litellm.provisioning.roles configured — every group receives the base defaults.',
+      });
+      return;
+    }
+    try {
+      const matched = roleConfigs.find(rc => rc.group === group);
+      const effective = matched
+        ? applyRoleOverrides(provisioningDefaults, matched)
+        : provisioningDefaults;
+      res.json({
+        group,
+        matched_role: matched?.group ?? null,
+        effective_defaults: effective,
+      });
+    } catch (error: any) {
+      logger.error('Failed to resolve provisioning preview', error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+
   router.get('/user/info', async (req: Request, res: Response) => {
     try {
       const tokenEntityRef = await resolveUserId(req, auth);
@@ -161,6 +224,45 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
     }
   });
 
+  // ── Key ownership guard ──────────────────────────────────────────────────
+  //
+  // Every key-mutation route below runs under the LiteLLM master key, so
+  // without an explicit check any authenticated Backstage user could act on
+  // any key whose token they learn (audit logs expose truncated tokens, and
+  // anyone who has held the raw key knows it). We port the same pattern the
+  // bridge already uses (bridge.ts:bridgeRegenerateKey): fetch the caller's
+  // own key list and 403 if the target token isn't in it.
+  //
+  // Returns the caller's LiteLLM user_id (when resolvable) so handlers can
+  // stamp it in logs without re-deriving it.
+  async function authorizeKeyAction(
+    req: Request,
+    keyId: string,
+  ): Promise<{ tokenEntityRef: string | undefined; userId: string | undefined }> {
+    const tokenEntityRef = await resolveUserId(req, auth);
+    const userId = tokenEntityRef
+      ? toLiteLLMUserId(tokenEntityRef, userIdDomain)
+      : (req.query.user_id as string | undefined);
+    if (!userId) {
+      throw { status: 403, body: { error: 'Cannot verify key ownership without an authenticated user' } };
+    }
+    const ownKeys = await client.listKeys(userId);
+    const owns = ownKeys.some(k => (k.token ?? k.key) === keyId);
+    if (!owns) {
+      throw { status: 403, body: { error: 'Access denied: key does not belong to the caller' } };
+    }
+    return { tokenEntityRef, userId };
+  }
+
+  // Normalize the ownership-guard rejection shape into a response.
+  function sendOwnershipError(err: any, res: Response): boolean {
+    if (err && typeof err.status === 'number' && err.body) {
+      res.status(err.status).json(err.body);
+      return true;
+    }
+    return false;
+  }
+
   router.post('/keys/:keyId/regenerate', async (req: Request, res: Response) => {
     try {
       const { keyId } = req.params;
@@ -168,11 +270,12 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
         res.status(400).json({ error: 'keyId is required' });
         return;
       }
-      const tokenEntityRef = await resolveUserId(req, auth);
+      const { tokenEntityRef } = await authorizeKeyAction(req, keyId);
       const result = await client.regenerateKey(keyId);
       logger.info({ action: 'key.rotate', userId: tokenEntityRef ?? 'unknown', keyId });
       res.json(result);
     } catch (error: any) {
+      if (sendOwnershipError(error, res)) return;
       logger.error('Failed to rotate key', error);
       res.status(500).json({ error: error.message });
     }
@@ -267,12 +370,13 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
         res.status(400).json({ error: 'keyId is required' });
         return;
       }
-      const tokenEntityRef = await resolveUserId(req, auth);
+      const { tokenEntityRef } = await authorizeKeyAction(req, keyId);
       const request: UpdateKeyRequest = { ...req.body, key: keyId };
       const result = await client.updateKey(request);
       logger.info({ action: 'key.update', userId: tokenEntityRef ?? 'unknown', keyId });
       res.json(result);
     } catch (error: any) {
+      if (sendOwnershipError(error, res)) return;
       logger.error('Failed to update key', error);
       res.status(500).json({ error: error.message });
     }
@@ -285,11 +389,12 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
         res.status(400).json({ error: 'keyId is required' });
         return;
       }
-      const deleteEntityRef = await resolveUserId(req, auth);
+      const { tokenEntityRef } = await authorizeKeyAction(req, keyId);
       await client.deleteKeys({ keys: [keyId] });
-      logger.info({ action: 'key.delete', userId: deleteEntityRef ?? 'unknown', keyId });
+      logger.info({ action: 'key.delete', userId: tokenEntityRef ?? 'unknown', keyId });
       res.json({ success: true });
     } catch (error: any) {
+      if (sendOwnershipError(error, res)) return;
       logger.error('Failed to delete key', error);
       res.status(500).json({ error: error.message });
     }
@@ -298,11 +403,12 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
   router.post('/keys/:keyId/block', async (req: Request, res: Response) => {
     try {
       const { keyId } = req.params;
-      const tokenEntityRef = await resolveUserId(req, auth);
+      const { tokenEntityRef } = await authorizeKeyAction(req, keyId);
       await client.blockKey(keyId);
       logger.info({ action: 'key.block', userId: tokenEntityRef ?? 'unknown', keyId });
       res.json({ success: true });
     } catch (error: any) {
+      if (sendOwnershipError(error, res)) return;
       logger.error('Failed to block key', error);
       res.status(500).json({ error: error.message });
     }
@@ -311,11 +417,12 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
   router.post('/keys/:keyId/unblock', async (req: Request, res: Response) => {
     try {
       const { keyId } = req.params;
-      const tokenEntityRef = await resolveUserId(req, auth);
+      const { tokenEntityRef } = await authorizeKeyAction(req, keyId);
       await client.unblockKey(keyId);
       logger.info({ action: 'key.unblock', userId: tokenEntityRef ?? 'unknown', keyId });
       res.json({ success: true });
     } catch (error: any) {
+      if (sendOwnershipError(error, res)) return;
       logger.error('Failed to unblock key', error);
       res.status(500).json({ error: error.message });
     }
@@ -324,11 +431,12 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
   router.post('/keys/:keyId/reset_spend', async (req: Request, res: Response) => {
     try {
       const { keyId } = req.params;
-      const tokenEntityRef = await resolveUserId(req, auth);
+      const { tokenEntityRef } = await authorizeKeyAction(req, keyId);
       await client.resetKeySpend(keyId);
       logger.info({ action: 'key.reset_spend', userId: tokenEntityRef ?? 'unknown', keyId });
       res.json({ success: true });
     } catch (error: any) {
+      if (sendOwnershipError(error, res)) return;
       logger.error('Failed to reset key spend', error);
       res.status(500).json({ error: error.message });
     }
@@ -449,7 +557,7 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
 
   router.get('/usage', async (req: Request, res: Response) => {
     try {
-      const { start_date, end_date, group_by } = req.query;
+      const { start_date, end_date } = req.query;
       if (!start_date || !end_date) {
         res.status(400).json({ error: 'start_date and end_date are required' });
         return;
@@ -477,7 +585,6 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
         start_date as string,
         end_date as string,
         userId,
-        group_by as string | undefined,
       );
       res.json(usage);
     } catch (error: any) {

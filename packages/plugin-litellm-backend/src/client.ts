@@ -37,6 +37,11 @@ export class LiteLLMClient {
     const timeoutId = setTimeout(() => controller.abort(), this.timeout);
 
     try {
+      // Auth note: the LiteLLM OpenAPI spec declares the security scheme as an
+      // `x-litellm-api-key` header, but Bearer + master key is the deliberate,
+      // production-tested choice — LiteLLM's proxy accepts both, and Bearer is
+      // what every observed deployment actually uses. Do not "correct" this to
+      // match the spec literally without testing against a live gateway.
       const response = await fetch(`${this.baseUrl}${path}`, {
         ...options,
         signal: controller.signal,
@@ -276,6 +281,8 @@ export class LiteLLMClient {
             info.input_cost_per_token ?? params.input_cost_per_token,
           output_cost_per_token:
             info.output_cost_per_token ?? params.output_cost_per_token,
+          max_input_tokens: info.max_input_tokens ?? m.max_input_tokens,
+          max_output_tokens: info.max_output_tokens ?? m.max_output_tokens,
         } as ModelInfo;
       });
       const filtered = normalised.filter(m => m.model_name);
@@ -455,7 +462,6 @@ export class LiteLLMClient {
     startDate: string,
     endDate: string,
     userId?: string,
-    _groupBy?: string,
   ): Promise<UsageMetrics> {
     const params = new URLSearchParams({
       start_date: startDate,

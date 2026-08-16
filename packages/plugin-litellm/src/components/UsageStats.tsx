@@ -19,6 +19,7 @@ import {
   Chip,
   LinearProgress,
   Skeleton,
+  useTheme,
 } from '@mui/material';
 import {
   AreaChart,
@@ -103,8 +104,18 @@ export const UsageStats: React.FC<UsageStatsProps> = ({
   loading,
   userInfo,
 }) => {
+  const theme = useTheme();
   const [selectedModel, setSelectedModel] = useState<string>('all');
   const [tab, setTab] = useState<TabKey>('costs');
+
+  // Theme-aware chart chrome — Recharts defaults to #ccc gridlines and #666
+  // tick text, which reads poorly in Backstage's dark theme. Derive grid and
+  // axis colors from the MUI palette so charts adapt to either theme.
+  const gridStroke = theme.palette.divider;
+  const tickFill = theme.palette.text.secondary;
+  const tickStyle = { fontSize: 12, fill: tickFill } as const;
+  const tickStyleSmall = { fontSize: 11, fill: tickFill } as const;
+  const tickStyleTiny = { fontSize: 10, fill: tickFill } as const;
 
   const selectedPreset = useMemo<DatePreset>(() => {
     if (dateRange.start.toDateString() === dateRange.end.toDateString()) return 'today';
@@ -322,9 +333,9 @@ export const UsageStats: React.FC<UsageStatsProps> = ({
               <Box height={260}>
                 <ResponsiveContainer width="100%" height="100%">
                   <AreaChart data={modelSpendByDate}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="date" tick={{ fontSize: 12 }} />
-                    <YAxis tick={{ fontSize: 12 }} tickFormatter={v => `$${v.toFixed(2)}`} />
+                    <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
+                    <XAxis dataKey="date" tick={tickStyle} />
+                    <YAxis tick={tickStyle} tickFormatter={v => `$${v.toFixed(2)}`} />
                     <Tooltip formatter={(v: number) => [`$${v.toFixed(4)}`, undefined]} />
                     <Legend />
                     {topSpendModels.map(m => (
@@ -353,9 +364,9 @@ export const UsageStats: React.FC<UsageStatsProps> = ({
               <Box height={260}>
                 <ResponsiveContainer width="100%" height="100%">
                   <AreaChart data={dailyData}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="date" tick={{ fontSize: 12 }} />
-                    <YAxis tick={{ fontSize: 12 }} tickFormatter={fmtInt} />
+                    <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
+                    <XAxis dataKey="date" tick={tickStyle} />
+                    <YAxis tick={tickStyle} tickFormatter={fmtInt} />
                     <Tooltip formatter={(v: number) => [fmtInt(v), undefined]} />
                     <Legend />
                     <Area type="monotone" dataKey="promptTokens" name="Input (prompt)" stackId="tok" stroke="#8884d8" fill="#8884d8" fillOpacity={0.5} />
@@ -375,9 +386,9 @@ export const UsageStats: React.FC<UsageStatsProps> = ({
               <Box height={260}>
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={dailyData}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="date" tick={{ fontSize: 12 }} />
-                    <YAxis tick={{ fontSize: 12 }} />
+                    <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
+                    <XAxis dataKey="date" tick={tickStyle} />
+                    <YAxis tick={tickStyle} />
                     <Tooltip />
                     <Legend />
                     <Bar dataKey="successfulRequests" name="Successful" fill="#82ca9d" stackId="r" />
@@ -397,9 +408,9 @@ export const UsageStats: React.FC<UsageStatsProps> = ({
               <Box height={260}>
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={successRateData}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="date" tick={{ fontSize: 12 }} />
-                    <YAxis domain={[0, 100]} tick={{ fontSize: 12 }} tickFormatter={v => `${v}%`} />
+                    <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
+                    <XAxis dataKey="date" tick={tickStyle} />
+                    <YAxis domain={[0, 100]} tick={tickStyle} tickFormatter={v => `${v}%`} />
                     <Tooltip formatter={(v: number) => [`${v}%`, 'Success rate']} />
                     <ReferenceLine y={100} stroke="#82ca9d" strokeDasharray="4 2" />
                     <Line type="monotone" dataKey="successRate" name="Success rate" stroke="#8884d8" dot={{ r: 3 }} />
@@ -424,9 +435,9 @@ export const UsageStats: React.FC<UsageStatsProps> = ({
                 <Box height={180}>
                   <ResponsiveContainer width="100%" height="100%">
                     <AreaChart data={cumulativeData}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="date" tick={{ fontSize: 12 }} />
-                      <YAxis tick={{ fontSize: 12 }} tickFormatter={v => `$${v.toFixed(2)}`} />
+                      <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
+                      <XAxis dataKey="date" tick={tickStyle} />
+                      <YAxis tick={tickStyle} tickFormatter={v => `$${v.toFixed(2)}`} />
                       <Tooltip formatter={(v: number) => [`$${v.toFixed(4)}`, 'Cumulative spend']} />
                       {maxBudget > 0 && (
                         <ReferenceLine y={maxBudget} stroke="#e57373" strokeDasharray="6 3" label={{ value: `Budget ${fmtUsd(maxBudget)}`, position: 'insideTopRight', fontSize: 11 }} />
@@ -453,9 +464,9 @@ export const UsageStats: React.FC<UsageStatsProps> = ({
               <Box height={Math.max(200, topModelSpendBars.length * 36)}>
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={topModelSpendBars} layout="vertical" margin={{ left: 20 }}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis type="number" tick={{ fontSize: 12 }} tickFormatter={v => `$${v.toFixed(2)}`} />
-                    <YAxis type="category" dataKey="model" tick={{ fontSize: 11 }} width={200} />
+                    <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
+                    <XAxis type="number" tick={tickStyle} tickFormatter={v => `$${v.toFixed(2)}`} />
+                    <YAxis type="category" dataKey="model" tick={tickStyleSmall} width={200} />
                     <Tooltip formatter={(v: number) => [fmtUsd(v), 'Spend']} />
                     <Bar dataKey="spend" name="Spend" radius={[0, 4, 4, 0]}>
                       {topModelSpendBars.map(r => (
@@ -477,9 +488,9 @@ export const UsageStats: React.FC<UsageStatsProps> = ({
               <Box height={260}>
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={modelRows}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="model" tick={{ fontSize: 10 }} interval={0} angle={-15} textAnchor="end" height={60} />
-                    <YAxis tick={{ fontSize: 12 }} />
+                    <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
+                    <XAxis dataKey="model" tick={tickStyleTiny} interval={0} angle={-15} textAnchor="end" height={60} />
+                    <YAxis tick={tickStyle} />
                     <Tooltip />
                     <Legend />
                     <Bar dataKey="promptTokens" name="Prompt" fill="#8884d8" stackId="t" />
@@ -561,9 +572,9 @@ export const UsageStats: React.FC<UsageStatsProps> = ({
                 <Box height={Math.max(160, topKeySpendBars.length * 36)}>
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={topKeySpendBars} layout="vertical" margin={{ left: 20 }}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis type="number" tick={{ fontSize: 12 }} tickFormatter={v => `$${v.toFixed(2)}`} />
-                      <YAxis type="category" dataKey="keyAlias" tick={{ fontSize: 11 }} width={160} />
+                      <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
+                      <XAxis type="number" tick={tickStyle} tickFormatter={v => `$${v.toFixed(2)}`} />
+                      <YAxis type="category" dataKey="keyAlias" tick={tickStyleSmall} width={160} />
                       <Tooltip formatter={(v: number) => [fmtUsd(v), 'Spend']} />
                       <Bar dataKey="spend" name="Spend" fill="#8884d8" radius={[0, 4, 4, 0]} />
                     </BarChart>

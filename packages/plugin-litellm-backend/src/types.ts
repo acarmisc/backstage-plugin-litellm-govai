@@ -73,6 +73,8 @@ export interface ModelInfo {
   supports_vision?: boolean;
   input_cost_per_token?: number;
   output_cost_per_token?: number;
+  max_input_tokens?: number;
+  max_output_tokens?: number;
 }
 
 export interface UsageModelBreakdown {
@@ -146,6 +148,10 @@ export interface GenerateKeyRequest {
   team_id?: string;
   key_type?: string;
   metadata?: Record<string, string>;
+  /** When true, LiteLLM rotates the key on a schedule. */
+  auto_rotate?: boolean;
+  /** Rotation interval in days (LiteLLM-enforced when auto_rotate is true). */
+  rotation_interval_days?: number;
 }
 
 export interface UpdateKeyRequest {

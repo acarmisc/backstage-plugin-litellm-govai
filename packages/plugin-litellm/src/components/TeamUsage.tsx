@@ -16,6 +16,7 @@ import {
   Collapse,
   IconButton,
   CircularProgress,
+  useTheme,
 } from '@mui/material';
 import { ExpandMore, ExpandLess, Group, Speed, Memory } from '@mui/icons-material';
 import {
@@ -48,6 +49,9 @@ interface TeamCardProps {
 
 const TeamCard: React.FC<TeamCardProps> = ({ team, usage, usageLoading }) => {
   const [expanded, setExpanded] = useState(false);
+  const theme = useTheme();
+  const gridStroke = theme.palette.divider;
+  const tickFill = theme.palette.text.secondary;
 
   const budget = team.max_budget ?? 0;
   const spend = team.spend ?? 0;
@@ -170,9 +174,9 @@ const TeamCard: React.FC<TeamCardProps> = ({ team, usage, usageLoading }) => {
               <Box height={160} mb={2}>
                 <ResponsiveContainer width="100%" height="100%">
                   <AreaChart data={dailyData}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="date" tick={{ fontSize: 11 }} />
-                    <YAxis tick={{ fontSize: 11 }} tickFormatter={v => `$${v.toFixed(2)}`} />
+                    <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
+                    <XAxis dataKey="date" tick={{ fontSize: 11, fill: tickFill }} />
+                    <YAxis tick={{ fontSize: 11, fill: tickFill }} tickFormatter={v => `$${v.toFixed(2)}`} />
                     <Tooltip formatter={(v: number) => [`$${v.toFixed(4)}`, 'Spend']} />
                     <Area type="monotone" dataKey="spend" stroke="#8884d8" fill="#8884d8" fillOpacity={0.3} />
                   </AreaChart>

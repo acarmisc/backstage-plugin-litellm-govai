@@ -288,7 +288,11 @@ describe('getOrProvisionUser', () => {
       (err: any) => {
         assert.ok(err instanceof ProvisioningError);
         assert.strictEqual(err.body.provisioning, true);
-        assert.ok(err.body.hint.includes('Provisioning attempted but failed'));
+        // When createUser throws a generic Error (no .status), the catch
+        // path maps it to a 502 with an "LiteLLM upstream error: <msg>" hint.
+        assert.ok(err.body.hint.includes('LiteLLM upstream'));
+        assert.ok(err.body.hint.includes('LiteLLM down'));
+        assert.strictEqual(err.status, 502);
         return true;
       },
     );
