@@ -7,6 +7,14 @@ export interface Config {
     baseUrl: string;
 
     /**
+     * Publicly reachable LiteLLM proxy URL. Used to build ready-to-paste
+     * curl / OpenAI-SDK snippets in the frontend ("Key Generated" dialog).
+     * When omitted, the internal baseUrl is used instead.
+     * @visibility backend
+     */
+    publicBaseUrl?: string;
+
+    /**
      * LiteLLM master key for admin operations. Never exposed to the frontend.
      * @visibility secret
      */

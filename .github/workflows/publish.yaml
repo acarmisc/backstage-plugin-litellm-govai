@@ -1,158 +1,82 @@
 name: Publish to npm
 
+# Release process:
+#   git tag litellm@X.Y.Z          # or litellm-backend@X.Y.Z
+#   git push origin litellm@X.Y.Z
+#
+# The tag prefix selects which workspace package gets published, and its
+# version must match the version already committed in that package's
+# package.json.
+
 on:
   push:
     tags:
-      - 'litellm@*'
-      - 'litellm-backend@*'
-  workflow_dispatch:
-    inputs:
-      package:
-        description: 'Package to publish (litellm or litellm-backend)'
-        required: true
-        type: choice
-        options:
-          - litellm
-          - litellm-backend
-        default: 'litellm'
-      ref:
-        description: 'Tag or sha to check out (optional; defaults to the branch you dispatched from)'
-        required: false
-        default: ''
+      - "litellm@*"
+      - "litellm-backend@*"
 
-concurrency:
-  group: publish-${{ github.ref }}
-  cancel-in-progress: false
+permissions:
+  contents: write
 
 jobs:
-  resolve:
-    name: Resolve target package
+  publish:
     runs-on: ubuntu-latest
-    outputs:
-      short_name: ${{ steps.parse.outputs.short_name }}
-      pkg_name: ${{ steps.parse.outputs.pkg_name }}
-      pkg_dir: ${{ steps.parse.outputs.pkg_dir }}
-      version: ${{ steps.parse.outputs.version }}
-      ref: ${{ steps.parse.outputs.ref }}
     steps:
-      - name: Parse trigger
-        id: parse
-        env:
-          EVENT_NAME: ${{ github.event_name }}
-          REF_NAME: ${{ github.ref_name }}
-          INPUT_PACKAGE: ${{ github.event.inputs.package }}
-          INPUT_REF: ${{ github.event.inputs.ref }}
-        run: |
-          set -euo pipefail
-          if [ "$EVENT_NAME" = "push" ]; then
-            # Tag form: <short>@<version>, where <short> is litellm or litellm-backend.
-            tag="$REF_NAME"
-            short="${tag%@*}"
-            version="${tag#*@}"
-            ref="$tag"
-          else
-            short="$INPUT_PACKAGE"
-            version=""  # will be read from package.json after checkout
-            ref="${INPUT_REF:-${{ github.ref }}}"
-          fi
+      - name: Checkout
+        uses: actions/checkout@v4
 
-          case "$short" in
-            litellm)
-              pkg_name="@acarmisc/backstage-plugin-litellm"
-              pkg_dir="packages/plugin-litellm"
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Resolve package from tag
+        id: pkg
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          case "$TAG" in
+            litellm-backend@*)
+              echo "dir=packages/plugin-litellm-backend" >> "$GITHUB_OUTPUT"
+              echo "version=${TAG#litellm-backend@}" >> "$GITHUB_OUTPUT"
               ;;
-            litellm-backend)
-              pkg_name="@acarmisc/backstage-plugin-litellm-backend"
-              pkg_dir="packages/plugin-litellm-backend"
+            litellm@*)
+              echo "dir=packages/plugin-litellm" >> "$GITHUB_OUTPUT"
+              echo "version=${TAG#litellm@}" >> "$GITHUB_OUTPUT"
               ;;
             *)
-              echo "::error::Unrecognized package short name: '$short'"
+              echo "::error::Unrecognized tag pattern: $TAG"
               exit 1
               ;;
           esac
 
-          echo "short_name=$short" >> "$GITHUB_OUTPUT"
-          echo "pkg_name=$pkg_name" >> "$GITHUB_OUTPUT"
-          echo "pkg_dir=$pkg_dir" >> "$GITHUB_OUTPUT"
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-          echo "ref=$ref" >> "$GITHUB_OUTPUT"
-
-          echo "Resolved: short=$short pkg=$pkg_name dir=$pkg_dir version=${version:-<from package.json>} ref=$ref"
-
-  publish-npm:
-    name: Publish ${{ needs.resolve.outputs.short_name }} to npm
-    needs: resolve
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    outputs:
-      version: ${{ steps.verify.outputs.version }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ needs.resolve.outputs.ref }}
-          fetch-depth: 0
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          registry-url: 'https://registry.npmjs.org'
-
       - name: Verify tag version matches package.json
-        id: verify
-        env:
-          PKG_DIR: ${{ needs.resolve.outputs.pkg_dir }}
-          TAG_VERSION: ${{ needs.resolve.outputs.version }}
         run: |
-          set -euo pipefail
-          pkg_version=$(node -p "require('./$PKG_DIR/package.json').version")
-          echo "package.json version: $pkg_version"
-          echo "tag version:          ${TAG_VERSION:-<workflow_dispatch, skipping match check>}"
-
-          if [ -n "$TAG_VERSION" ] && [ "$TAG_VERSION" != "$pkg_version" ]; then
-            echo "::error::Tag version ($TAG_VERSION) does not match package.json version ($pkg_version) in $PKG_DIR. Aborting to avoid publishing the wrong version."
+          PKG_VERSION=$(node -p "require('./${{ steps.pkg.outputs.dir }}/package.json').version")
+          TAG_VERSION="${{ steps.pkg.outputs.version }}"
+          if [ "$PKG_VERSION" != "$TAG_VERSION" ]; then
+            echo "::error::Tag version ($TAG_VERSION) does not match ${{ steps.pkg.outputs.dir }}/package.json version ($PKG_VERSION)"
             exit 1
           fi
 
-          echo "version=$pkg_version" >> "$GITHUB_OUTPUT"
-
       - name: Install dependencies
-        working-directory: ${{ needs.resolve.outputs.pkg_dir }}
+        working-directory: ${{ steps.pkg.outputs.dir }}
         # Backstage's MUI4 theme has a react@^17 peer dep; --legacy-peer-deps
         # mirrors local install behaviour and avoids npm@7+ ERESOLVE failures.
         run: npm install --no-audit --no-fund --legacy-peer-deps
 
       - name: Build
-        working-directory: ${{ needs.resolve.outputs.pkg_dir }}
+        working-directory: ${{ steps.pkg.outputs.dir }}
         run: npm run build
 
       - name: Publish to npm
-        working-directory: ${{ needs.resolve.outputs.pkg_dir }}
+        working-directory: ${{ steps.pkg.outputs.dir }}
+        run: npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: npm publish --access public
 
-  github-release:
-    name: Create GitHub Release
-    needs: [resolve, publish-npm]
-    runs-on: ubuntu-latest
-    # Only auto-create a release when the workflow was triggered by a tag push;
-    # workflow_dispatch runs are typically reruns or ad-hoc publishes and
-    # should not (re)create a Release.
-    if: github.event_name == 'push'
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ needs.resolve.outputs.ref }}
-          fetch-depth: 0
-
-      - name: Create release
+      - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
-          name: ${{ needs.resolve.outputs.short_name }} v${{ needs.publish-npm.outputs.version }}
+          name: ${{ github.ref_name }}
           generate_release_notes: true
-          make_latest: 'true'
-          fail_on_unmatched_files: false

@@ -52,6 +52,12 @@ litellm:
   # @visibility backend
   baseUrl: ${LITELLM_BASE_URL}
 
+  # Optional — publicly reachable LiteLLM proxy URL, used to build
+  # ready-to-paste curl / OpenAI-SDK snippets in the "Key Generated" dialog.
+  # Falls back to baseUrl (the internal URL) when omitted.
+  # @visibility backend
+  # publicBaseUrl: https://llm-gw.example.com
+
   # Required — LiteLLM master key for admin operations.
   # Never exposed to the frontend (marked @visibility secret).
   masterKey: ${LITELLM_MASTER_KEY}
@@ -116,6 +122,7 @@ litellm:
 | Key | Type | Required | Default | Description |
 |-----|------|----------|---------|-------------|
 | `litellm.baseUrl` | string | yes | — | LiteLLM proxy base URL |
+| `litellm.publicBaseUrl` | string | no | — | Publicly reachable proxy URL for snippet generation |
 | `litellm.masterKey` | string | yes | — | Admin master key (`@visibility secret`) |
 | `litellm.userIdDomain` | string | no | — | Email domain for LiteLLM user IDs |
 | `litellm.provisioning.enabled` | boolean | no | `false` | Enable autoprovisioning |
@@ -245,6 +252,7 @@ The backend provides the following endpoints (all prefixed with `/api/litellm`):
 | Endpoint | Method | Purpose |
 |----------|--------|---------|
 | `/health` | GET | Health check |
+| `/config` | GET | Public LiteLLM proxy base URL (for snippet generation) |
 | `/user/info` | GET | Get current user info and quotas |
 | `/keys` | GET | List user's virtual keys |
 | `/keys/generate` | POST | Generate a new virtual key |

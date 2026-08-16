@@ -248,11 +248,18 @@ export const TeamUsage: React.FC<TeamUsageProps> = ({
   if (!teams.length) {
     return (
       <Paper sx={{ p: 2 }}>
-        <Box display="flex" alignItems="center" gap={1}>
-          <Group color="disabled" />
-          <Typography color="text.secondary" variant="body2">
-            No team membership found in LiteLLM for this account.
-          </Typography>
+        <Box display="flex" alignItems="flex-start" gap={1.5}>
+          <Group color="disabled" sx={{ mt: 0.5 }} />
+          <Box>
+            <Typography color="text.secondary" variant="body2">
+              You're not a member of any LiteLLM team yet.
+            </Typography>
+            <Typography color="text.secondary" variant="body2" mt={0.5}>
+              That's fine — your account is provisioned, so you can still generate
+              personal keys and use models. If you need a shared budget with
+              colleagues, ask an admin to add you to a team.
+            </Typography>
+          </Box>
         </Box>
       </Paper>
     );

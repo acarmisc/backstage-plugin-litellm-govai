@@ -1,6 +1,6 @@
 {
   "name": "@acarmisc/backstage-plugin-litellm",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "backstage": {
     "role": "frontend-plugin",
     "pluginId": "litellm",
@@ -11,6 +11,11 @@
   "publishConfig": {
     "access": "public"
   },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/acarmisc/backstage-plugin-litellm-govai"
+  },
+  "homepage": "https://github.com/acarmisc/backstage-plugin-litellm-govai#readme",
   "license": "Apache-2.0",
   "sideEffects": false,
   "exports": {

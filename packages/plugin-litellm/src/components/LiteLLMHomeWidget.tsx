@@ -62,38 +62,48 @@ export const LiteLLMHomeWidget: React.FC<LiteLLMHomeWidgetProps> = ({
   const api = useApi(liteLlmApiRef);
   const [period, setPeriod] = useState<DatePreset>(defaultPeriod);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [usageError, setUsageError] = useState<string | null>(null);
+  const [keysError, setKeysError] = useState<string | null>(null);
   const [usage, setUsage] = useState<UsageMetrics | null>(null);
   const [keys, setKeys] = useState<VirtualKey[]>([]);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    setError(null);
+    setUsageError(null);
+    setKeysError(null);
 
     const { start, end } = presetToDateRange(period);
     const startDate = start.toISOString().split('T')[0];
     const endDate = end.toISOString().split('T')[0];
 
-    Promise.all([api.getUsage(startDate, endDate), api.listKeys()])
-      .then(([usageData, keysData]) => {
-        if (!cancelled) {
-          setUsage(usageData);
-          setKeys(keysData);
-          setLoading(false);
+    Promise.allSettled([api.getUsage(startDate, endDate), api.listKeys()]).then(
+      ([usageResult, keysResult]) => {
+        if (cancelled) return;
+        if (usageResult.status === 'fulfilled') {
+          setUsage(usageResult.value);
+        } else {
+          setUsage(null);
+          setUsageError(usageResult.reason?.message ?? 'Failed to load usage data');
         }
-      })
-      .catch((err: Error) => {
-        if (!cancelled) {
-          setError(err.message ?? 'Failed to load usage data');
-          setLoading(false);
+        if (keysResult.status === 'fulfilled') {
+          setKeys(keysResult.value);
+        } else {
+          setKeys([]);
+          setKeysError(keysResult.reason?.message ?? 'Failed to load keys');
         }
-      });
+        setLoading(false);
+      },
+    );
 
     return () => {
       cancelled = true;
     };
   }, [api, period]);
+
+  const partialFailure =
+    !loading && (usageError || keysError) && (usage || keys.length > 0);
+  const totalFailure = !loading && usageError && keysError;
 
   const dailyData = (usage?.daily_usage ?? []).map(d => ({
     date: d.date,
@@ -128,15 +138,26 @@ export const LiteLLMHomeWidget: React.FC<LiteLLMHomeWidgetProps> = ({
       )}
 
       {/* Error state */}
-      {!loading && error && (
+      {!loading && totalFailure && (
         <Alert severity="error" sx={{ mt: 1 }}>
-          {error}
+          {usageError ?? 'Failed to load usage data'}
         </Alert>
       )}
 
       {/* Content */}
-      {!loading && !error && (
+      {!loading && !totalFailure && (
         <>
+          {partialFailure && (
+            <Alert severity="warning" sx={{ mt: 1, mb: 1 }}>
+              {usageError
+                ? `Usage data unavailable (${usageError}).`
+                : ''}
+              {keysError
+                ? ` Key list unavailable (${keysError}).` : ''}
+              {' Showing what loaded.'}
+            </Alert>
+          )}
+
           <Grid container spacing={2} sx={{ mb: hasSparkline ? 1.5 : 0 }}>
             <Grid item xs={6}>
               <Kpi label="USD Spent" value={fmtUsd(usage?.total_spend ?? 0)} />

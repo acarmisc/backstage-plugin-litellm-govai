@@ -304,6 +304,7 @@ export const LiteLLMPage: React.FC = () => {
           onResetKeySpend={handleResetKeySpend}
           onDeleteKey={handleDeleteKey}
           onPruneExpiredKeys={handlePruneExpiredKeys}
+          onGetConfig={() => api.getConfig()}
         />
       )}
 

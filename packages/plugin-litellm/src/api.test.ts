@@ -124,6 +124,13 @@ describe('LiteLlmApi routing', () => {
     assert.ok(calls[0].url.includes('/usage'), calls[0].url);
     assert.ok(calls[0].url.includes('start_date='), calls[0].url);
   });
+
+  test('getConfig → GET /config', async () => {
+    const { api, calls } = makeApi(200, { baseUrl: 'https://llm-gw.example.com' });
+    const config = await api.getConfig();
+    assert.strictEqual(calls[0].url.endsWith('/config'), true, calls[0].url);
+    assert.strictEqual(config.baseUrl, 'https://llm-gw.example.com');
+  });
 });
 
 // ---------------------------------------------------------------------------
