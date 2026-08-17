@@ -185,16 +185,6 @@ export const LiteLLMPage: React.FC = () => {
     [api, refreshKeys],
   );
 
-  const handleRotateKey = useCallback(
-    async (keyId: string): Promise<GenerateKeyResponse> => {
-      const response = await api.rotateKey(keyId);
-      setSnackbar({ message: 'Key rotated — copy the new secret now', severity: 'success' });
-      refreshKeys();
-      return response;
-    },
-    [api, refreshKeys],
-  );
-
   const handleDeleteKey = useCallback(
     async (keyId: string) => {
       try {
@@ -298,7 +288,6 @@ export const LiteLLMPage: React.FC = () => {
           loading={keysLoading || modelsLoading}
           onGenerateKey={handleGenerateKey}
           onUpdateKey={handleUpdateKey}
-          onRotateKey={handleRotateKey}
           onBlockKey={handleBlockKey}
           onUnblockKey={handleUnblockKey}
           onResetKeySpend={handleResetKeySpend}

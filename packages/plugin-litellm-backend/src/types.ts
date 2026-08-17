@@ -148,10 +148,6 @@ export interface GenerateKeyRequest {
   team_id?: string;
   key_type?: string;
   metadata?: Record<string, string>;
-  /** When true, LiteLLM rotates the key on a schedule. */
-  auto_rotate?: boolean;
-  /** Rotation interval in days (LiteLLM-enforced when auto_rotate is true). */
-  rotation_interval_days?: number;
 }
 
 export interface UpdateKeyRequest {

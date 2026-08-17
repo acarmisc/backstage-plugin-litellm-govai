@@ -113,8 +113,6 @@ export const openApiSpec: OpenApiSpec = {
             max_budget: { type: 'number', nullable: true, description: 'Positive number caps spend; null = unlimited' },
             tpm_limit: { type: 'number' },
             rpm_limit: { type: 'number' },
-            auto_rotate: { type: 'boolean' },
-            rotation_interval_days: { type: 'number' },
           } } } },
         },
         responses: {
@@ -129,14 +127,6 @@ export const openApiSpec: OpenApiSpec = {
         summary: 'Revoke/delete a virtual key (caller must own it)',
         parameters: [{ name: 'keyId', in: 'path', required: true, schema: { type: 'string' } }],
         responses: { '200': { description: 'Deleted' }, '403': { description: 'Not the key owner' } },
-      },
-    },
-    '/keys/{keyId}/regenerate': {
-      post: {
-        tags: ['Keys'],
-        summary: 'Rotate a key in place (caller must own it)',
-        parameters: [{ name: 'keyId', in: 'path', required: true, schema: { type: 'string' } }],
-        responses: { '200': { description: 'New secret' }, '403': { description: 'Not the key owner' } },
       },
     },
     '/keys/{keyId}/update': {
@@ -257,14 +247,6 @@ export const openApiSpec: OpenApiSpec = {
         summary: 'Mint a virtual key for the caller (Keycloak token auth)',
         requestBody: { content: { 'application/json': { schema: { type: 'object' } } } },
         responses: { '200': { description: 'Generated key' }, '401': { description: 'Invalid token' } },
-      },
-    },
-    '/bridge/keys/regenerate': {
-      post: {
-        tags: ['Bridge'],
-        summary: 'Rotate the caller key by alias (Keycloak token auth)',
-        requestBody: { content: { 'application/json': { schema: { type: 'object', properties: { alias: { type: 'string' } } } } } },
-        responses: { '200': { description: 'New secret' }, '401': { description: 'Invalid token' }, '404': { description: 'No key with that alias' } },
       },
     },
     '/bridge/models': {

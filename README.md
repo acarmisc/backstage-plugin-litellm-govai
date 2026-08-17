@@ -261,7 +261,6 @@ instead of maintaining this table by hand.
 | `/keys` | GET | List user's virtual keys |
 | `/keys/generate` | POST | Generate a new virtual key |
 | `/keys/:keyId` | DELETE | Revoke/delete a virtual key (caller must own it) |
-| `/keys/:keyId/regenerate` | POST | Rotate a key in place — new secret, same settings (caller must own it) |
 | `/keys/:keyId/update` | POST | Update alias / models / budget / limits (caller must own it) |
 | `/keys/:keyId/block` | POST | Suspend a key without revoking it (caller must own it) |
 | `/keys/:keyId/unblock` | POST | Re-enable a blocked key (caller must own it) |
@@ -282,7 +281,6 @@ authenticate with a raw Keycloak access token instead (see [CLI Bridge](#cli-bri
 | `/bridge/health` | GET | Bridge health + configured `clientId` (no auth) |
 | `/bridge/keys` | GET | List the caller's virtual keys |
 | `/bridge/keys` | POST | Mint a virtual key for the caller |
-| `/bridge/keys/regenerate` | POST | Rotate the caller's key by alias |
 | `/bridge/models` | GET | List available LLM models |
 
 ## CLI Bridge (Abby)

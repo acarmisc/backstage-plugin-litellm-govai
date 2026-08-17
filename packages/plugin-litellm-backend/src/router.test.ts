@@ -61,7 +61,6 @@ function mockClient(overrides: {
   listKeys?: (uid?: string) => Promise<VirtualKey[]>;
   generateKey?: (r: any) => Promise<any>;
   updateKey?: (r: any) => Promise<any>;
-  regenerateKey?: (token: string) => Promise<any>;
   deleteKeys?: (r: any) => Promise<any>;
   blockKey?: (k: string) => Promise<any>;
   unblockKey?: (k: string) => Promise<any>;
@@ -76,7 +75,6 @@ function mockClient(overrides: {
     listKeys: [],
     generateKey: [],
     updateKey: [],
-    regenerateKey: [],
     deleteKeys: [],
     blockKey: [],
     unblockKey: [],
@@ -113,12 +111,6 @@ function mockClient(overrides: {
       return overrides.updateKey
         ? overrides.updateKey(r)
         : Promise.resolve({});
-    },
-    regenerateKey: (token: string) => {
-      calls.regenerateKey.push(token);
-      return overrides.regenerateKey
-        ? overrides.regenerateKey(token)
-        : Promise.resolve({ key: 'sk-rotated' });
     },
     deleteKeys: (r: any) => {
       calls.deleteKeys.push(r);
@@ -405,19 +397,6 @@ describe('router key-mutation routes — ownership guard (rec #18 regression)', 
       assert.strictEqual(status, 200);
       assert.strictEqual(h.client.calls.deleteKeys.length, 1);
       assert.deepStrictEqual(h.client.calls.deleteKeys[0].keys, ['hash-own']);
-    } finally {
-      await new Promise<void>(r => h.server.close(() => r()));
-    }
-  });
-
-  test('403 on regenerate of a foreign key', async () => {
-    const h = await mutationHarness();
-    try {
-      const { status } = await req(h.baseUrl, 'POST', '/keys/hash-bob/regenerate', {
-        authRef: 'user:default/alice',
-      });
-      assert.strictEqual(status, 403);
-      assert.strictEqual(h.client.calls.regenerateKey.length, 0);
     } finally {
       await new Promise<void>(r => h.server.close(() => r()));
     }

@@ -30,7 +30,6 @@ import {
   TokenVerifier,
   bridgeGenerateKey,
   bridgeListKeys,
-  bridgeRegenerateKey,
   newDefaultVerifier,
   readBridgeConfig,
 } from './bridge';
@@ -229,9 +228,8 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
   // Every key-mutation route below runs under the LiteLLM master key, so
   // without an explicit check any authenticated Backstage user could act on
   // any key whose token they learn (audit logs expose truncated tokens, and
-  // anyone who has held the raw key knows it). We port the same pattern the
-  // bridge already uses (bridge.ts:bridgeRegenerateKey): fetch the caller's
-  // own key list and 403 if the target token isn't in it.
+  // anyone who has held the raw key knows it). We fetch the caller's own key
+  // list and 403 if the target token isn't in it.
   //
   // Returns the caller's LiteLLM user_id (when resolvable) so handlers can
   // stamp it in logs without re-deriving it.
@@ -262,24 +260,6 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
     }
     return false;
   }
-
-  router.post('/keys/:keyId/regenerate', async (req: Request, res: Response) => {
-    try {
-      const { keyId } = req.params;
-      if (!keyId) {
-        res.status(400).json({ error: 'keyId is required' });
-        return;
-      }
-      const { tokenEntityRef } = await authorizeKeyAction(req, keyId);
-      const result = await client.regenerateKey(keyId);
-      logger.info({ action: 'key.rotate', userId: tokenEntityRef ?? 'unknown', keyId });
-      res.json(result);
-    } catch (error: any) {
-      if (sendOwnershipError(error, res)) return;
-      logger.error('Failed to rotate key', error);
-      res.status(500).json({ error: error.message });
-    }
-  });
 
   router.post('/keys/generate', async (req: Request, res: Response) => {
     try {
@@ -667,29 +647,6 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
           provisioningDefaults,
           logger,
           (req.body ?? {}) as Partial<GenerateKeyRequest>,
-          userIdDomain,
-        );
-        res.json(result);
-      } catch (error: any) {
-        handleBridgeError(error, res);
-      }
-    });
-
-    router.post('/bridge/keys/regenerate', async (req: Request, res: Response) => {
-      try {
-        const claims = await requireClaims(req);
-        const alias = ((req.body ?? {}) as { alias?: string }).alias?.trim();
-        if (!alias) {
-          res.status(400).json({ error: 'alias is required' });
-          return;
-        }
-        const result = await bridgeRegenerateKey(
-          client,
-          claims,
-          provisioningEnabled,
-          provisioningDefaults,
-          logger,
-          alias,
           userIdDomain,
         );
         res.json(result);

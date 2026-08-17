@@ -29,7 +29,6 @@ export interface LiteLlmApiInterface {
   generateKey(request: GenerateKeyRequest): Promise<GenerateKeyResponse>;
   updateKey(keyId: string, request: UpdateKeyRequest): Promise<VirtualKey>;
   deleteKey(keyId: string): Promise<{ success: boolean }>;
-  rotateKey(keyId: string): Promise<GenerateKeyResponse>;
   blockKey(keyId: string): Promise<void>;
   unblockKey(keyId: string): Promise<void>;
   resetKeySpend(keyId: string): Promise<void>;
@@ -123,10 +122,6 @@ export class LiteLlmApi implements LiteLlmApiInterface {
 
   async deleteKey(keyId: string): Promise<{ success: boolean }> {
     return this.del<{ success: boolean }>(`/keys/${encodeURIComponent(keyId)}`);
-  }
-
-  async rotateKey(keyId: string): Promise<GenerateKeyResponse> {
-    return this.post<GenerateKeyResponse>(`/keys/${encodeURIComponent(keyId)}/regenerate`, {});
   }
 
   async blockKey(keyId: string): Promise<void> {

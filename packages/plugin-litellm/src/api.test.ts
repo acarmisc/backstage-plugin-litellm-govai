@@ -102,13 +102,6 @@ describe('LiteLlmApi routing', () => {
     assert.strictEqual(calls[0].init?.method, 'DELETE');
   });
 
-  test('rotateKey → POST /keys/:id/regenerate', async () => {
-    const { api, calls } = makeApi(200, { key: 'sk-new' });
-    await api.rotateKey('sk-abc');
-    assert.ok(calls[0].url.endsWith('/sk-abc/regenerate'), calls[0].url);
-    assert.strictEqual(calls[0].init?.method, 'POST');
-  });
-
   test('getUsage → GET /usage with date params', async () => {
     const { api, calls } = makeApi(200, {});
     await api.getUsage('2025-01-01', '2025-01-31');

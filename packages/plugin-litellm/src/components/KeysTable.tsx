@@ -47,7 +47,6 @@ interface KeysTableProps {
   loading: boolean;
   onGenerateKey: (request: GenerateKeyRequest) => Promise<GenerateKeyResponse>;
   onUpdateKey: (keyId: string, request: UpdateKeyRequest) => Promise<void>;
-  onRotateKey: (keyId: string) => Promise<GenerateKeyResponse>;
   onBlockKey: (keyId: string) => Promise<void>;
   onUnblockKey: (keyId: string) => Promise<void>;
   onResetKeySpend: (keyId: string) => Promise<void>;
@@ -168,9 +167,9 @@ const emptyForm = (): GenerateKeyRequest => ({
   rpm_limit: undefined,
   team_id: undefined,
   key_type: 'llm_api',
-  auto_rotate: false,
-  rotation_interval_days: undefined,
-});const keyToEditForm = (k: VirtualKey): UpdateKeyRequest => ({
+});
+
+const keyToEditForm = (k: VirtualKey): UpdateKeyRequest => ({
   key_alias: k.key_alias ?? '',
   models: k.models ?? [],
   max_budget: k.max_budget,
@@ -185,7 +184,6 @@ export const KeysTable: React.FC<KeysTableProps> = ({
   loading,
   onGenerateKey,
   onUpdateKey,
-  onRotateKey,
   onBlockKey,
   onUnblockKey,
   onResetKeySpend,
@@ -204,10 +202,6 @@ export const KeysTable: React.FC<KeysTableProps> = ({
   const [editingKey, setEditingKey] = useState<VirtualKey | null>(null);
   const [editForm, setEditForm] = useState<UpdateKeyRequest>({});
   const [editSubmitting, setEditSubmitting] = useState(false);
-
-  // Rotation
-  const [rotatingKeyId, setRotatingKeyId] = useState<string | null>(null);
-  const [rotatedKeyValue, setRotatedKeyValue] = useState<string | null>(null);
 
   // Block/unblock
   const [blockingKeyId, setBlockingKeyId] = useState<string | null>(null);
@@ -312,18 +306,6 @@ export const KeysTable: React.FC<KeysTableProps> = ({
       console.error('Failed to update key:', error);
     } finally {
       setEditSubmitting(false);
-    }
-  };
-
-  const handleRotate = async (keyId: string) => {
-    setRotatingKeyId(keyId);
-    try {
-      const response = await onRotateKey(keyId);
-      setRotatedKeyValue(response.key);
-    } catch (error) {
-      console.error('Failed to rotate key:', error);
-    } finally {
-      setRotatingKeyId(null);
     }
   };
 
@@ -500,7 +482,6 @@ export const KeysTable: React.FC<KeysTableProps> = ({
               ) : (
                 filteredKeys.map((key) => {
                   const keyId = key.token ?? key.key;
-                  const isRotating = rotatingKeyId === keyId;
                   const isBlocking = blockingKeyId === keyId;
                   return (
                     <TableRow key={keyId} sx={key.blocked ? { bgcolor: 'action.disabledBackground' } : undefined}>
@@ -555,13 +536,6 @@ export const KeysTable: React.FC<KeysTableProps> = ({
                       <TableCell align="right">
                         <IconButton onClick={() => handleOpenEdit(key)} title="Edit key">
                           <Edit fontSize="small" />
-                        </IconButton>
-                        <IconButton
-                          onClick={() => handleRotate(keyId)}
-                          disabled={isRotating}
-                          title="Rotate key — generates a new secret, same settings"
-                        >
-                          {isRotating ? <CircularProgress size={18} /> : <Autorenew fontSize="small" />}
                         </IconButton>
                         <IconButton
                           onClick={() => handleToggleBlock(key)}
@@ -748,57 +722,26 @@ export const KeysTable: React.FC<KeysTableProps> = ({
                 }
                 fullWidth
               />
-              <FormControlLabel
-                control={
-                  <Checkbox
-                    checked={!!formData.auto_rotate}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        auto_rotate: e.target.checked,
-                        rotation_interval_days: e.target.checked
-                          ? formData.rotation_interval_days ?? 90
-                          : undefined,
-                      })
-                    }
-                  />
-                }
-                label="Auto-rotate (LiteLLM rotates the secret on a schedule)"
-              />
-              {formData.auto_rotate && (
-                <TextField
-                  label="Rotate every (days)"
-                  type="number"
-                  value={formData.rotation_interval_days ?? ''}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      rotation_interval_days: e.target.value ? Number(e.target.value) : undefined,
-                    })
-                  }
-                  helperText="LiteLLM enforces this interval server-side; the old secret stops working the moment it rotates."
-                  fullWidth
-                />
-              )}
             </Box>
           )}
         </DialogContent>
         <DialogActions>
-          <Button onClick={handleCloseModal}>{newKeyValue ? 'Done' : 'Cancel'}</Button>
-          {!newKeyValue && (
-            <Button
-              onClick={handleGenerate}
-              variant="contained"
-              color="primary"
-              disabled={!canGenerate}
-            >
-              {submitting ? <CircularProgress size={24} /> : 'Generate'}
-            </Button>
-          )}
-          {newKeyValue && (
+          {newKeyValue ? (
             <Button onClick={handleCloseModal} variant="contained" color="success">
               Done
             </Button>
+          ) : (
+            <>
+              <Button onClick={handleCloseModal}>Cancel</Button>
+              <Button
+                onClick={handleGenerate}
+                variant="contained"
+                color="primary"
+                disabled={!canGenerate}
+              >
+                {submitting ? <CircularProgress size={24} /> : 'Generate'}
+              </Button>
+            </>
           )}
         </DialogActions>
       </Dialog>
@@ -904,39 +847,6 @@ export const KeysTable: React.FC<KeysTableProps> = ({
           <Button onClick={handleCloseEdit}>Cancel</Button>
           <Button onClick={handleUpdate} variant="contained" color="primary" disabled={editSubmitting}>
             {editSubmitting ? <CircularProgress size={24} /> : 'Save'}
-          </Button>
-        </DialogActions>
-      </Dialog>
-
-      {/* Rotate result dialog */}
-      <Dialog open={!!rotatedKeyValue} onClose={() => setRotatedKeyValue(null)} maxWidth="sm" fullWidth>
-        <DialogTitle>Key Rotated</DialogTitle>
-        <DialogContent>
-          <Typography variant="body2" color="text.secondary" gutterBottom>
-            The old secret is now invalid. Copy the new one — you won't see it again.
-          </Typography>
-          <Box
-            display="flex"
-            alignItems="center"
-            gap={1}
-            mt={2}
-            p={2}
-            sx={{ backgroundColor: 'action.hover', border: '1px solid', borderColor: 'divider', borderRadius: 1 }}
-          >
-            <Typography
-              component="code"
-              sx={{ fontFamily: 'monospace', wordBreak: 'break-all', flex: 1 }}
-            >
-              {rotatedKeyValue}
-            </Typography>
-            <IconButton onClick={() => copyToClipboard(rotatedKeyValue!)}>
-              <ContentCopy />
-            </IconButton>
-          </Box>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setRotatedKeyValue(null)} variant="contained" color="success">
-            Done
           </Button>
         </DialogActions>
       </Dialog>
