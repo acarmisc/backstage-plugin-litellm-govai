@@ -6,46 +6,40 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+
 jobs:
   build:
+    strategy:
+      fail-fast: false
+      matrix:
+        package:
+          - plugin-litellm
+          - plugin-litellm-backend
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/${{ matrix.package }}
     steps:
       - uses: actions/checkout@v4
-      
-      - name: Check for package.json
-        id: check_package
-        run: |
-          if [ -f "package.json" ]; then
-            echo "exists=true" >> $GITHUB_OUTPUT
-          else
-            echo "exists=false" >> $GITHUB_OUTPUT
-          fi
-          cat $GITHUB_OUTPUT
-      
-      - if: steps.check_package.outputs.exists == 'true'
-        uses: actions/setup-node@v4
+
+      - uses: actions/setup-node@v4
         with:
-          node-version: '22'
-      
-      - if: steps.check_package.outputs.exists == 'true'
-        name: Install dependencies
-        run: yarn install --immutable || echo "Skipping - not a complete monorepo"
-      
-      - if: steps.check_package.outputs.exists == 'true'
-        name: Type check
-        run: yarn tsc || echo "Skipping - workspace deps not available"
-      
-      - if: steps.check_package.outputs.exists == 'true'
-        name: Lint
-        run: yarn lint || echo "Skipping - workspace deps not available"
-      
-      - if: steps.check_package.outputs.exists == 'true'
-        name: Test
-        run: yarn test --passWithNoTests || echo "Skipping - workspace deps not available"
-      
-      - if: steps.check_package.outputs.exists == 'false'
-        name: Info
-        run: |
-          echo "This is a plugin package collection designed for Backstage monorepo use."
-          echo "Workspace dependencies (workspace:^) require a Backstage monorepo context."
-          echo "See README for installation instructions."
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: packages/${{ matrix.package }}/package-lock.json
+
+      - name: Install dependencies
+        # Backstage's MUI4 theme has a react@^17 peer dep; --legacy-peer-deps
+        # mirrors local install behaviour and avoids npm@7+ ERESOLVE failures.
+        run: npm ci --no-audit --no-fund --legacy-peer-deps
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build
+        run: npm run build
+
+      - name: Test
+        run: npm test
