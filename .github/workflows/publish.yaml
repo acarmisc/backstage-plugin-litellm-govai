@@ -16,6 +16,7 @@ on:
 
 permissions:
   contents: write
+  id-token: write # required for npm provenance attestation
 
 jobs:
   publish:
@@ -60,9 +61,13 @@ jobs:
 
       - name: Install dependencies
         working-directory: ${{ steps.pkg.outputs.dir }}
-        # Backstage's MUI4 theme has a react@^17 peer dep; --legacy-peer-deps
-        # mirrors local install behaviour and avoids npm@7+ ERESOLVE failures.
-        run: npm install --no-audit --no-fund --legacy-peer-deps
+        # npm ci installs exactly what's in the committed lockfile instead of
+        # re-resolving the whole tree — reproducible, and avoids surprise
+        # breakage from floating transitive deps (see the v0.12.2 postmortem:
+        # an upstream @peculiar/asn1-* version-ordering bug broke a fresh
+        # `npm install` mid-release). --legacy-peer-deps mirrors local
+        # install behaviour (Backstage's MUI4 theme has a react@^17 peer dep).
+        run: npm ci --no-audit --no-fund --legacy-peer-deps
 
       - name: Build
         working-directory: ${{ steps.pkg.outputs.dir }}
@@ -70,7 +75,7 @@ jobs:
 
       - name: Publish to npm
         working-directory: ${{ steps.pkg.outputs.dir }}
-        run: npm publish --access public
+        run: npm publish --access public --provenance
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
