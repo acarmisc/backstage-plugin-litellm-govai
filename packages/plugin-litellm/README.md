@@ -49,8 +49,11 @@ import { LiteLLMHomeWidget } from '@acarmisc/backstage-plugin-litellm';
 - `litellmPlugin` — the frontend plugin instance
 - `LiteLLMPage` — main plugin page (keys, usage, team context)
 - `LiteLLMHomeWidget` — homepage usage summary card
+- `GenerateKeyDialog` — shared "Generate New Key" dialog (surfaces failures inline, warns on duplicate aliases)
 - `DashboardHeader`, `KeysTable`, `UsageStats`, `TeamUsage` — individual page sections, exported for composition
 - `LiteLlmApi`, `liteLlmApiRef` — API client and its Backstage API ref
+
+Note: `DashboardHeader` and `KeysTable` are composition pieces driven by `LiteLLMPage` and their props differ from older versions. `LiteLLMPage` is the supported entry point; composing the sections directly means keeping them in sync with the page's data wiring (keys, models, teams, and the `onGenerateKeyClick` callback).
 
 ## License
 
