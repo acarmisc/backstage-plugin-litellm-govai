@@ -1,6 +1,6 @@
 {
   "name": "@acarmisc/backstage-plugin-litellm",
-  "version": "0.12.2",
+  "version": "0.12.3",
   "backstage": {
     "role": "frontend-plugin",
     "pluginId": "litellm",
@@ -73,5 +73,8 @@
     "react": "^18.0.0",
     "react-dom": "^18.0.0",
     "react-router-dom": "^6.20.0"
+  },
+  "overrides": {
+    "@peculiar/asn1-schema": "2.9.2"
   }
 }
