@@ -14,6 +14,12 @@ This is a Backstage 1.50+ plugin providing a governance interface for LiteLLM pr
 - `packages/plugin-litellm` - Frontend (`@acarmisc/backstage-plugin-litellm`)
 - `packages/plugin-litellm-backend` - Backend (`@acarmisc/backstage-plugin-litellm-backend`)
 
+## Screenshots
+
+**Usage Analytics** — spend, token, and request trends for the signed-in user, with per-model and per-key breakdowns:
+
+![Usage Analytics](docs/screenshots/usage-analytics.png)
+
 ## Installation
 
 This plugin is designed to be used **within a Backstage monorepo**. It uses workspace dependencies and requires the Backstage CLI to build.
