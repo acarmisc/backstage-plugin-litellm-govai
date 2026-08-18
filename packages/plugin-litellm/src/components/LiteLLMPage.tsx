@@ -1,5 +1,12 @@
 import React, { useState, useCallback, useMemo } from 'react';
-import { Box, Snackbar, Alert, CircularProgress, Typography, Paper, Tabs, Tab } from '@mui/material';
+import Box from '@mui/material/Box';
+import Snackbar from '@mui/material/Snackbar';
+import Alert from '@mui/material/Alert';
+import CircularProgress from '@mui/material/CircularProgress';
+import Typography from '@mui/material/Typography';
+import Paper from '@mui/material/Paper';
+import Tabs from '@mui/material/Tabs';
+import Tab from '@mui/material/Tab';
 import { useAsync, useAsyncRetry } from 'react-use';
 import { useApi } from '@backstage/core-plugin-api';
 import { DashboardHeader } from './DashboardHeader';

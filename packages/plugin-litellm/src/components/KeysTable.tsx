@@ -1,27 +1,25 @@
 import React, { useState, useMemo } from 'react';
-import {
-  Paper,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Button,
-  IconButton,
-  Box,
-  Typography,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  TextField,
-  Chip,
-  CircularProgress,
-  Autocomplete,
-  LinearProgress,
-  InputAdornment,
-} from '@mui/material';
+import Paper from '@mui/material/Paper';
+import Table from '@mui/material/Table';
+import TableBody from '@mui/material/TableBody';
+import TableCell from '@mui/material/TableCell';
+import TableContainer from '@mui/material/TableContainer';
+import TableHead from '@mui/material/TableHead';
+import TableRow from '@mui/material/TableRow';
+import Button from '@mui/material/Button';
+import IconButton from '@mui/material/IconButton';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import Dialog from '@mui/material/Dialog';
+import DialogTitle from '@mui/material/DialogTitle';
+import DialogContent from '@mui/material/DialogContent';
+import DialogActions from '@mui/material/DialogActions';
+import TextField from '@mui/material/TextField';
+import Chip from '@mui/material/Chip';
+import CircularProgress from '@mui/material/CircularProgress';
+import Autocomplete from '@mui/material/Autocomplete';
+import LinearProgress from '@mui/material/LinearProgress';
+import InputAdornment from '@mui/material/InputAdornment';
 import { ContentCopy, Delete, Add, Edit, Autorenew, Search, Warning, Lock, LockOpen } from '@mui/icons-material';
 import { expiryStatus } from '../api';
 import {
@@ -63,19 +61,43 @@ const formatDate = (dateStr: string): string => {
   }
 };
 
+function expiryChipLabel(status: 'expired' | 'soon' | 'ok', expiresAt: string): string {
+  if (status === 'expired') return 'Expired';
+  if (status === 'soon') return `${Math.ceil((new Date(expiresAt).getTime() - Date.now()) / 86400000)}d left`;
+  return formatDate(expiresAt);
+}
+
+function expiryChipColor(status: 'expired' | 'soon' | 'ok'): 'error' | 'warning' | 'default' {
+  if (status === 'expired') return 'error';
+  if (status === 'soon') return 'warning';
+  return 'default';
+}
+
 function ExpiryChip({ expiresAt }: { expiresAt?: string }) {
   const status = expiryStatus(expiresAt);
   if (!status) return <Typography variant="body2" color="text.secondary">-</Typography>;
-  const label = status === 'expired' ? 'Expired' : status === 'soon' ? `${Math.ceil((new Date(expiresAt!).getTime() - Date.now()) / 86400000)}d left` : formatDate(expiresAt!);
-  const color = status === 'expired' ? 'error' : status === 'soon' ? 'warning' : 'default';
+  const label = expiryChipLabel(status, expiresAt!);
+  const color = expiryChipColor(status);
   const icon = (status === 'expired' || status === 'soon') ? <Warning fontSize="small" /> : undefined;
   return <Chip label={label} color={color} size="small" icon={icon} />;
+}
+
+function budgetColor(pct: number): 'error' | 'warning' | 'primary' {
+  if (pct >= 100) return 'error';
+  if (pct >= 80) return 'warning';
+  return 'primary';
+}
+
+function keyBlockIcon(isBlocking: boolean, blocked?: boolean) {
+  if (isBlocking) return <CircularProgress size={18} />;
+  if (blocked) return <LockOpen fontSize="small" />;
+  return <Lock fontSize="small" />;
 }
 
 function BudgetCell({ spend, maxBudget }: { spend: number; maxBudget?: number }) {
   if (!maxBudget) return <Typography variant="body2" color="text.secondary">-</Typography>;
   const pct = Math.min(100, (spend / maxBudget) * 100);
-  const color = pct >= 100 ? 'error' : pct >= 80 ? 'warning' : 'primary';
+  const color = budgetColor(pct);
   return (
     <Box minWidth={100}>
       <Box display="flex" justifyContent="space-between">
@@ -179,6 +201,7 @@ export const KeysTable: React.FC<KeysTableProps> = ({
       await onUpdateKey(editingKey.token ?? editingKey.key, editForm);
       handleCloseEdit();
     } catch (error) {
+      // eslint-disable-next-line no-console -- TODO: surface via a snackbar/alert instead of console-only
       console.error('Failed to update key:', error);
     } finally {
       setEditSubmitting(false);
@@ -240,6 +263,7 @@ export const KeysTable: React.FC<KeysTableProps> = ({
     try {
       await onPruneExpiredKeys();
     } catch (error) {
+      // eslint-disable-next-line no-console -- TODO: surface via a snackbar/alert instead of console-only
       console.error('Failed to prune expired keys:', error);
     } finally {
       setPruneSubmitting(false);
@@ -268,6 +292,120 @@ export const KeysTable: React.FC<KeysTableProps> = ({
         )}
       </Box>
     );
+  };
+
+  const renderTableBody = () => {
+    if (loading) {
+      return (
+        <TableRow>
+          <TableCell colSpan={8} align="center">
+            <CircularProgress size={24} />
+          </TableCell>
+        </TableRow>
+      );
+    }
+    if (filteredKeys.length === 0) {
+      return (
+        <TableRow>
+          <TableCell colSpan={8} align="center" sx={{ py: 4 }}>
+            {filterText ? (
+              <Typography color="text.secondary">No keys match filter</Typography>
+            ) : (
+              <Box>
+                <Typography color="text.secondary" gutterBottom>
+                  No keys yet — generate your first key to start calling models.
+                </Typography>
+                <Button
+                  variant="contained"
+                  color="primary"
+                  size="small"
+                  startIcon={<Add />}
+                  onClick={onGenerateKeyClick}
+                >
+                  Generate Your First Key
+                </Button>
+              </Box>
+            )}
+          </TableCell>
+        </TableRow>
+      );
+    }
+    return filteredKeys.map((key) => {
+      const keyId = key.token ?? key.key;
+      const isBlocking = blockingKeyId === keyId;
+      return (
+        <TableRow key={keyId} sx={key.blocked ? { bgcolor: 'action.disabledBackground' } : undefined}>
+          <TableCell>
+            <Box display="flex" alignItems="center" gap={0.5}>
+              {key.key_alias || '-'}
+              {key.blocked && <Chip label="Blocked" color="error" size="small" />}
+            </Box>
+          </TableCell>
+          <TableCell>
+            <Box display="flex" alignItems="center" gap={0.5}>
+              <Typography
+                variant="body2"
+                component="code"
+                color="text.secondary"
+                title={keyId}
+                sx={{
+                  fontFamily: 'monospace',
+                  backgroundColor: 'background.default',
+                  px: 1,
+                  py: 0.5,
+                  borderRadius: 1,
+                }}
+              >
+                {shortKeyId(keyId)}
+              </Typography>
+              <IconButton size="small" onClick={() => copyToClipboard(keyId)} title="Copy Key ID">
+                <ContentCopy fontSize="small" />
+              </IconButton>
+            </Box>
+          </TableCell>
+          <TableCell>{formatDate(key.created_at)}</TableCell>
+          <TableCell>
+            <ExpiryChip expiresAt={key.expires_at} />
+          </TableCell>
+          <TableCell>
+            <BudgetCell spend={key.spend ?? 0} maxBudget={key.max_budget} />
+          </TableCell>
+          <TableCell>
+            <Typography variant="body2">{key.tpm_limit ?? '-'} / {key.rpm_limit ?? '-'}</Typography>
+          </TableCell>
+          <TableCell>
+            <Box display="flex" gap={0.5} flexWrap="wrap">
+              {key.models?.slice(0, 2).map((model) => (
+                <Chip key={model} label={model} size="small" />
+              ))}
+              {(key.models?.length || 0) > 2 && (
+                <Chip label={`+${(key.models?.length || 0) - 2}`} size="small" variant="outlined" />
+              )}
+            </Box>
+          </TableCell>
+          <TableCell align="right">
+            <IconButton onClick={() => handleOpenEdit(key)} title="Edit key">
+              <Edit fontSize="small" />
+            </IconButton>
+            <IconButton
+              onClick={() => handleToggleBlock(key)}
+              disabled={isBlocking}
+              color={key.blocked ? 'warning' : 'default'}
+              title={key.blocked ? 'Unblock key' : 'Block key — suspends without revoking'}
+            >
+              {keyBlockIcon(isBlocking, key.blocked)}
+            </IconButton>
+            <IconButton
+              color="error"
+              onClick={() => setDeleteConfirmId(keyId)}
+              title="Revoke key"
+            >
+              <Delete />
+            </IconButton>
+          </TableCell>
+        </TableRow>
+      );
+    });
   };
 
   return (
@@ -326,113 +464,7 @@ export const KeysTable: React.FC<KeysTableProps> = ({
               </TableRow>
             </TableHead>
             <TableBody>
-              {loading ? (
-                <TableRow>
-                  <TableCell colSpan={8} align="center">
-                    <CircularProgress size={24} />
-                  </TableCell>
-                </TableRow>
-              ) : filteredKeys.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={8} align="center" sx={{ py: 4 }}>
-                    {filterText ? (
-                      <Typography color="text.secondary">No keys match filter</Typography>
-                    ) : (
-                      <Box>
-                        <Typography color="text.secondary" gutterBottom>
-                          No keys yet — generate your first key to start calling models.
-                        </Typography>
-                        <Button
-                          variant="contained"
-                          color="primary"
-                          size="small"
-                          startIcon={<Add />}
-                          onClick={onGenerateKeyClick}
-                        >
-                          Generate Your First Key
-                        </Button>
-                      </Box>
-                    )}
-                  </TableCell>
-                </TableRow>
-              ) : (
-                filteredKeys.map((key) => {
-                  const keyId = key.token ?? key.key;
-                  const isBlocking = blockingKeyId === keyId;
-                  return (
-                    <TableRow key={keyId} sx={key.blocked ? { bgcolor: 'action.disabledBackground' } : undefined}>
-                      <TableCell>
-                        <Box display="flex" alignItems="center" gap={0.5}>
-                          {key.key_alias || '-'}
-                          {key.blocked && <Chip label="Blocked" color="error" size="small" />}
-                        </Box>
-                      </TableCell>
-                      <TableCell>
-                        <Box display="flex" alignItems="center" gap={0.5}>
-                          <Typography
-                            variant="body2"
-                            component="code"
-                            color="text.secondary"
-                            title={keyId}
-                            sx={{
-                              fontFamily: 'monospace',
-                              backgroundColor: 'background.default',
-                              px: 1,
-                              py: 0.5,
-                              borderRadius: 1,
-                            }}
-                          >
-                            {shortKeyId(keyId)}
-                          </Typography>
-                          <IconButton size="small" onClick={() => copyToClipboard(keyId)} title="Copy Key ID">
-                            <ContentCopy fontSize="small" />
-                          </IconButton>
-                        </Box>
-                      </TableCell>
-                      <TableCell>{formatDate(key.created_at)}</TableCell>
-                      <TableCell>
-                        <ExpiryChip expiresAt={key.expires_at} />
-                      </TableCell>
-                      <TableCell>
-                        <BudgetCell spend={key.spend ?? 0} maxBudget={key.max_budget} />
-                      </TableCell>
-                      <TableCell>
-                        <Typography variant="body2">{key.tpm_limit ?? '-'} / {key.rpm_limit ?? '-'}</Typography>
-                      </TableCell>
-                      <TableCell>
-                        <Box display="flex" gap={0.5} flexWrap="wrap">
-                          {key.models?.slice(0, 2).map((model) => (
-                            <Chip key={model} label={model} size="small" />
-                          ))}
-                          {(key.models?.length || 0) > 2 && (
-                            <Chip label={`+${(key.models?.length || 0) - 2}`} size="small" variant="outlined" />
-                          )}
-                        </Box>
-                      </TableCell>
-                      <TableCell align="right">
-                        <IconButton onClick={() => handleOpenEdit(key)} title="Edit key">
-                          <Edit fontSize="small" />
-                        </IconButton>
-                        <IconButton
-                          onClick={() => handleToggleBlock(key)}
-                          disabled={isBlocking}
-                          color={key.blocked ? 'warning' : 'default'}
-                          title={key.blocked ? 'Unblock key' : 'Block key — suspends without revoking'}
-                        >
-                          {isBlocking ? <CircularProgress size={18} /> : key.blocked ? <LockOpen fontSize="small" /> : <Lock fontSize="small" />}
-                        </IconButton>
-                        <IconButton
-                          color="error"
-                          onClick={() => setDeleteConfirmId(keyId)}
-                          title="Revoke key"
-                        >
-                          <Delete />
-                        </IconButton>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })
-              )}
+              {renderTableBody()}
             </TableBody>
           </Table>
         </TableContainer>

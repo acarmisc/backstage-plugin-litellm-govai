@@ -48,6 +48,12 @@ export class LiteLLMUpstreamError extends Error {
   }
 }
 
+function extractModelList(fallback: { data?: any[] } | any[]): any[] {
+  if (Array.isArray(fallback)) return fallback;
+  if (Array.isArray(fallback?.data)) return fallback.data;
+  return [];
+}
+
 export class LiteLLMClient {
   private baseUrl: string;
   private masterKey: string;
@@ -308,11 +314,7 @@ export class LiteLLMClient {
       // fall through to /models
     }
     const fallback = await this.request<{ data?: any[] } | any[]>('/models');
-    const data = Array.isArray(fallback)
-      ? fallback
-      : Array.isArray(fallback?.data)
-      ? fallback!.data!
-      : [];
+    const data = extractModelList(fallback);
     return data
       .map((m: any) => ({
         model_name: m.model_name ?? m.id ?? '',
@@ -446,7 +448,7 @@ export class LiteLLMClient {
             ...emptyModelBucket(),
           };
           if (!kb.key_alias && kmeta.key_alias) kb.key_alias = kmeta.key_alias;
-          if (kb.team_id == null && kmeta.team_id) kb.team_id = kmeta.team_id;
+          if (kb.team_id === null && kmeta.team_id) kb.team_id = kmeta.team_id;
           if (!kb.models.includes(name)) kb.models.push(name);
           kb.total_spend += km.spend ?? 0;
           kb.total_tokens += km.total_tokens ?? 0;

@@ -1,15 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import {
-  Paper,
-  Box,
-  Typography,
-  FormControl,
-  Select,
-  MenuItem,
-  Grid,
-  CircularProgress,
-  Alert,
-} from '@mui/material';
+import Paper from '@mui/material/Paper';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import FormControl from '@mui/material/FormControl';
+import Select from '@mui/material/Select';
+import MenuItem from '@mui/material/MenuItem';
+import Grid from '@mui/material/Grid';
+import CircularProgress from '@mui/material/CircularProgress';
+import Alert from '@mui/material/Alert';
 import { AreaChart, Area, ResponsiveContainer } from 'recharts';
 import { useApi } from '@backstage/core-plugin-api';
 import { liteLlmApiRef } from '../api';

@@ -1,23 +1,21 @@
 import React, { useState, useCallback } from 'react';
-import {
-  Paper,
-  Box,
-  Typography,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  TablePagination,
-  TextField,
-  MenuItem,
-  Chip,
-  CircularProgress,
-  Collapse,
-  IconButton,
-  Alert,
-} from '@mui/material';
+import Paper from '@mui/material/Paper';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import Table from '@mui/material/Table';
+import TableBody from '@mui/material/TableBody';
+import TableCell from '@mui/material/TableCell';
+import TableContainer from '@mui/material/TableContainer';
+import TableHead from '@mui/material/TableHead';
+import TableRow from '@mui/material/TableRow';
+import TablePagination from '@mui/material/TablePagination';
+import TextField from '@mui/material/TextField';
+import MenuItem from '@mui/material/MenuItem';
+import Chip from '@mui/material/Chip';
+import CircularProgress from '@mui/material/CircularProgress';
+import Collapse from '@mui/material/Collapse';
+import IconButton from '@mui/material/IconButton';
+import Alert from '@mui/material/Alert';
 import { KeyboardArrowDown, KeyboardArrowUp } from '@mui/icons-material';
 import { useAsync } from 'react-use';
 import { LiteLlmApiInterface } from '../api';
@@ -109,6 +107,28 @@ const DetailRow: React.FC<{ entry: AuditLogEntry }> = ({ entry }) => {
   );
 };
 
+function renderAuditLogBody(loading: boolean, entries: AuditLogEntry[]) {
+  if (loading) {
+    return (
+      <TableRow>
+        <TableCell colSpan={6} align="center" sx={{ py: 4 }}>
+          <CircularProgress size={24} />
+        </TableCell>
+      </TableRow>
+    );
+  }
+  if (entries.length === 0) {
+    return (
+      <TableRow>
+        <TableCell colSpan={6} align="center" sx={{ py: 4 }}>
+          <Typography color="text.secondary">No audit events found</Typography>
+        </TableCell>
+      </TableRow>
+    );
+  }
+  return entries.map(entry => <DetailRow key={entry.id} entry={entry} />);
+}
+
 export const AuditLog: React.FC<AuditLogProps> = ({ api }) => {
   const [page, setPage] = useState(0);
   const [pageSize, setPageSize] = useState(25);
@@ -186,21 +206,7 @@ export const AuditLog: React.FC<AuditLogProps> = ({ api }) => {
             </TableRow>
           </TableHead>
           <TableBody>
-            {loading ? (
-              <TableRow>
-                <TableCell colSpan={6} align="center" sx={{ py: 4 }}>
-                  <CircularProgress size={24} />
-                </TableCell>
-              </TableRow>
-            ) : entries.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={6} align="center" sx={{ py: 4 }}>
-                  <Typography color="text.secondary">No audit events found</Typography>
-                </TableCell>
-              </TableRow>
-            ) : (
-              entries.map(entry => <DetailRow key={entry.id} entry={entry} />)
-            )}
+            {renderAuditLogBody(loading, entries)}
           </TableBody>
         </Table>
       </TableContainer>

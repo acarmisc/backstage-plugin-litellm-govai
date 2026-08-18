@@ -1,23 +1,21 @@
 import React, { useState } from 'react';
-import {
-  Paper,
-  Box,
-  Typography,
-  LinearProgress,
-  Chip,
-  Divider,
-  Stack,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableRow,
-  TableContainer,
-  Collapse,
-  IconButton,
-  CircularProgress,
-  useTheme,
-} from '@mui/material';
+import Paper from '@mui/material/Paper';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import LinearProgress from '@mui/material/LinearProgress';
+import Chip from '@mui/material/Chip';
+import Divider from '@mui/material/Divider';
+import Stack from '@mui/material/Stack';
+import Table from '@mui/material/Table';
+import TableBody from '@mui/material/TableBody';
+import TableCell from '@mui/material/TableCell';
+import TableHead from '@mui/material/TableHead';
+import TableRow from '@mui/material/TableRow';
+import TableContainer from '@mui/material/TableContainer';
+import Collapse from '@mui/material/Collapse';
+import IconButton from '@mui/material/IconButton';
+import CircularProgress from '@mui/material/CircularProgress';
+import { useTheme } from '@mui/material/styles';
 import { ExpandMore, ExpandLess, Group, Speed, Memory } from '@mui/icons-material';
 import {
   AreaChart,
@@ -29,6 +27,12 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import { TeamInfo, UsageMetrics } from '../types';
+
+function budgetBarColor(isOver: boolean, isNear: boolean): 'error' | 'warning' | 'primary' {
+  if (isOver) return 'error';
+  if (isNear) return 'warning';
+  return 'primary';
+}
 
 const Stat: React.FC<{ label: string; value: string }> = ({ label, value }) => (
   <Box>
@@ -60,6 +64,38 @@ const TeamCard: React.FC<TeamCardProps> = ({ team, usage, usageLoading }) => {
   const isNear = budget > 0 && spend >= budget * 0.8 && !isOver;
 
   const dailyData = usage?.daily_usage?.map(d => ({ date: d.date, spend: d.spend })) ?? [];
+
+  const renderDailySpendSection = () => {
+    if (usageLoading) {
+      return (
+        <Box display="flex" justifyContent="center" p={2}>
+          <CircularProgress size={24} />
+        </Box>
+      );
+    }
+    if (dailyData.length > 0) {
+      return (
+        <>
+          <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+            Daily Spend
+          </Typography>
+          <Box height={160} mb={2}>
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={dailyData}>
+                <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
+                <XAxis dataKey="date" tick={{ fontSize: 11, fill: tickFill }} />
+                <YAxis tick={{ fontSize: 11, fill: tickFill }} tickFormatter={v => `$${v.toFixed(2)}`} />
+                <Tooltip formatter={(v: number) => [`$${v.toFixed(4)}`, 'Spend']} />
+                <Area type="monotone" dataKey="spend" stroke="#8884d8" fill="#8884d8" fillOpacity={0.3} />
+              </AreaChart>
+            </ResponsiveContainer>
+          </Box>
+          <Divider sx={{ mb: 2 }} />
+        </>
+      );
+    }
+    return null;
+  };
 
   return (
     <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
@@ -103,11 +139,11 @@ const TeamCard: React.FC<TeamCardProps> = ({ team, usage, usageLoading }) => {
         />
         <Stat
           label="TPM"
-          value={team.tpm_limit != null && team.tpm_limit > 0 ? String(team.tpm_limit) : '—'}
+          value={typeof team.tpm_limit === 'number' && team.tpm_limit > 0 ? String(team.tpm_limit) : '—'}
         />
         <Stat
           label="RPM"
-          value={team.rpm_limit != null && team.rpm_limit > 0 ? String(team.rpm_limit) : '—'}
+          value={typeof team.rpm_limit === 'number' && team.rpm_limit > 0 ? String(team.rpm_limit) : '—'}
         />
       </Stack>
 
@@ -123,7 +159,7 @@ const TeamCard: React.FC<TeamCardProps> = ({ team, usage, usageLoading }) => {
           <LinearProgress
             variant="determinate"
             value={budgetPct}
-            color={isOver ? 'error' : isNear ? 'warning' : 'primary'}
+            color={budgetBarColor(isOver, isNear)}
             sx={{ height: 6, borderRadius: 1 }}
           />
         </Box>
@@ -138,8 +174,8 @@ const TeamCard: React.FC<TeamCardProps> = ({ team, usage, usageLoading }) => {
             </Typography>
           </Box>
           <Stack direction="row" spacing={3} flexWrap="wrap" useFlexGap gap={1.5} mb={2}>
-            <Stat label="TPM limit" value={team.tpm_limit != null && team.tpm_limit > 0 ? String(team.tpm_limit) : 'Unlimited'} />
-            <Stat label="RPM limit" value={team.rpm_limit != null && team.rpm_limit > 0 ? String(team.rpm_limit) : 'Unlimited'} />
+            <Stat label="TPM limit" value={typeof team.tpm_limit === 'number' && team.tpm_limit > 0 ? String(team.tpm_limit) : 'Unlimited'} />
+            <Stat label="RPM limit" value={typeof team.rpm_limit === 'number' && team.rpm_limit > 0 ? String(team.rpm_limit) : 'Unlimited'} />
             <Stat label="Max budget" value={budget > 0 ? `$${budget.toFixed(2)}` : 'Unlimited'} />
           </Stack>
 
@@ -162,29 +198,7 @@ const TeamCard: React.FC<TeamCardProps> = ({ team, usage, usageLoading }) => {
 
           <Divider sx={{ mb: 2 }} />
 
-          {usageLoading ? (
-            <Box display="flex" justifyContent="center" p={2}>
-              <CircularProgress size={24} />
-            </Box>
-          ) : dailyData.length > 0 ? (
-            <>
-              <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                Daily Spend
-              </Typography>
-              <Box height={160} mb={2}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={dailyData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
-                    <XAxis dataKey="date" tick={{ fontSize: 11, fill: tickFill }} />
-                    <YAxis tick={{ fontSize: 11, fill: tickFill }} tickFormatter={v => `$${v.toFixed(2)}`} />
-                    <Tooltip formatter={(v: number) => [`$${v.toFixed(4)}`, 'Spend']} />
-                    <Area type="monotone" dataKey="spend" stroke="#8884d8" fill="#8884d8" fillOpacity={0.3} />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </Box>
-              <Divider sx={{ mb: 2 }} />
-            </>
-          ) : null}
+          {renderDailySpendSection()}
 
           <Box display="flex" alignItems="center" gap={1} mb={1}>
             <Memory fontSize="small" color="action" />

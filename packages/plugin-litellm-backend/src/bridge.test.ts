@@ -62,11 +62,11 @@ function mockClient(opts: {
     updateUser: [],
     getUserInfo: [],
   };
-  let getUserInfoSeq = Array.isArray(opts.userInfo)
-    ? [...opts.userInfo]
-    : opts.userInfo !== undefined
-      ? [opts.userInfo]
-      : [null];
+  const getUserInfoSeq: any[] = (() => {
+    if (Array.isArray(opts.userInfo)) return [...opts.userInfo];
+    if (opts.userInfo !== undefined) return [opts.userInfo];
+    return [null];
+  })();
   return {
     calls,
     getUserInfo: (uid?: string) => {
@@ -331,7 +331,7 @@ describe('KeycloakJWTVerifier', () => {
 
     // tampered signature
     const good = await sign();
-    const tampered = good.slice(0, -4) + 'aaaa';
+    const tampered = `${good.slice(0, -4)}aaaa`;
     await assert.rejects(
       () => verifier.verify(tampered),
       (e: unknown) => e instanceof BridgeAuthError,

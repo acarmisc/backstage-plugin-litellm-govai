@@ -1,26 +1,24 @@
 import React, { useMemo, useState } from 'react';
-import {
-  Paper,
-  Box,
-  Typography,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
-  Grid,
-  Tabs,
-  Tab,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Chip,
-  LinearProgress,
-  Skeleton,
-  useTheme,
-} from '@mui/material';
+import Paper from '@mui/material/Paper';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import FormControl from '@mui/material/FormControl';
+import InputLabel from '@mui/material/InputLabel';
+import Select from '@mui/material/Select';
+import MenuItem from '@mui/material/MenuItem';
+import Grid from '@mui/material/Grid';
+import Tabs from '@mui/material/Tabs';
+import Tab from '@mui/material/Tab';
+import Table from '@mui/material/Table';
+import TableBody from '@mui/material/TableBody';
+import TableCell from '@mui/material/TableCell';
+import TableContainer from '@mui/material/TableContainer';
+import TableHead from '@mui/material/TableHead';
+import TableRow from '@mui/material/TableRow';
+import Chip from '@mui/material/Chip';
+import LinearProgress from '@mui/material/LinearProgress';
+import Skeleton from '@mui/material/Skeleton';
+import { useTheme } from '@mui/material/styles';
 import {
   AreaChart,
   Area,
@@ -95,6 +93,18 @@ const EmptyChart: React.FC<{ height?: number; message?: string }> = ({
     <Typography color="text.secondary" variant="body2">{message}</Typography>
   </Box>
 );
+
+/** Shows a loading skeleton, an empty-state message, or the chart itself. */
+const ChartOrFallback: React.FC<{ loading: boolean; empty: boolean; height?: number; children: React.ReactNode }> = ({
+  loading,
+  empty,
+  height,
+  children,
+}) => {
+  if (loading) return <ChartSkeleton height={height} />;
+  if (empty) return <EmptyChart height={height} />;
+  return <>{children}</>;
+};
 
 export const UsageStats: React.FC<UsageStatsProps> = ({
   usage,
@@ -250,6 +260,89 @@ export const UsageStats: React.FC<UsageStatsProps> = ({
   const maxBudget = userInfo?.max_budget ?? 0;
   const totalCumSpend = cumulativeData[cumulativeData.length - 1]?.cumulative ?? 0;
 
+  const renderKeyRows = () => {
+    if (loading) {
+      return <TableRow><TableCell colSpan={7}><LinearProgress /></TableCell></TableRow>;
+    }
+    if (keyRows.length === 0) {
+      return <TableRow><TableCell colSpan={7} align="center">No key activity</TableCell></TableRow>;
+    }
+    return [...keyRows]
+      .sort((a, b) => b.spend - a.spend || b.apiRequests - a.apiRequests)
+      .map(r => (
+        <TableRow key={r.keyHash}>
+          <TableCell>
+            <Typography variant="body2">{r.keyAlias}</Typography>
+            {r.teamId ? (
+              <Typography variant="caption" color="text.secondary">team: {r.teamId}</Typography>
+            ) : null}
+          </TableCell>
+          <TableCell>
+            <Box display="flex" gap={0.5} flexWrap="wrap">
+              {r.models.map(m => (
+                <Chip key={m} label={m} size="small" variant="outlined" />
+              ))}
+            </Box>
+          </TableCell>
+          <TableCell align="right">{fmtUsd(r.spend)}</TableCell>
+          <TableCell align="right">{fmtInt(r.apiRequests)}</TableCell>
+          <TableCell align="right">{fmtInt(r.totalTokens)}</TableCell>
+          <TableCell align="right">{fmtInt(r.failedRequests)}</TableCell>
+          <TableCell>
+            {r.apiRequests > 0 ? (
+              <Box display="flex" alignItems="center" gap={1}>
+                <LinearProgress
+                  variant="determinate"
+                  value={r.successRate * 100}
+                  sx={{ flex: 1, height: 6, borderRadius: 3 }}
+                />
+                <Typography variant="caption">{fmtPct(r.successRate)}</Typography>
+              </Box>
+            ) : '—'}
+          </TableCell>
+        </TableRow>
+      ));
+  };
+
+  const renderModelRows = () => {
+    if (loading) {
+      return <TableRow><TableCell colSpan={8}><LinearProgress /></TableCell></TableRow>;
+    }
+    if (modelRows.length === 0) {
+      return <TableRow><TableCell colSpan={8} align="center">No model activity</TableCell></TableRow>;
+    }
+    return [...modelRows]
+      .sort((a, b) => b.spend - a.spend || b.totalTokens - a.totalTokens)
+      .map(r => (
+        <TableRow key={r.model}>
+          <TableCell>
+            <Box display="flex" alignItems="center" gap={0.75}>
+              <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: modelColor(r.model), flexShrink: 0 }} />
+              {r.model}
+            </Box>
+          </TableCell>
+          <TableCell align="right">{fmtUsd(r.spend)}</TableCell>
+          <TableCell align="right">{fmtInt(r.apiRequests)}</TableCell>
+          <TableCell align="right">{fmtInt(r.successfulRequests)}</TableCell>
+          <TableCell align="right">{fmtInt(r.failedRequests)}</TableCell>
+          <TableCell align="right">{fmtInt(r.promptTokens)}</TableCell>
+          <TableCell align="right">{fmtInt(r.completionTokens)}</TableCell>
+          <TableCell>
+            {r.apiRequests > 0 ? (
+              <Box display="flex" alignItems="center" gap={1}>
+                <LinearProgress
+                  variant="determinate"
+                  value={r.successRate * 100}
+                  sx={{ flex: 1, height: 6, borderRadius: 3 }}
+                />
+                <Typography variant="caption">{fmtPct(r.successRate)}</Typography>
+              </Box>
+            ) : '—'}
+          </TableCell>
+        </TableRow>
+      ));
+  };
+
   return (
     <Paper sx={{ p: 2 }}>
       {/* ── Header ── */}
@@ -329,7 +422,7 @@ export const UsageStats: React.FC<UsageStatsProps> = ({
             <Typography variant="subtitle2" color="text.secondary" gutterBottom>
               Daily Spend by Model
             </Typography>
-            {loading ? <ChartSkeleton /> : modelSpendByDate.length === 0 ? <EmptyChart /> : (
+            <ChartOrFallback loading={loading} empty={modelSpendByDate.length === 0}>
               <Box height={260}>
                 <ResponsiveContainer width="100%" height="100%">
                   <AreaChart data={modelSpendByDate}>
@@ -352,7 +445,7 @@ export const UsageStats: React.FC<UsageStatsProps> = ({
                   </AreaChart>
                 </ResponsiveContainer>
               </Box>
-            )}
+            </ChartOrFallback>
           </Grid>
 
           {/* Token Usage Trend */}
@@ -360,7 +453,7 @@ export const UsageStats: React.FC<UsageStatsProps> = ({
             <Typography variant="subtitle2" color="text.secondary" gutterBottom>
               Daily Token Usage
             </Typography>
-            {loading ? <ChartSkeleton /> : dailyData.length === 0 ? <EmptyChart /> : (
+            <ChartOrFallback loading={loading} empty={dailyData.length === 0}>
               <Box height={260}>
                 <ResponsiveContainer width="100%" height="100%">
                   <AreaChart data={dailyData}>
@@ -374,7 +467,7 @@ export const UsageStats: React.FC<UsageStatsProps> = ({
                   </AreaChart>
                 </ResponsiveContainer>
               </Box>
-            )}
+            </ChartOrFallback>
           </Grid>
 
           {/* Daily Requests */}
@@ -382,7 +475,7 @@ export const UsageStats: React.FC<UsageStatsProps> = ({
             <Typography variant="subtitle2" color="text.secondary" gutterBottom>
               Daily Requests
             </Typography>
-            {loading ? <ChartSkeleton /> : dailyData.length === 0 ? <EmptyChart /> : (
+            <ChartOrFallback loading={loading} empty={dailyData.length === 0}>
               <Box height={260}>
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={dailyData}>
@@ -396,7 +489,7 @@ export const UsageStats: React.FC<UsageStatsProps> = ({
                   </BarChart>
                 </ResponsiveContainer>
               </Box>
-            )}
+            </ChartOrFallback>
           </Grid>
 
           {/* Success Rate Trend */}
@@ -404,7 +497,7 @@ export const UsageStats: React.FC<UsageStatsProps> = ({
             <Typography variant="subtitle2" color="text.secondary" gutterBottom>
               Daily Success Rate
             </Typography>
-            {loading ? <ChartSkeleton /> : successRateData.length === 0 ? <EmptyChart /> : (
+            <ChartOrFallback loading={loading} empty={successRateData.length === 0}>
               <Box height={260}>
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={successRateData}>
@@ -417,7 +510,7 @@ export const UsageStats: React.FC<UsageStatsProps> = ({
                   </LineChart>
                 </ResponsiveContainer>
               </Box>
-            )}
+            </ChartOrFallback>
           </Grid>
 
           {/* Cumulative Spend — only when max_budget is set */}
@@ -431,7 +524,7 @@ export const UsageStats: React.FC<UsageStatsProps> = ({
                   </Typography>
                 )}
               </Typography>
-              {loading ? <ChartSkeleton height={180} /> : cumulativeData.length === 0 ? <EmptyChart height={180} /> : (
+              <ChartOrFallback loading={loading} empty={cumulativeData.length === 0} height={180}>
                 <Box height={180}>
                   <ResponsiveContainer width="100%" height="100%">
                     <AreaChart data={cumulativeData}>
@@ -446,7 +539,7 @@ export const UsageStats: React.FC<UsageStatsProps> = ({
                     </AreaChart>
                   </ResponsiveContainer>
                 </Box>
-              )}
+              </ChartOrFallback>
             </Grid>
           )}
         </Grid>
@@ -460,7 +553,7 @@ export const UsageStats: React.FC<UsageStatsProps> = ({
             <Typography variant="subtitle2" color="text.secondary" gutterBottom>
               Spend by Model
             </Typography>
-            {loading ? <ChartSkeleton /> : topModelSpendBars.length === 0 ? <EmptyChart /> : (
+            <ChartOrFallback loading={loading} empty={topModelSpendBars.length === 0}>
               <Box height={Math.max(200, topModelSpendBars.length * 36)}>
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={topModelSpendBars} layout="vertical" margin={{ left: 20 }}>
@@ -476,7 +569,7 @@ export const UsageStats: React.FC<UsageStatsProps> = ({
                   </BarChart>
                 </ResponsiveContainer>
               </Box>
-            )}
+            </ChartOrFallback>
           </Grid>
 
           {/* Tokens by model stacked bar */}
@@ -484,7 +577,7 @@ export const UsageStats: React.FC<UsageStatsProps> = ({
             <Typography variant="subtitle2" color="text.secondary" gutterBottom>
               Tokens by Model
             </Typography>
-            {loading ? <ChartSkeleton /> : modelRows.length === 0 ? <EmptyChart /> : (
+            <ChartOrFallback loading={loading} empty={modelRows.length === 0}>
               <Box height={260}>
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={modelRows}>
@@ -498,7 +591,7 @@ export const UsageStats: React.FC<UsageStatsProps> = ({
                   </BarChart>
                 </ResponsiveContainer>
               </Box>
-            )}
+            </ChartOrFallback>
           </Grid>
 
           {/* Model table */}
@@ -518,40 +611,7 @@ export const UsageStats: React.FC<UsageStatsProps> = ({
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {loading ? (
-                    <TableRow><TableCell colSpan={8}><LinearProgress /></TableCell></TableRow>
-                  ) : modelRows.length === 0 ? (
-                    <TableRow><TableCell colSpan={8} align="center">No model activity</TableCell></TableRow>
-                  ) : [...modelRows]
-                    .sort((a, b) => b.spend - a.spend || b.totalTokens - a.totalTokens)
-                    .map(r => (
-                      <TableRow key={r.model}>
-                        <TableCell>
-                          <Box display="flex" alignItems="center" gap={0.75}>
-                            <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: modelColor(r.model), flexShrink: 0 }} />
-                            {r.model}
-                          </Box>
-                        </TableCell>
-                        <TableCell align="right">{fmtUsd(r.spend)}</TableCell>
-                        <TableCell align="right">{fmtInt(r.apiRequests)}</TableCell>
-                        <TableCell align="right">{fmtInt(r.successfulRequests)}</TableCell>
-                        <TableCell align="right">{fmtInt(r.failedRequests)}</TableCell>
-                        <TableCell align="right">{fmtInt(r.promptTokens)}</TableCell>
-                        <TableCell align="right">{fmtInt(r.completionTokens)}</TableCell>
-                        <TableCell>
-                          {r.apiRequests > 0 ? (
-                            <Box display="flex" alignItems="center" gap={1}>
-                              <LinearProgress
-                                variant="determinate"
-                                value={r.successRate * 100}
-                                sx={{ flex: 1, height: 6, borderRadius: 3 }}
-                              />
-                              <Typography variant="caption">{fmtPct(r.successRate)}</Typography>
-                            </Box>
-                          ) : '—'}
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                  {renderModelRows()}
                 </TableBody>
               </Table>
             </TableContainer>
@@ -600,45 +660,7 @@ export const UsageStats: React.FC<UsageStatsProps> = ({
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {loading ? (
-                    <TableRow><TableCell colSpan={7}><LinearProgress /></TableCell></TableRow>
-                  ) : keyRows.length === 0 ? (
-                    <TableRow><TableCell colSpan={7} align="center">No key activity</TableCell></TableRow>
-                  ) : [...keyRows]
-                    .sort((a, b) => b.spend - a.spend || b.apiRequests - a.apiRequests)
-                    .map(r => (
-                      <TableRow key={r.keyHash}>
-                        <TableCell>
-                          <Typography variant="body2">{r.keyAlias}</Typography>
-                          {r.teamId ? (
-                            <Typography variant="caption" color="text.secondary">team: {r.teamId}</Typography>
-                          ) : null}
-                        </TableCell>
-                        <TableCell>
-                          <Box display="flex" gap={0.5} flexWrap="wrap">
-                            {r.models.map(m => (
-                              <Chip key={m} label={m} size="small" variant="outlined" />
-                            ))}
-                          </Box>
-                        </TableCell>
-                        <TableCell align="right">{fmtUsd(r.spend)}</TableCell>
-                        <TableCell align="right">{fmtInt(r.apiRequests)}</TableCell>
-                        <TableCell align="right">{fmtInt(r.totalTokens)}</TableCell>
-                        <TableCell align="right">{fmtInt(r.failedRequests)}</TableCell>
-                        <TableCell>
-                          {r.apiRequests > 0 ? (
-                            <Box display="flex" alignItems="center" gap={1}>
-                              <LinearProgress
-                                variant="determinate"
-                                value={r.successRate * 100}
-                                sx={{ flex: 1, height: 6, borderRadius: 3 }}
-                              />
-                              <Typography variant="caption">{fmtPct(r.successRate)}</Typography>
-                            </Box>
-                          ) : '—'}
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                  {renderKeyRows()}
                 </TableBody>
               </Table>
             </TableContainer>

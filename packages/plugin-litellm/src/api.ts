@@ -148,6 +148,7 @@ export class LiteLlmApi implements LiteLlmApiInterface {
       try {
         await this.del(`/keys/${encodeURIComponent(key.token ?? key.key)}`);
       } catch (err) {
+        // eslint-disable-next-line no-console -- best-effort bulk cleanup; no errorApi in this client class to report through
         console.warn(`Failed to delete expired key ${key.token ?? key.key}:`, err);
       }
     }

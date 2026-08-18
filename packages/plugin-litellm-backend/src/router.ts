@@ -247,12 +247,18 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
       ? toLiteLLMUserId(tokenEntityRef, userIdDomain)
       : (req.query.user_id as string | undefined);
     if (!userId) {
-      throw { status: 403, body: { error: 'Cannot verify key ownership without an authenticated user' } };
+      throw Object.assign(new Error('Cannot verify key ownership without an authenticated user'), {
+        status: 403,
+        body: { error: 'Cannot verify key ownership without an authenticated user' },
+      });
     }
     const ownKeys = await client.listKeys(userId);
     const owns = ownKeys.some(k => (k.token ?? k.key) === keyId);
     if (!owns) {
-      throw { status: 403, body: { error: 'Access denied: key does not belong to the caller' } };
+      throw Object.assign(new Error('Access denied: key does not belong to the caller'), {
+        status: 403,
+        body: { error: 'Access denied: key does not belong to the caller' },
+      });
     }
     return { tokenEntityRef, userId };
   }

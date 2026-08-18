@@ -1,23 +1,21 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import {
-  Box,
-  Typography,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  TextField,
-  MenuItem,
-  Button,
-  IconButton,
-  CircularProgress,
-  Autocomplete,
-  Checkbox,
-  FormControlLabel,
-  Alert,
-  Tabs,
-  Tab,
-} from '@mui/material';
+import Box from '@mui/material/Box';
+import Typography from '@mui/material/Typography';
+import Dialog from '@mui/material/Dialog';
+import DialogTitle from '@mui/material/DialogTitle';
+import DialogContent from '@mui/material/DialogContent';
+import DialogActions from '@mui/material/DialogActions';
+import TextField from '@mui/material/TextField';
+import MenuItem from '@mui/material/MenuItem';
+import Button from '@mui/material/Button';
+import IconButton from '@mui/material/IconButton';
+import CircularProgress from '@mui/material/CircularProgress';
+import Autocomplete from '@mui/material/Autocomplete';
+import Checkbox from '@mui/material/Checkbox';
+import FormControlLabel from '@mui/material/FormControlLabel';
+import Alert from '@mui/material/Alert';
+import Tabs from '@mui/material/Tabs';
+import Tab from '@mui/material/Tab';
 import { ContentCopy, Code } from '@mui/icons-material';
 import { VirtualKey, ModelInfo, TeamInfo, GenerateKeyRequest, GenerateKeyResponse, LiteLlmConfig } from '../types';
 import { estimateTokensFromBudget, fmtInt } from '../format';
@@ -90,6 +88,75 @@ response = client.chat.completions.create(
 print(response.choices[0].message.content)`,
   };
 }
+
+function aliasHelperText(aliasError: boolean, aliasDuplicate: boolean): string | undefined {
+  if (aliasError) return 'Alias is required';
+  if (aliasDuplicate) return 'This alias is already used by one of your keys — LiteLLM requires aliases to be unique across all keys';
+  return undefined;
+}
+
+function teamHelperText(teamError: boolean, teamRequired: boolean): string {
+  if (teamError) return 'Team is required';
+  if (teamRequired) return 'Bind this key to a team for scoped access';
+  return 'Optional: bind this key to a specific team for scoped access';
+}
+
+function budgetHelperText(budgetInvalid: boolean, budgetEstimate: number | null): string | undefined {
+  if (budgetInvalid) return 'Enter a positive budget or tick "Unlimited"';
+  if (budgetEstimate !== null) return `≈ ${fmtInt(budgetEstimate)} tokens at the selected model's rate`;
+  return undefined;
+}
+
+interface SnippetTabsProps {
+  snippets: Snippets;
+  model: string;
+  onCopy: (text: string) => void;
+}
+
+const SnippetTabs: React.FC<SnippetTabsProps> = ({ snippets, model, onCopy }) => {
+  const [tab, setTab] = useState<'curl' | 'openai'>('curl');
+  const code = tab === 'curl' ? snippets.curl : snippets.openai;
+  return (
+    <Box>
+      <Tabs value={tab} onChange={(_, v) => setTab(v as 'curl' | 'openai')} sx={{ mb: 1 }}>
+        <Tab label="curl" value="curl" />
+        <Tab label="OpenAI SDK" value="openai" />
+      </Tabs>
+      <Box
+        position="relative"
+        p={1.5}
+        sx={{ backgroundColor: 'action.hover', border: '1px solid', borderColor: 'divider', borderRadius: 1 }}
+      >
+        <IconButton
+          size="small"
+          onClick={() => onCopy(code)}
+          title="Copy snippet"
+          sx={{ position: 'absolute', top: 4, right: 4 }}
+        >
+          <ContentCopy fontSize="small" />
+        </IconButton>
+        <Typography
+          component="pre"
+          sx={{
+            fontFamily: 'monospace',
+            fontSize: 12,
+            whiteSpace: 'pre-wrap',
+            wordBreak: 'break-all',
+            mb: 0,
+            pr: 4,
+          }}
+        >
+          {code}
+        </Typography>
+        {model && (
+          <Typography variant="caption" color="text.secondary" display="block" mt={1}>
+            Using model “{model}” — swap it for any model you have access to.
+          </Typography>
+        )}
+      </Box>
+    </Box>
+  );
+};
 
 export const GenerateKeyDialog: React.FC<GenerateKeyDialogProps> = ({
   open,
@@ -230,6 +297,44 @@ export const GenerateKeyDialog: React.FC<GenerateKeyDialogProps> = ({
     );
   };
 
+  const renderTeamField = () => {
+    if (teams.length > 0) {
+      return (
+        <Autocomplete
+          options={teams}
+          getOptionLabel={t => t.team_alias || t.team_id}
+          value={selectedTeam}
+          onChange={(_e, team) => {
+            const teamModels = team?.models;
+            const restrictedModels =
+              teamModels && teamModels.length > 0
+                ? (formData.models || []).filter(m => teamModels.includes(m))
+                : formData.models;
+            setFormData({ ...formData, team_id: team?.team_id, models: restrictedModels });
+          }}
+          renderInput={params => (
+            <TextField
+              {...params}
+              label="Team"
+              error={teamError}
+              helperText={teamHelperText(teamError, teamRequired)}
+              required={teamRequired}
+              fullWidth
+            />
+          )}
+        />
+      );
+    }
+    if (teamRequired) {
+      return (
+        <Typography variant="body2" color="error">
+          Team selection is required, but you don't belong to any team yet — contact your administrator.
+        </Typography>
+      );
+    }
+    return null;
+  };
+
   return (
     <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
       <DialogTitle>{newKeyValue ? 'Key Generated' : 'Generate New Key'}</DialogTitle>
@@ -292,13 +397,7 @@ export const GenerateKeyDialog: React.FC<GenerateKeyDialogProps> = ({
               }}
               error={aliasError}
               color={aliasDuplicate ? 'warning' : undefined}
-              helperText={
-                aliasError
-                  ? 'Alias is required'
-                  : aliasDuplicate
-                    ? 'This alias is already used by one of your keys — LiteLLM requires aliases to be unique across all keys'
-                    : undefined
-              }
+              helperText={aliasHelperText(aliasError, aliasDuplicate)}
               required
               fullWidth
             />
@@ -316,41 +415,7 @@ export const GenerateKeyDialog: React.FC<GenerateKeyDialogProps> = ({
               <MenuItem value="1y">1 Year</MenuItem>
             </TextField>
 
-            {teams.length > 0 ? (
-              <Autocomplete
-                options={teams}
-                getOptionLabel={t => t.team_alias || t.team_id}
-                value={selectedTeam}
-                onChange={(_e, team) => {
-                  const teamModels = team?.models;
-                  const restrictedModels =
-                    teamModels && teamModels.length > 0
-                      ? (formData.models || []).filter(m => teamModels.includes(m))
-                      : formData.models;
-                  setFormData({ ...formData, team_id: team?.team_id, models: restrictedModels });
-                }}
-                renderInput={params => (
-                  <TextField
-                    {...params}
-                    label="Team"
-                    error={teamError}
-                    helperText={
-                      teamError
-                        ? 'Team is required'
-                        : teamRequired
-                          ? 'Bind this key to a team for scoped access'
-                          : 'Optional: bind this key to a specific team for scoped access'
-                    }
-                    required={teamRequired}
-                    fullWidth
-                  />
-                )}
-              />
-            ) : teamRequired ? (
-              <Typography variant="body2" color="error">
-                Team selection is required, but you don't belong to any team yet — contact your administrator.
-              </Typography>
-            ) : null}
+            {renderTeamField()}
 
             {availableModels.length > 0 && (
               <Autocomplete
@@ -404,13 +469,7 @@ export const GenerateKeyDialog: React.FC<GenerateKeyDialogProps> = ({
                 setFormData({ ...formData, max_budget: e.target.value ? Number(e.target.value) : undefined })
               }
               error={budgetInvalid}
-              helperText={
-                budgetInvalid
-                  ? 'Enter a positive budget or tick "Unlimited"'
-                  : budgetEstimate !== null
-                    ? `≈ ${fmtInt(budgetEstimate)} tokens at the selected model's rate`
-                    : undefined
-              }
+              helperText={budgetHelperText(budgetInvalid, budgetEstimate)}
               disabled={unlimitedBudget}
               required
               fullWidth
@@ -486,53 +545,3 @@ function formatContextWindow(
   return null;
 }
 
-interface SnippetTabsProps {
-  snippets: Snippets;
-  model: string;
-  onCopy: (text: string) => void;
-}
-
-const SnippetTabs: React.FC<SnippetTabsProps> = ({ snippets, model, onCopy }) => {
-  const [tab, setTab] = useState<'curl' | 'openai'>('curl');
-  const code = tab === 'curl' ? snippets.curl : snippets.openai;
-  return (
-    <Box>
-      <Tabs value={tab} onChange={(_, v) => setTab(v as 'curl' | 'openai')} sx={{ mb: 1 }}>
-        <Tab label="curl" value="curl" />
-        <Tab label="OpenAI SDK" value="openai" />
-      </Tabs>
-      <Box
-        position="relative"
-        p={1.5}
-        sx={{ backgroundColor: 'action.hover', border: '1px solid', borderColor: 'divider', borderRadius: 1 }}
-      >
-        <IconButton
-          size="small"
-          onClick={() => onCopy(code)}
-          title="Copy snippet"
-          sx={{ position: 'absolute', top: 4, right: 4 }}
-        >
-          <ContentCopy fontSize="small" />
-        </IconButton>
-        <Typography
-          component="pre"
-          sx={{
-            fontFamily: 'monospace',
-            fontSize: 12,
-            whiteSpace: 'pre-wrap',
-            wordBreak: 'break-all',
-            mb: 0,
-            pr: 4,
-          }}
-        >
-          {code}
-        </Typography>
-        {model && (
-          <Typography variant="caption" color="text.secondary" display="block" mt={1}>
-            Using model “{model}” — swap it for any model you have access to.
-          </Typography>
-        )}
-      </Box>
-    </Box>
-  );
-};

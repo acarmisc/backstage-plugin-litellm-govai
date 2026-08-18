@@ -215,8 +215,7 @@ export async function provisionUser(
   };
 
   logger.info(
-    `Provisioning new LiteLLM user for Backstage identity: ${userId}` +
-      (profile.email ? ` (email=${profile.email})` : ''),
+    `Provisioning new LiteLLM user for Backstage identity: ${userId}${profile.email ? ` (email=${profile.email})` : ''}`,
   );
   try {
     await client.createUser(payload);
