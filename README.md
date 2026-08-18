@@ -359,6 +359,8 @@ startup; the bridge routes are not mounted otherwise.
 - **Team Context**: Optional team-based key generation and usage tracking
 - **User Info**: Display user quotas and current usage limits
 - **Model Selection**: Browse available LLM models configured in LiteLLM
+- **At-a-glance Dashboard**: The profile header shows the current user, team membership, a live counter of total / expired / expiring-soon keys, and a one-click "Generate New Key" shortcut
+- **Inline Generation Errors**: Key-generation failures (e.g. a duplicate alias) surface directly in the dialog, with a client-side warning when the typed alias already matches one of your keys; the backend preserves the upstream status and `param` (e.g. `400` / `key_alias`)
 
 ## Release
 

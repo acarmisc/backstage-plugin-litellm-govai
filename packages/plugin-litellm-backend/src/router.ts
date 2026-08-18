@@ -2,7 +2,7 @@ import express, { Router, Request, Response } from 'express';
 import { Config } from '@backstage/config';
 import { AuthService, DiscoveryService } from '@backstage/backend-plugin-api';
 import { CatalogClient } from '@backstage/catalog-client';
-import { LiteLLMClient } from './client';
+import { LiteLLMClient, LiteLLMUpstreamError } from './client';
 import { openApiSpec } from './openapi';
 import {
   VirtualKey,
@@ -361,6 +361,16 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
             'is requested. Fix or clear it in LiteLLM under Teams → this team → ' +
             'Team Settings, then retry.',
           teamId: req.body.team_id,
+        });
+        return;
+      }
+      // Preserve upstream LiteLLM status + structured error (e.g. a 400 with
+      // param "key_alias" for a duplicate alias) so the frontend can
+      // distinguish "alias taken" from a genuine server error.
+      if (error instanceof LiteLLMUpstreamError) {
+        res.status(error.status).json({
+          error: error.message,
+          ...(error.param ? { param: error.param } : {}),
         });
         return;
       }

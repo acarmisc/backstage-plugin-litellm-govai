@@ -18,6 +18,36 @@ import {
 
 const DEFAULT_TIMEOUT = 30000;
 
+/**
+ * Typed error for failed upstream LiteLLM responses. Preserves the HTTP
+ * status and the structured `param` (e.g. `key_alias`) from the upstream
+ * body so the router can surface a 400 instead of collapsing everything
+ * into a 500. The message is the upstream `error.message` when present,
+ * otherwise the raw body text.
+ */
+export class LiteLLMUpstreamError extends Error {
+  status: number;
+  param?: string;
+
+  constructor(status: number, statusText: string, body: string) {
+    let message = `LiteLLM API error: ${status} ${statusText} - ${body}`;
+    let param: string | undefined;
+    try {
+      const parsed = JSON.parse(body);
+      const inner = parsed?.error ?? parsed;
+      if (typeof inner?.message === 'string') message = inner.message;
+      if (typeof inner?.param === 'string' && inner.param !== 'None') {
+        param = inner.param;
+      }
+    } catch {
+      // not JSON — keep the raw body in the message
+    }
+    super(message);
+    this.status = status;
+    this.param = param;
+  }
+}
+
 export class LiteLLMClient {
   private baseUrl: string;
   private masterKey: string;
@@ -54,11 +84,11 @@ export class LiteLLMClient {
 
       if (!response.ok) {
         const errorBody = await response.text();
-        const err = new Error(
-          `LiteLLM API error: ${response.status} ${response.statusText} - ${errorBody}`,
+        throw new LiteLLMUpstreamError(
+          response.status,
+          response.statusText,
+          errorBody,
         );
-        (err as any).status = response.status;
-        throw err;
       }
 
       return response.json();

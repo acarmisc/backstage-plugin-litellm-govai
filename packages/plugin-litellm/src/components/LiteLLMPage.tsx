@@ -4,6 +4,7 @@ import { useAsync, useAsyncRetry } from 'react-use';
 import { useApi } from '@backstage/core-plugin-api';
 import { DashboardHeader } from './DashboardHeader';
 import { KeysTable } from './KeysTable';
+import { GenerateKeyDialog } from './GenerateKeyDialog';
 import { UsageStats } from './UsageStats';
 import { TeamUsage } from './TeamUsage';
 import { AuditLog } from './AuditLog';
@@ -31,6 +32,7 @@ export const LiteLLMPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'overview' | 'keys' | 'teams' | 'audit'>('overview');
 
   const [snackbar, setSnackbar] = useState<{ message: string; severity: 'success' | 'warning' | 'error' } | null>(null);
+  const [generateDialogOpen, setGenerateDialogOpen] = useState(false);
 
   // Team usage cache: teamId -> UsageMetrics
   const [teamUsageCache, setTeamUsageCache] = useState<Record<string, UsageMetrics | null>>({});
@@ -262,7 +264,13 @@ export const LiteLLMPage: React.FC = () => {
   return (
     <Box p={3}>
       <Box mb={2}>
-        <DashboardHeader userInfo={userInfo} teams={teams ?? []} loading={userLoading || teamsLoading} />
+        <DashboardHeader
+          userInfo={userInfo}
+          teams={teams ?? []}
+          keys={keys ?? []}
+          loading={userLoading || teamsLoading}
+          onGenerateKeyClick={() => setGenerateDialogOpen(true)}
+        />
       </Box>
 
       <Tabs
@@ -291,18 +299,14 @@ export const LiteLLMPage: React.FC = () => {
         <KeysTable
           keys={keys ?? []}
           models={allowedModels}
-          teams={teams ?? []}
-          username={userInfo.user_id}
-          keyGenerationSettings={liteLlmConfig?.keyGeneration}
           loading={keysLoading || modelsLoading}
-          onGenerateKey={handleGenerateKey}
+          onGenerateKeyClick={() => setGenerateDialogOpen(true)}
           onUpdateKey={handleUpdateKey}
           onBlockKey={handleBlockKey}
           onUnblockKey={handleUnblockKey}
           onResetKeySpend={handleResetKeySpend}
           onDeleteKey={handleDeleteKey}
           onPruneExpiredKeys={handlePruneExpiredKeys}
-          onGetConfig={() => api.getConfig()}
         />
       )}
 
@@ -319,6 +323,18 @@ export const LiteLLMPage: React.FC = () => {
       )}
 
       {activeTab === 'audit' && userInfo.can_view_audit && <AuditLog api={api} />}
+
+      <GenerateKeyDialog
+        open={generateDialogOpen}
+        onClose={() => setGenerateDialogOpen(false)}
+        keys={keys ?? []}
+        models={allowedModels}
+        teams={teams ?? []}
+        username={userInfo.user_id}
+        keyGenerationSettings={liteLlmConfig?.keyGeneration}
+        onGenerateKey={handleGenerateKey}
+        onGetConfig={() => api.getConfig()}
+      />
 
       <Snackbar
         open={!!snackbar}

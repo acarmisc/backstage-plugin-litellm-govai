@@ -4,6 +4,7 @@ import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import express from 'express';
 import { createRouter } from './router';
+import { LiteLLMUpstreamError } from './client';
 import { VirtualKey, ModelInfo, UsageMetrics } from './types';
 
 // ---------------------------------------------------------------------------
@@ -360,6 +361,60 @@ describe('router /keys/generate', () => {
     assert.strictEqual(last.user_id, 'alice@example.com');
     assert.strictEqual(last.metadata.created_via, 'backstage');
     assert.strictEqual(last.metadata.created_by_backstage_user, 'user:default/alice');
+  });
+
+  test('preserves upstream 400 + param for a duplicate alias', async () => {
+    const h2 = await startHarness({
+      config: { 'litellm.userIdDomain': 'example.com' },
+      client: mockClient({
+        generateKey: () =>
+          Promise.reject(
+            new LiteLLMUpstreamError(
+              400,
+              'Bad Request',
+              '{"error":{"message":"Key with alias \'test\' already exists. Unique key aliases across all keys are required.","type":"bad_request_error","param":"key_alias","code":"400"}}',
+            ),
+          ),
+      }),
+    });
+    try {
+      const { status, body } = await req(h2.baseUrl, 'POST', '/keys/generate', {
+        authRef: 'user:default/alice',
+        body: { alias: 'test', max_budget: 100 },
+      });
+      assert.strictEqual(status, 400);
+      assert.match(body.error, /already exists/);
+      assert.strictEqual(body.param, 'key_alias');
+    } finally {
+      await new Promise<void>(r => h2.server.close(() => r()));
+    }
+  });
+
+  test('preserves a non-400 upstream status and omits param when absent', async () => {
+    const h2 = await startHarness({
+      config: { 'litellm.userIdDomain': 'example.com' },
+      client: mockClient({
+        generateKey: () =>
+          Promise.reject(
+            new LiteLLMUpstreamError(
+              422,
+              'Unprocessable Entity',
+              '{"error":{"message":"some upstream problem","type":"bad_request_error","param":"None","code":"422"}}',
+            ),
+          ),
+      }),
+    });
+    try {
+      const { status, body } = await req(h2.baseUrl, 'POST', '/keys/generate', {
+        authRef: 'user:default/alice',
+        body: { alias: 'other', max_budget: 100 },
+      });
+      assert.strictEqual(status, 422);
+      assert.strictEqual(body.error, 'some upstream problem');
+      assert.strictEqual(body.param, undefined);
+    } finally {
+      await new Promise<void>(r => h2.server.close(() => r()));
+    }
   });
 });
 

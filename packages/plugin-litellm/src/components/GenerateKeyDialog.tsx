@@ -1,0 +1,538 @@
+import React, { useState, useEffect, useMemo } from 'react';
+import {
+  Box,
+  Typography,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  TextField,
+  MenuItem,
+  Button,
+  IconButton,
+  CircularProgress,
+  Autocomplete,
+  Checkbox,
+  FormControlLabel,
+  Alert,
+  Tabs,
+  Tab,
+} from '@mui/material';
+import { ContentCopy, Code } from '@mui/icons-material';
+import { VirtualKey, ModelInfo, TeamInfo, GenerateKeyRequest, GenerateKeyResponse, LiteLlmConfig } from '../types';
+import { estimateTokensFromBudget, fmtInt } from '../format';
+
+interface GenerateKeyDialogProps {
+  open: boolean;
+  onClose: () => void;
+  keys: VirtualKey[];
+  models: ModelInfo[];
+  teams: TeamInfo[];
+  /** Current user's LiteLLM user id, used to pre-fill a default key alias. */
+  username?: string;
+  /** Controls for the "Generate New Key" form; see litellm.keyGeneration in app-config.yaml. */
+  keyGenerationSettings?: { allowUnlimitedBudget: boolean; teamRequired: boolean };
+  onGenerateKey: (request: GenerateKeyRequest) => Promise<GenerateKeyResponse>;
+  onGetConfig: () => Promise<LiteLlmConfig>;
+}
+
+const generateDefaultAlias = (username?: string): string => {
+  const base = (username || 'user')
+    .split('@')[0]
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '') || 'user';
+  const hash = Math.random().toString(36).slice(2, 8);
+  return `${base}-${hash}`;
+};
+
+const emptyForm = (): GenerateKeyRequest => ({
+  alias: '',
+  models: [],
+  duration: '30d',
+  max_budget: 100,
+  tpm_limit: undefined,
+  rpm_limit: undefined,
+  team_id: undefined,
+  key_type: 'llm_api',
+});
+
+function trimSlash(url: string): string {
+  return url.replace(/\/+$/, '');
+}
+
+interface Snippets {
+  curl: string;
+  openai: string;
+}
+
+function buildSnippets(baseUrl: string, key: string, model: string): Snippets {
+  const base = trimSlash(baseUrl);
+  return {
+    curl: `curl ${base}/v1/chat/completions \\
+  -H "Authorization: Bearer ${key}" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "model": "${model}",
+    "messages": [{ "role": "user", "content": "Hello!" }]
+  }'`,
+    openai: `from openai import OpenAI
+
+client = OpenAI(
+  api_key="${key}",
+  base_url="${base}/v1",
+)
+
+response = client.chat.completions.create(
+  model="${model}",
+  messages=[{ "role": "user", "content": "Hello!" }],
+)
+print(response.choices[0].message.content)`,
+  };
+}
+
+export const GenerateKeyDialog: React.FC<GenerateKeyDialogProps> = ({
+  open,
+  onClose,
+  keys,
+  models,
+  teams,
+  username,
+  keyGenerationSettings,
+  onGenerateKey,
+  onGetConfig,
+}) => {
+  const [formData, setFormData] = useState<GenerateKeyRequest>(emptyForm());
+  const [unlimitedBudget, setUnlimitedBudget] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [newKeyValue, setNewKeyValue] = useState<string | null>(null);
+  const [newKeySnippets, setNewKeySnippets] = useState<Snippets | null>(null);
+  const [newKeyModel, setNewKeyModel] = useState<string>('');
+  const [generateError, setGenerateError] = useState<string | null>(null);
+
+  // Re-arm the form each time the dialog opens so a stale result from a
+  // previous run (or another user's session) is never shown.
+  useEffect(() => {
+    if (open) {
+      setFormData({ ...emptyForm(), alias: generateDefaultAlias(username) });
+      setUnlimitedBudget(false);
+      setNewKeyValue(null);
+      setNewKeySnippets(null);
+      setNewKeyModel('');
+      setGenerateError(null);
+    }
+  }, [open, username]);
+
+  const allowUnlimitedBudget = keyGenerationSettings?.allowUnlimitedBudget ?? false;
+  const teamRequired = keyGenerationSettings?.teamRequired ?? true;
+
+  const selectedTeam = teams.find(t => t.team_id === formData.team_id) ?? null;
+
+  // Once a team is selected, only offer models that team is actually allowed
+  // to use — `models` here is already scoped to what the user can access.
+  const availableModels = useMemo(() => {
+    const teamModels = selectedTeam?.models;
+    if (teamModels && teamModels.length > 0) {
+      const allowed = new Set(teamModels);
+      return models.filter(m => allowed.has(m.model_name));
+    }
+    return models;
+  }, [models, selectedTeam]);
+
+  const selectedModels = availableModels.filter(m => (formData.models || []).includes(m.model_name));
+
+  // ── Inline form validation ───────────────────────────────────────────────
+  const aliasError = !(formData.alias || '').trim();
+  const teamError = teamRequired && !formData.team_id;
+  const budgetInvalid =
+    !unlimitedBudget &&
+    (formData.max_budget === undefined ||
+      formData.max_budget === null ||
+      formData.max_budget <= 0);
+  const canGenerate = !aliasError && !teamError && !budgetInvalid && !submitting;
+
+  // Issue #35: warn (don't block) when the alias already matches one of the
+  // user's loaded keys — LiteLLM enforces globally-unique aliases.
+  const aliasDuplicate = !!formData.alias && keys.some(k => k.key_alias === formData.alias);
+
+  // ── Budget estimate at the selected model's input rate ───────────────────
+  const budgetEstimate = useMemo(() => {
+    if (unlimitedBudget || budgetInvalid) return null;
+    const inputCosts = selectedModels
+      .map(m => m.input_cost_per_token)
+      .filter((c): c is number => typeof c === 'number' && c > 0);
+    if (inputCosts.length === 0) return null;
+    const pricePerToken = Math.max(...inputCosts);
+    return estimateTokensFromBudget(formData.max_budget ?? 0, pricePerToken);
+  }, [formData.max_budget, selectedModels, unlimitedBudget, budgetInvalid]);
+
+  const handleGenerate = async () => {
+    setSubmitting(true);
+    setGenerateError(null);
+    try {
+      const request: GenerateKeyRequest = {
+        ...formData,
+        max_budget: unlimitedBudget ? null : formData.max_budget,
+      };
+      const response = await onGenerateKey(request);
+      setNewKeyValue(response.key);
+      setNewKeyModel(formData.models?.[0] ?? '');
+      setNewKeySnippets(null);
+      try {
+        const config = await onGetConfig();
+        const model = formData.models?.[0] ?? '';
+        setNewKeySnippets(buildSnippets(config.baseUrl, response.key, model));
+      } catch {
+        // Snippets are a nice-to-have; the raw key is still shown.
+      }
+      setFormData(emptyForm());
+      setUnlimitedBudget(false);
+    } catch (error: any) {
+      setGenerateError(error?.message ?? 'Failed to generate key');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleClose = () => {
+    onClose();
+    setGenerateError(null);
+    setNewKeyValue(null);
+    setNewKeySnippets(null);
+    setFormData(emptyForm());
+    setUnlimitedBudget(false);
+  };
+
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+  };
+
+  const modelOption = (m: ModelInfo) => {
+    const inCost = fmtCost(m.input_cost_per_token);
+    const outCost = fmtCost(m.output_cost_per_token);
+    const ctx = formatContextWindow(m.max_input_tokens, m.max_output_tokens);
+    return (
+      <Box>
+        <span>{m.model_name}</span>
+        {m.supports_function_calling && ' 🔧'}
+        {m.supports_vision && ' 👁️'}
+        {ctx && (
+          <Typography variant="caption" color="text.secondary" sx={{ ml: 1 }}>
+            {ctx}
+          </Typography>
+        )}
+        {(inCost || outCost) && (
+          <Typography variant="caption" color="text.secondary" sx={{ ml: 1 }}>
+            {inCost} in · {outCost} out
+          </Typography>
+        )}
+      </Box>
+    );
+  };
+
+  return (
+    <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
+      <DialogTitle>{newKeyValue ? 'Key Generated' : 'Generate New Key'}</DialogTitle>
+      <DialogContent>
+        {newKeyValue ? (
+          <Box>
+            <Typography variant="body2" color="text.secondary" gutterBottom>
+              Copy this key now. You won't be able to see it again.
+            </Typography>
+            <Box
+              display="flex"
+              alignItems="center"
+              gap={1}
+              mt={2}
+              p={2}
+              sx={{
+                backgroundColor: 'action.hover',
+                border: '1px solid',
+                borderColor: 'divider',
+                borderRadius: 1,
+              }}
+            >
+              <Typography
+                component="code"
+                color="text.primary"
+                sx={{ fontFamily: 'monospace', wordBreak: 'break-all', flex: 1 }}
+              >
+                {newKeyValue}
+              </Typography>
+              <IconButton onClick={() => copyToClipboard(newKeyValue)}>
+                <ContentCopy />
+              </IconButton>
+            </Box>
+
+            {newKeySnippets && (
+              <Box mt={3}>
+                <Box display="flex" alignItems="center" gap={1} mb={1}>
+                  <Code fontSize="small" color="action" />
+                  <Typography variant="subtitle2">
+                    Start calling the proxy — paste and run
+                  </Typography>
+                </Box>
+                <SnippetTabs snippets={newKeySnippets} model={newKeyModel} onCopy={copyToClipboard} />
+              </Box>
+            )}
+          </Box>
+        ) : (
+          <Box display="flex" flexDirection="column" gap={2} mt={1}>
+            {generateError && (
+              <Alert severity="error" onClose={() => setGenerateError(null)}>
+                {generateError}
+              </Alert>
+            )}
+            <TextField
+              label="Alias"
+              value={formData.alias || ''}
+              onChange={(e) => {
+                setFormData({ ...formData, alias: e.target.value });
+                setGenerateError(null);
+              }}
+              error={aliasError}
+              color={aliasDuplicate ? 'warning' : undefined}
+              helperText={
+                aliasError
+                  ? 'Alias is required'
+                  : aliasDuplicate
+                    ? 'This alias is already used by one of your keys — LiteLLM requires aliases to be unique across all keys'
+                    : undefined
+              }
+              required
+              fullWidth
+            />
+            <TextField
+              select
+              label="Duration"
+              value={formData.duration || '30d'}
+              onChange={(e) => setFormData({ ...formData, duration: e.target.value })}
+              fullWidth
+            >
+              <MenuItem value="1d">1 Day</MenuItem>
+              <MenuItem value="7d">7 Days</MenuItem>
+              <MenuItem value="30d">30 Days</MenuItem>
+              <MenuItem value="90d">90 Days</MenuItem>
+              <MenuItem value="1y">1 Year</MenuItem>
+            </TextField>
+
+            {teams.length > 0 ? (
+              <Autocomplete
+                options={teams}
+                getOptionLabel={t => t.team_alias || t.team_id}
+                value={selectedTeam}
+                onChange={(_e, team) => {
+                  const teamModels = team?.models;
+                  const restrictedModels =
+                    teamModels && teamModels.length > 0
+                      ? (formData.models || []).filter(m => teamModels.includes(m))
+                      : formData.models;
+                  setFormData({ ...formData, team_id: team?.team_id, models: restrictedModels });
+                }}
+                renderInput={params => (
+                  <TextField
+                    {...params}
+                    label="Team"
+                    error={teamError}
+                    helperText={
+                      teamError
+                        ? 'Team is required'
+                        : teamRequired
+                          ? 'Bind this key to a team for scoped access'
+                          : 'Optional: bind this key to a specific team for scoped access'
+                    }
+                    required={teamRequired}
+                    fullWidth
+                  />
+                )}
+              />
+            ) : teamRequired ? (
+              <Typography variant="body2" color="error">
+                Team selection is required, but you don't belong to any team yet — contact your administrator.
+              </Typography>
+            ) : null}
+
+            {availableModels.length > 0 && (
+              <Autocomplete
+                multiple
+                options={availableModels}
+                groupBy={m => m.mode || 'other'}
+                getOptionLabel={m => m.model_name}
+                value={selectedModels}
+                onChange={(_e, selected) =>
+                  setFormData({ ...formData, models: selected.map(m => m.model_name) })
+                }
+                renderOption={(props, m) => <li {...props}>{modelOption(m)}</li>}
+                renderInput={params => (
+                  <TextField
+                    {...params}
+                    label="Models"
+                    helperText={
+                      selectedTeam
+                        ? 'Leave empty to allow all models available to this team'
+                        : 'Leave empty to allow all models'
+                    }
+                    fullWidth
+                  />
+                )}
+              />
+            )}
+
+            {allowUnlimitedBudget && (
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    checked={unlimitedBudget}
+                    onChange={(e) => {
+                      setUnlimitedBudget(e.target.checked);
+                      if (e.target.checked) {
+                        setFormData({ ...formData, max_budget: null });
+                      } else {
+                        setFormData({ ...formData, max_budget: 100 });
+                      }
+                    }}
+                  />
+                }
+                label="Unlimited budget"
+              />
+            )}
+            <TextField
+              label="Max Budget (USD)"
+              type="number"
+              value={unlimitedBudget ? '' : formData.max_budget ?? ''}
+              onChange={(e) =>
+                setFormData({ ...formData, max_budget: e.target.value ? Number(e.target.value) : undefined })
+              }
+              error={budgetInvalid}
+              helperText={
+                budgetInvalid
+                  ? 'Enter a positive budget or tick "Unlimited"'
+                  : budgetEstimate !== null
+                    ? `≈ ${fmtInt(budgetEstimate)} tokens at the selected model's rate`
+                    : undefined
+              }
+              disabled={unlimitedBudget}
+              required
+              fullWidth
+            />
+            <TextField
+              label="TPM Limit"
+              type="number"
+              value={formData.tpm_limit ?? ''}
+              onChange={(e) =>
+                setFormData({ ...formData, tpm_limit: e.target.value ? Number(e.target.value) : undefined })
+              }
+              helperText="Max tokens per minute this key can consume across all models. Leave blank for no limit."
+              fullWidth
+            />
+            <TextField
+              label="RPM Limit"
+              type="number"
+              value={formData.rpm_limit ?? ''}
+              onChange={(e) =>
+                setFormData({ ...formData, rpm_limit: e.target.value ? Number(e.target.value) : undefined })
+              }
+              helperText="Max requests per minute this key can make across all models. Leave blank for no limit."
+              fullWidth
+            />
+          </Box>
+        )}
+      </DialogContent>
+      <DialogActions>
+        {newKeyValue ? (
+          <Button onClick={handleClose} variant="contained" color="success">
+            Done
+          </Button>
+        ) : (
+          <>
+            <Button onClick={handleClose}>Cancel</Button>
+            <Button
+              onClick={handleGenerate}
+              variant="contained"
+              color="primary"
+              disabled={!canGenerate}
+            >
+              {submitting ? <CircularProgress size={24} /> : 'Generate'}
+            </Button>
+          </>
+        )}
+      </DialogActions>
+    </Dialog>
+  );
+};
+
+function fmtCost(perToken?: number): string | null {
+  if (!perToken) return null;
+  const per1k = perToken * 1000;
+  return per1k < 0.01 ? `$${(perToken * 1_000_000).toFixed(2)}/M` : `$${per1k.toFixed(3)}/1K`;
+}
+
+function formatContextWindow(
+  maxInput?: number,
+  maxOutput?: number,
+): string | null {
+  if (!maxInput && !maxOutput) return null;
+  const fmt = (n?: number) => {
+    if (!n) return null;
+    if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+    if (n >= 1_000) return `${Math.round(n / 1000)}K`;
+    return String(n);
+  };
+  const inPart = fmt(maxInput);
+  const outPart = fmt(maxOutput);
+  if (inPart && outPart) return `ctx ${inPart} in / ${outPart} out`;
+  if (inPart) return `ctx ${inPart}`;
+  if (outPart) return `ctx ${outPart} out`;
+  return null;
+}
+
+interface SnippetTabsProps {
+  snippets: Snippets;
+  model: string;
+  onCopy: (text: string) => void;
+}
+
+const SnippetTabs: React.FC<SnippetTabsProps> = ({ snippets, model, onCopy }) => {
+  const [tab, setTab] = useState<'curl' | 'openai'>('curl');
+  const code = tab === 'curl' ? snippets.curl : snippets.openai;
+  return (
+    <Box>
+      <Tabs value={tab} onChange={(_, v) => setTab(v as 'curl' | 'openai')} sx={{ mb: 1 }}>
+        <Tab label="curl" value="curl" />
+        <Tab label="OpenAI SDK" value="openai" />
+      </Tabs>
+      <Box
+        position="relative"
+        p={1.5}
+        sx={{ backgroundColor: 'action.hover', border: '1px solid', borderColor: 'divider', borderRadius: 1 }}
+      >
+        <IconButton
+          size="small"
+          onClick={() => onCopy(code)}
+          title="Copy snippet"
+          sx={{ position: 'absolute', top: 4, right: 4 }}
+        >
+          <ContentCopy fontSize="small" />
+        </IconButton>
+        <Typography
+          component="pre"
+          sx={{
+            fontFamily: 'monospace',
+            fontSize: 12,
+            whiteSpace: 'pre-wrap',
+            wordBreak: 'break-all',
+            mb: 0,
+            pr: 4,
+          }}
+        >
+          {code}
+        </Typography>
+        {model && (
+          <Typography variant="caption" color="text.secondary" display="block" mt={1}>
+            Using model “{model}” — swap it for any model you have access to.
+          </Typography>
+        )}
+      </Box>
+    </Box>
+  );
+};
