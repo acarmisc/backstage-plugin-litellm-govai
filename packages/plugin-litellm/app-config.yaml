@@ -1,0 +1,6 @@
+app:
+  title: LiteLLM Plugin Dev
+  baseUrl: http://localhost:3000
+
+backend:
+  baseUrl: http://localhost:7007
