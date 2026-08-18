@@ -289,6 +289,28 @@ describe('router /config', () => {
       await new Promise<void>(r => h2.server.close(() => r()));
     }
   });
+
+  test('key-generation settings default to unlimited-budget disabled and team required', async () => {
+    const { body } = await req(h.baseUrl, 'GET', '/config');
+    assert.strictEqual(body.keyGeneration.allowUnlimitedBudget, false);
+    assert.strictEqual(body.keyGeneration.teamRequired, true);
+  });
+
+  test('key-generation settings can be overridden via config', async () => {
+    const h2 = await startHarness({
+      config: {
+        'litellm.keyGeneration.allowUnlimitedBudget': true,
+        'litellm.keyGeneration.teamRequired': false,
+      },
+    });
+    try {
+      const { body } = await req(h2.baseUrl, 'GET', '/config');
+      assert.strictEqual(body.keyGeneration.allowUnlimitedBudget, true);
+      assert.strictEqual(body.keyGeneration.teamRequired, false);
+    } finally {
+      await new Promise<void>(r => h2.server.close(() => r()));
+    }
+  });
 });
 
 describe('router /keys/generate', () => {

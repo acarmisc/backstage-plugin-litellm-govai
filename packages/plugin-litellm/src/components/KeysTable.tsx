@@ -44,6 +44,10 @@ interface KeysTableProps {
   keys: VirtualKey[];
   models: ModelInfo[];
   teams: TeamInfo[];
+  /** Current user's LiteLLM user id, used to pre-fill a default key alias. */
+  username?: string;
+  /** Controls for the "Generate New Key" form; see litellm.keyGeneration in app-config.yaml. */
+  keyGenerationSettings?: { allowUnlimitedBudget: boolean; teamRequired: boolean };
   loading: boolean;
   onGenerateKey: (request: GenerateKeyRequest) => Promise<GenerateKeyResponse>;
   onUpdateKey: (keyId: string, request: UpdateKeyRequest) => Promise<void>;
@@ -59,6 +63,16 @@ interface KeysTableProps {
 const maskKey = (key: string): string => {
   if (key.length <= 8) return '***';
   return `${key.slice(0, 4)}...${key.slice(-4)}`;
+};
+
+const generateDefaultAlias = (username?: string): string => {
+  const base = (username || 'user')
+    .split('@')[0]
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '') || 'user';
+  const hash = Math.random().toString(36).slice(2, 8);
+  return `${base}-${hash}`;
 };
 
 const shortKeyId = (token: string): string => {
@@ -181,6 +195,8 @@ export const KeysTable: React.FC<KeysTableProps> = ({
   keys,
   models,
   teams,
+  username,
+  keyGenerationSettings,
   loading,
   onGenerateKey,
   onUpdateKey,
@@ -226,18 +242,34 @@ export const KeysTable: React.FC<KeysTableProps> = ({
     );
   }, [keys, filterText]);
 
-  const selectedModels = models.filter(m => (formData.models || []).includes(m.model_name));
+  const allowUnlimitedBudget = keyGenerationSettings?.allowUnlimitedBudget ?? false;
+  const teamRequired = keyGenerationSettings?.teamRequired ?? true;
+
   const selectedTeam = teams.find(t => t.team_id === formData.team_id) ?? null;
+
+  // Once a team is selected, only offer models that team is actually allowed
+  // to use — `models` here is already scoped to what the user can access.
+  const availableModels = useMemo(() => {
+    const teamModels = selectedTeam?.models;
+    if (teamModels && teamModels.length > 0) {
+      const allowed = new Set(teamModels);
+      return models.filter(m => allowed.has(m.model_name));
+    }
+    return models;
+  }, [models, selectedTeam]);
+
+  const selectedModels = availableModels.filter(m => (formData.models || []).includes(m.model_name));
   const editSelectedModels = models.filter(m => (editForm.models || []).includes(m.model_name));
 
   // ── Inline form validation (rec #25) ─────────────────────────────────────
   const aliasError = !(formData.alias || '').trim();
+  const teamError = teamRequired && !formData.team_id;
   const budgetInvalid =
     !unlimitedBudget &&
     (formData.max_budget === undefined ||
       formData.max_budget === null ||
       formData.max_budget <= 0);
-  const canGenerate = !aliasError && !budgetInvalid && !submitting;
+  const canGenerate = !aliasError && !teamError && !budgetInvalid && !submitting;
 
   // ── Budget estimate at the selected model's input rate (rec #27) ────────
   const budgetEstimate = useMemo(() => {
@@ -275,6 +307,11 @@ export const KeysTable: React.FC<KeysTableProps> = ({
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const handleOpenGenerate = () => {
+    setFormData({ ...emptyForm(), alias: generateDefaultAlias(username) });
+    setGenerateModalOpen(true);
   };
 
   const handleCloseModal = () => {
@@ -428,7 +465,7 @@ export const KeysTable: React.FC<KeysTableProps> = ({
               variant="contained"
               color="primary"
               startIcon={<Add />}
-              onClick={() => setGenerateModalOpen(true)}
+              onClick={handleOpenGenerate}
             >
               Generate New Key
             </Button>
@@ -471,7 +508,7 @@ export const KeysTable: React.FC<KeysTableProps> = ({
                           color="primary"
                           size="small"
                           startIcon={<Add />}
-                          onClick={() => setGenerateModalOpen(true)}
+                          onClick={handleOpenGenerate}
                         >
                           Generate Your First Key
                         </Button>
@@ -633,29 +670,46 @@ export const KeysTable: React.FC<KeysTableProps> = ({
                 <MenuItem value="1y">1 Year</MenuItem>
               </TextField>
 
-              {teams.length > 0 && (
+              {teams.length > 0 ? (
                 <Autocomplete
                   options={teams}
                   getOptionLabel={t => t.team_alias || t.team_id}
                   value={selectedTeam}
-                  onChange={(_e, team) =>
-                    setFormData({ ...formData, team_id: team?.team_id })
-                  }
+                  onChange={(_e, team) => {
+                    const teamModels = team?.models;
+                    const restrictedModels =
+                      teamModels && teamModels.length > 0
+                        ? (formData.models || []).filter(m => teamModels.includes(m))
+                        : formData.models;
+                    setFormData({ ...formData, team_id: team?.team_id, models: restrictedModels });
+                  }}
                   renderInput={params => (
                     <TextField
                       {...params}
                       label="Team"
-                      helperText="Optional: bind this key to a specific team for scoped access"
+                      error={teamError}
+                      helperText={
+                        teamError
+                          ? 'Team is required'
+                          : teamRequired
+                            ? 'Bind this key to a team for scoped access'
+                            : 'Optional: bind this key to a specific team for scoped access'
+                      }
+                      required={teamRequired}
                       fullWidth
                     />
                   )}
                 />
-              )}
+              ) : teamRequired ? (
+                <Typography variant="body2" color="error">
+                  Team selection is required, but you don't belong to any team yet — contact your administrator.
+                </Typography>
+              ) : null}
 
-              {models.length > 0 && (
+              {availableModels.length > 0 && (
                 <Autocomplete
                   multiple
-                  options={models}
+                  options={availableModels}
                   groupBy={m => m.mode || 'other'}
                   getOptionLabel={m => m.model_name}
                   value={selectedModels}
@@ -664,27 +718,38 @@ export const KeysTable: React.FC<KeysTableProps> = ({
                   }
                   renderOption={(props, m) => <li {...props}>{modelOption(m)}</li>}
                   renderInput={params => (
-                    <TextField {...params} label="Models" helperText="Leave empty to allow all models" fullWidth />
+                    <TextField
+                      {...params}
+                      label="Models"
+                      helperText={
+                        selectedTeam
+                          ? 'Leave empty to allow all models available to this team'
+                          : 'Leave empty to allow all models'
+                      }
+                      fullWidth
+                    />
                   )}
                 />
               )}
 
-              <FormControlLabel
-                control={
-                  <Checkbox
-                    checked={unlimitedBudget}
-                    onChange={(e) => {
-                      setUnlimitedBudget(e.target.checked);
-                      if (e.target.checked) {
-                        setFormData({ ...formData, max_budget: null });
-                      } else {
-                        setFormData({ ...formData, max_budget: 100 });
-                      }
-                    }}
-                  />
-                }
-                label="Unlimited budget"
-              />
+              {allowUnlimitedBudget && (
+                <FormControlLabel
+                  control={
+                    <Checkbox
+                      checked={unlimitedBudget}
+                      onChange={(e) => {
+                        setUnlimitedBudget(e.target.checked);
+                        if (e.target.checked) {
+                          setFormData({ ...formData, max_budget: null });
+                        } else {
+                          setFormData({ ...formData, max_budget: 100 });
+                        }
+                      }}
+                    />
+                  }
+                  label="Unlimited budget"
+                />
+              )}
               <TextField
                 label="Max Budget (USD)"
                 type="number"
@@ -711,6 +776,7 @@ export const KeysTable: React.FC<KeysTableProps> = ({
                 onChange={(e) =>
                   setFormData({ ...formData, tpm_limit: e.target.value ? Number(e.target.value) : undefined })
                 }
+                helperText="Max tokens per minute this key can consume across all models. Leave blank for no limit."
                 fullWidth
               />
               <TextField
@@ -720,6 +786,7 @@ export const KeysTable: React.FC<KeysTableProps> = ({
                 onChange={(e) =>
                   setFormData({ ...formData, rpm_limit: e.target.value ? Number(e.target.value) : undefined })
                 }
+                helperText="Max requests per minute this key can make across all models. Leave blank for no limit."
                 fullWidth
               />
             </Box>
@@ -795,6 +862,7 @@ export const KeysTable: React.FC<KeysTableProps> = ({
                 onChange={(e) =>
                   setEditForm({ ...editForm, tpm_limit: e.target.value ? Number(e.target.value) : undefined })
                 }
+                helperText="Max tokens per minute this key can consume across all models. Leave blank for no limit."
                 fullWidth
               />
               <TextField
@@ -804,6 +872,7 @@ export const KeysTable: React.FC<KeysTableProps> = ({
                 onChange={(e) =>
                   setEditForm({ ...editForm, rpm_limit: e.target.value ? Number(e.target.value) : undefined })
                 }
+                helperText="Max requests per minute this key can make across all models. Leave blank for no limit."
                 fullWidth
               />
 

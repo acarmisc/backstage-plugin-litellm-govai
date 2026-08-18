@@ -148,6 +148,13 @@ export interface GenerateKeyResponse {
 export interface LiteLlmConfig {
   /** Publicly reachable LiteLLM proxy base URL (for snippet generation). */
   baseUrl: string;
+  /** Controls for the "Generate New Key" form, set via litellm.keyGeneration in app-config.yaml. */
+  keyGeneration?: {
+    /** When false (default), the "Unlimited budget" checkbox is hidden and a budget is always required. */
+    allowUnlimitedBudget: boolean;
+    /** When true (default), a team must be selected before a key can be generated. */
+    teamRequired: boolean;
+  };
 }
 
 export interface DateRange {

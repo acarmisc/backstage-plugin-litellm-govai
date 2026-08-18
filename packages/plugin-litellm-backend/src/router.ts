@@ -62,6 +62,8 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
     readProvisioningDefaults(config);
   const roleConfigs = readRoleConfigs(config);
   const auditGroup = config.getOptionalString('litellm.audit.group');
+  const allowUnlimitedBudget = config.getOptionalBoolean('litellm.keyGeneration.allowUnlimitedBudget') ?? false;
+  const teamRequired = config.getOptionalBoolean('litellm.keyGeneration.teamRequired') ?? true;
   const catalogClient = new CatalogClient({ discoveryApi: discovery });
 
   if (provisioningEnabled) {
@@ -89,7 +91,10 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
   // Exposes the public LiteLLM proxy URL so the frontend can build
   // ready-to-paste curl / OpenAI-SDK snippets for freshly generated keys.
   router.get('/config', (_req: Request, res: Response) => {
-    res.json({ baseUrl: publicBaseUrl });
+    res.json({
+      baseUrl: publicBaseUrl,
+      keyGeneration: { allowUnlimitedBudget, teamRequired },
+    });
   });
 
   // Self-hosted OpenAPI 3.1 contract — lets integrators read a spec instead

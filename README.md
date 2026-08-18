@@ -115,6 +115,16 @@ litellm:
           - gpt-4o
           - claude-3-5-sonnet
         userRole: internal_user
+
+  # Optional — controls for the "Generate New Key" form in the frontend.
+  keyGeneration:
+    # Show the "Unlimited budget" checkbox. When false, a positive max
+    # budget is always required.
+    allowUnlimitedBudget: false   # default
+
+    # Require a team to be selected before a key can be generated.
+    # Set to false to allow personal, team-less keys.
+    teamRequired: true   # default
 ```
 
 **Config key reference:**
@@ -143,6 +153,8 @@ litellm:
 | `litellm.provisioning.roles[].tpmLimit` | number | no | — | Overrides default for group |
 | `litellm.provisioning.roles[].rpmLimit` | number | no | — | Overrides default for group |
 | `litellm.provisioning.roles[].metadata` | object | no | — | Merged over default metadata |
+| `litellm.keyGeneration.allowUnlimitedBudget` | boolean | no | `false` | Show the "Unlimited budget" checkbox in the Generate New Key form |
+| `litellm.keyGeneration.teamRequired` | boolean | no | `true` | Require a team to be selected before a key can be generated |
 
 *required when the `roles` array is present
 

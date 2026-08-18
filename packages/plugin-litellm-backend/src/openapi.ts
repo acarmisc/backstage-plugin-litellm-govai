@@ -64,12 +64,16 @@ export const openApiSpec: OpenApiSpec = {
     '/config': {
       get: {
         tags: ['System'],
-        summary: 'Public LiteLLM proxy base URL (for snippet generation)',
+        summary: 'Public LiteLLM proxy base URL and key-generation form settings',
         responses: {
           '200': {
-            description: 'Proxy URL',
+            description: 'Frontend config',
             content: { 'application/json': { schema: { type: 'object', properties: {
               baseUrl: { type: 'string' },
+              keyGeneration: { type: 'object', properties: {
+                allowUnlimitedBudget: { type: 'boolean' },
+                teamRequired: { type: 'boolean' },
+              } },
             } } } },
           },
         },

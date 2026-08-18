@@ -127,6 +127,27 @@ export interface Config {
       group?: string;
     };
 
+    /**
+     * Controls for the "Generate New Key" form in the frontend.
+     */
+    keyGeneration?: {
+      /**
+       * When true, users can tick an "Unlimited budget" checkbox that skips
+       * the max-budget cap entirely. The checkbox is hidden from the form
+       * when this is false, so a budget is always required.
+       * @default false
+       */
+      allowUnlimitedBudget?: boolean;
+
+      /**
+       * When true (the default), a team must be selected before a key can
+       * be generated. Set to false to let users generate personal,
+       * team-less keys.
+       * @default true
+       */
+      teamRequired?: boolean;
+    };
+
     bridge?: {
       /**
        * When true, mount the /bridge/keys, /bridge/keys (POST), /bridge/models

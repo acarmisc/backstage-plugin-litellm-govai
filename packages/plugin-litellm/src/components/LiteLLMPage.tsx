@@ -63,6 +63,8 @@ export const LiteLLMPage: React.FC = () => {
     [api],
   );
 
+  const { value: liteLlmConfig } = useAsync(() => api.getConfig(), [api]);
+
   // Filter to teams the current user belongs to
   const teams = useMemo(() => {
     if (!allTeams?.length) return [];
@@ -290,6 +292,8 @@ export const LiteLLMPage: React.FC = () => {
           keys={keys ?? []}
           models={allowedModels}
           teams={teams ?? []}
+          username={userInfo.user_id}
+          keyGenerationSettings={liteLlmConfig?.keyGeneration}
           loading={keysLoading || modelsLoading}
           onGenerateKey={handleGenerateKey}
           onUpdateKey={handleUpdateKey}
