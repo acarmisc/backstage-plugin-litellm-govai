@@ -15,6 +15,7 @@ export interface UserInfo {
 
 export interface TeamMember {
   user_id: string;
+  user_email?: string;
   role: 'admin' | 'user';
 }
 

@@ -142,6 +142,28 @@ describe('LiteLlmApi errors', () => {
       },
     );
   });
+
+  test('uses body.error as the message when present', async () => {
+    const { api } = makeApi(502, { error: 'LiteLLM rejected the key duration for this team.' });
+    await assert.rejects(
+      () => api.generateKey({ alias: 'x' }),
+      (err: any) => {
+        assert.strictEqual(err.message, 'LiteLLM rejected the key duration for this team.');
+        return true;
+      },
+    );
+  });
+
+  test('falls back to status text when body has no error field', async () => {
+    const { api } = makeApi(404, { message: 'not found' });
+    await assert.rejects(
+      () => api.getUserInfo(),
+      (err: any) => {
+        assert.strictEqual(err.message, '404 Not Found');
+        return true;
+      },
+    );
+  });
 });
 
 // ---------------------------------------------------------------------------

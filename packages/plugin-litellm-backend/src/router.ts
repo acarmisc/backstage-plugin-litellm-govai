@@ -338,6 +338,27 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
         res.status(error.status).json(error.body);
         return;
       }
+      // LiteLLM's enterprise team-key hook silently overrides the requested
+      // `duration` with the team's `metadata.team_member_key_duration` when a
+      // team_id is set, before parsing it. A malformed value there 500s with
+      // this exact message regardless of what we sent — surface that instead
+      // of the opaque passthrough so it's actionable from the LiteLLM side.
+      if (
+        typeof error.message === 'string' &&
+        error.message.includes('Invalid duration format') &&
+        req.body?.team_id
+      ) {
+        res.status(502).json({
+          error:
+            'LiteLLM rejected the key duration for this team. The team has a ' +
+            '"Team Member Key Duration" set in LiteLLM that is not in a valid ' +
+            '<number><unit> format (e.g. "30d") and overrides whatever duration ' +
+            'is requested. Fix or clear it in LiteLLM under Teams → this team → ' +
+            'Team Settings, then retry.',
+          teamId: req.body.team_id,
+        });
+        return;
+      }
       logger.error('Failed to generate key', error);
       res.status(500).json({ error: error.message });
     }

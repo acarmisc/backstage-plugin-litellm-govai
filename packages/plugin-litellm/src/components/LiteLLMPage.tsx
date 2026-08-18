@@ -124,10 +124,15 @@ export const LiteLLMPage: React.FC = () => {
 
   const handleGenerateKey = useCallback(
     async (request: GenerateKeyRequest): Promise<GenerateKeyResponse> => {
-      const response = await api.generateKey(request);
-      setSnackbar({ message: 'Key generated successfully', severity: 'success' });
-      refreshKeys();
-      return response;
+      try {
+        const response = await api.generateKey(request);
+        setSnackbar({ message: 'Key generated successfully', severity: 'success' });
+        refreshKeys();
+        return response;
+      } catch (e: any) {
+        setSnackbar({ message: `Failed to generate key: ${e.message}`, severity: 'error' });
+        throw e;
+      }
     },
     [api, refreshKeys],
   );

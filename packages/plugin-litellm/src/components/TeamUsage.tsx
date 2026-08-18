@@ -204,7 +204,24 @@ const TeamCard: React.FC<TeamCardProps> = ({ team, usage, usageLoading }) => {
                 <TableBody>
                   {team.members_with_roles.map(m => (
                     <TableRow key={m.user_id}>
-                      <TableCell sx={{ fontFamily: 'monospace', fontSize: 12 }}>{m.user_id}</TableCell>
+                      <TableCell>
+                        {m.user_email ? (
+                          <>
+                            <Typography variant="body2">{m.user_email}</Typography>
+                            <Typography
+                              variant="caption"
+                              color="text.secondary"
+                              sx={{ fontFamily: 'monospace' }}
+                            >
+                              {m.user_id}
+                            </Typography>
+                          </>
+                        ) : (
+                          <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>
+                            {m.user_id}
+                          </Typography>
+                        )}
+                      </TableCell>
                       <TableCell>
                         <Chip
                           label={m.role}

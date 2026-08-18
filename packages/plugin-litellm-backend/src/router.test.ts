@@ -341,6 +341,44 @@ describe('router /keys/generate', () => {
   });
 });
 
+describe('router /keys/generate — team duration override failure', () => {
+  let h: Harness;
+  before(async () => {
+    h = await startHarness({
+      config: { 'litellm.userIdDomain': 'example.com' },
+      client: mockClient({
+        generateKey: () => {
+          const err: any = new Error(
+            'LiteLLM API error: 500 Internal Server Error - {"error":{"message":"Invalid duration format","type":"internal_server_error","param":"None","code":"500"}}',
+          );
+          err.status = 500;
+          return Promise.reject(err);
+        },
+      }),
+    });
+  });
+  after(async () => { await new Promise<void>(r => h.server.close(() => r())); });
+
+  test('502 with an actionable message when team_id is set', async () => {
+    const { status, body } = await req(h.baseUrl, 'POST', '/keys/generate', {
+      authRef: 'user:default/alice',
+      body: { alias: 'team-key', max_budget: 50, team_id: 'team-123' },
+    });
+    assert.strictEqual(status, 502);
+    assert.match(body.error, /Team Member Key Duration/);
+    assert.strictEqual(body.teamId, 'team-123');
+  });
+
+  test('falls back to raw 500 passthrough when no team_id is set', async () => {
+    const { status, body } = await req(h.baseUrl, 'POST', '/keys/generate', {
+      authRef: 'user:default/alice',
+      body: { alias: 'no-team-key', max_budget: 50 },
+    });
+    assert.strictEqual(status, 500);
+    assert.match(body.error, /Invalid duration format/);
+  });
+});
+
 describe('router key-mutation routes — ownership guard (rec #18 regression)', () => {
   // alice owns hash-own; bob owns hash-bob. Neither owns the other's token.
   function clientWithTwoUsers(): any {

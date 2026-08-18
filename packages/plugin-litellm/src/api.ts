@@ -69,7 +69,11 @@ export class LiteLlmApi implements LiteLlmApiInterface {
     if (!response.ok) {
       let body: unknown;
       try { body = await response.json(); } catch { body = await response.text().catch(() => ''); }
-      throw new ApiError(`${response.status} ${response.statusText}`, response.status, body);
+      const message =
+        (typeof body === 'object' && body && typeof (body as any).error === 'string'
+          ? (body as any).error
+          : undefined) ?? `${response.status} ${response.statusText}`;
+      throw new ApiError(message, response.status, body);
     }
   }
 
