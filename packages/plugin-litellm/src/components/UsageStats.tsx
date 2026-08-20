@@ -2,23 +2,16 @@ import React, { useMemo, useState } from 'react';
 import Paper from '@mui/material/Paper';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
-import FormControl from '@mui/material/FormControl';
-import InputLabel from '@mui/material/InputLabel';
-import Select from '@mui/material/Select';
+import TextField from '@mui/material/TextField';
 import MenuItem from '@mui/material/MenuItem';
 import Grid from '@mui/material/Grid';
-import Tabs from '@mui/material/Tabs';
-import Tab from '@mui/material/Tab';
 import Table from '@mui/material/Table';
 import TableBody from '@mui/material/TableBody';
 import TableCell from '@mui/material/TableCell';
 import TableContainer from '@mui/material/TableContainer';
 import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
-import Chip from '@mui/material/Chip';
-import LinearProgress from '@mui/material/LinearProgress';
 import Skeleton from '@mui/material/Skeleton';
-import { useTheme } from '@mui/material/styles';
 import {
   AreaChart,
   Area,
@@ -33,6 +26,7 @@ import {
   ResponsiveContainer,
   Legend,
   ReferenceLine,
+  Cell,
 } from 'recharts';
 import {
   DateRange,
@@ -43,6 +37,25 @@ import {
   UsageKeyBreakdown,
 } from '../types';
 import { fmtUsd, fmtInt } from '../format';
+import {
+  ChartCard,
+  ChartTooltip,
+  EmptyState,
+  Meter,
+  MetricStrip,
+  SectionCard,
+  SegmentedControl,
+  Tone,
+  SeriesLegend,
+  TagChip,
+  chartColor,
+  dataTableSx,
+  fmtCompact,
+  fmtDateShort,
+  fmtUsdCompact,
+  useChartTheme,
+  SERIES,
+} from './ui';
 
 interface UsageStatsProps {
   usage: UsageMetrics | null;
@@ -59,51 +72,57 @@ type TabKey = 'costs' | 'models' | 'keys';
 const TOP_N_MODELS = 6;
 const PERIOD_LS_KEY = 'litellm_usage_period';
 
-const MODEL_COLORS = [
-  '#8884d8', '#82ca9d', '#ffc658', '#ff7300',
-  '#0088fe', '#00C49F', '#FFBB28', '#FF8042',
-  '#a4de6c', '#d0ed57',
-];
-
-function modelColor(model: string): string {
-  let h = 5381;
-  for (let i = 0; i < model.length; i++) h = ((h << 5) + h + model.charCodeAt(i)) >>> 0;
-  return MODEL_COLORS[h % MODEL_COLORS.length];
-}
+const PRESET_LABELS: Record<DatePreset, string> = {
+  today: 'Today',
+  '24h': 'Last 24 hours',
+  '7d': 'Last 7 days',
+  '30d': 'Last 30 days',
+};
 
 const fmtPct = (n: number) => `${(n * 100).toFixed(1)}%`;
 
-const KpiCard: React.FC<{ label: string; value: string; hint?: string }> = ({ label, value, hint }) => (
-  <Paper variant="outlined" sx={{ p: 2, height: '100%' }}>
-    <Typography variant="caption" color="text.secondary">{label}</Typography>
-    <Typography variant="h5" sx={{ mt: 0.5 }}>{value}</Typography>
-    {hint ? <Typography variant="caption" color="text.secondary">{hint}</Typography> : null}
-  </Paper>
-);
+/** Green above 99%, amber down to 90%, red below. */
+function rateTone(rate: number): Tone {
+  if (rate >= 0.99) return 'success';
+  if (rate >= 0.9) return 'warning';
+  return 'danger';
+}
 
-const ChartSkeleton: React.FC<{ height?: number }> = ({ height = 260 }) => (
-  <Skeleton variant="rectangular" height={height} sx={{ borderRadius: 1 }} />
-);
-
-const EmptyChart: React.FC<{ height?: number; message?: string }> = ({
-  height = 260,
-  message = 'No data for this period',
-}) => (
-  <Box height={height} display="flex" alignItems="center" justifyContent="center">
-    <Typography color="text.secondary" variant="body2">{message}</Typography>
-  </Box>
+const ChartSkeleton: React.FC<{ height?: number }> = ({ height = 240 }) => (
+  <Skeleton variant="rounded" height={height} />
 );
 
 /** Shows a loading skeleton, an empty-state message, or the chart itself. */
-const ChartOrFallback: React.FC<{ loading: boolean; empty: boolean; height?: number; children: React.ReactNode }> = ({
-  loading,
-  empty,
-  height,
-  children,
-}) => {
+const ChartOrFallback: React.FC<{
+  loading: boolean;
+  empty: boolean;
+  height?: number;
+  children: React.ReactNode;
+}> = ({ loading, empty, height = 240, children }) => {
   if (loading) return <ChartSkeleton height={height} />;
-  if (empty) return <EmptyChart height={height} />;
+  if (empty) return <EmptyState message="No data for this period" height={height} />;
   return <>{children}</>;
+};
+
+/** Inline success-rate bar used in both breakdown tables. */
+const SuccessRateCell: React.FC<{ rate: number; requests: number }> = ({ rate, requests }) => {
+  if (requests === 0) return <Typography variant="body2" color="text.secondary">—</Typography>;
+  const tone = rateTone(rate);
+  return (
+    <Box display="flex" alignItems="center" gap={1}>
+      {/* Fixed, not flexible: the success-rate column is the last one, so a
+          flexible meter stretches across all the table's slack space. */}
+      <Box width={72} flexShrink={0}>
+        <Meter value={rate * 100} tone={tone} height={4} />
+      </Box>
+      <Typography
+        variant="caption"
+        sx={{ fontVariantNumeric: 'tabular-nums', minWidth: 44 }}
+      >
+        {fmtPct(rate)}
+      </Typography>
+    </Box>
+  );
 };
 
 export const UsageStats: React.FC<UsageStatsProps> = ({
@@ -114,18 +133,9 @@ export const UsageStats: React.FC<UsageStatsProps> = ({
   loading,
   userInfo,
 }) => {
-  const theme = useTheme();
+  const chart = useChartTheme();
   const [selectedModel, setSelectedModel] = useState<string>('all');
   const [tab, setTab] = useState<TabKey>('costs');
-
-  // Theme-aware chart chrome — Recharts defaults to #ccc gridlines and #666
-  // tick text, which reads poorly in Backstage's dark theme. Derive grid and
-  // axis colors from the MUI palette so charts adapt to either theme.
-  const gridStroke = theme.palette.divider;
-  const tickFill = theme.palette.text.secondary;
-  const tickStyle = { fontSize: 12, fill: tickFill } as const;
-  const tickStyleSmall = { fontSize: 11, fill: tickFill } as const;
-  const tickStyleTiny = { fontSize: 10, fill: tickFill } as const;
 
   const selectedPreset = useMemo<DatePreset>(() => {
     if (dateRange.start.toDateString() === dateRange.end.toDateString()) return 'today';
@@ -260,45 +270,81 @@ export const UsageStats: React.FC<UsageStatsProps> = ({
   const maxBudget = userInfo?.max_budget ?? 0;
   const totalCumSpend = cumulativeData[cumulativeData.length - 1]?.cumulative ?? 0;
 
+  // Keep the budget reference line inside the plot even when spend is far below it.
+  const cumulativeDomain: any = maxBudget > 0
+    ? [0, (dataMax: number) => Math.max(dataMax, maxBudget) * 1.05]
+    : [0, 'auto'];
+
+  const successTone: Tone = totalRequests === 0 ? 'neutral' : rateTone(overallSuccessRate);
+
+  const metrics = [
+    {
+      label: 'Total spend',
+      value: fmtUsd(usage?.total_spend ?? 0),
+      hint: maxBudget > 0 ? `of ${fmtUsd(maxBudget)} budget` : undefined,
+      tone: 'accent' as const,
+    },
+    {
+      label: 'Requests',
+      value: fmtInt(totalRequests),
+      hint: `${fmtInt(usage?.failed_requests ?? 0)} failed`,
+      tone: 'info' as const,
+    },
+    {
+      label: 'Success rate',
+      value: totalRequests > 0 ? fmtPct(overallSuccessRate) : '—',
+      hint: totalRequests > 0 ? `${fmtInt(usage?.successful_requests ?? 0)} succeeded` : undefined,
+      tone: successTone,
+    },
+    {
+      label: 'Tokens',
+      value: fmtCompact(usage?.total_tokens ?? 0),
+      hint: `${fmtCompact(usage?.prompt_tokens ?? 0)} in · ${fmtCompact(usage?.completion_tokens ?? 0)} out`,
+      tone: 'success' as const,
+    },
+  ];
+
   const renderKeyRows = () => {
     if (loading) {
-      return <TableRow><TableCell colSpan={7}><LinearProgress /></TableCell></TableRow>;
+      return (
+        <TableRow>
+          <TableCell colSpan={7} sx={{ py: 3 }}>
+            <Skeleton variant="rounded" height={80} />
+          </TableCell>
+        </TableRow>
+      );
     }
     if (keyRows.length === 0) {
-      return <TableRow><TableCell colSpan={7} align="center">No key activity</TableCell></TableRow>;
+      return (
+        <TableRow>
+          <TableCell colSpan={7}><EmptyState message="No key activity in this period" /></TableCell>
+        </TableRow>
+      );
     }
     return [...keyRows]
       .sort((a, b) => b.spend - a.spend || b.apiRequests - a.apiRequests)
       .map(r => (
         <TableRow key={r.keyHash}>
           <TableCell>
-            <Typography variant="body2">{r.keyAlias}</Typography>
+            <Typography variant="body2" sx={{ fontWeight: 600 }}>{r.keyAlias}</Typography>
             {r.teamId ? (
               <Typography variant="caption" color="text.secondary">team: {r.teamId}</Typography>
             ) : null}
           </TableCell>
           <TableCell>
             <Box display="flex" gap={0.5} flexWrap="wrap">
-              {r.models.map(m => (
-                <Chip key={m} label={m} size="small" variant="outlined" />
+              {r.models.slice(0, 3).map(m => (
+                <TagChip key={m} label={m} title={m} />
               ))}
+              {r.models.length > 3 && <TagChip label={`+${r.models.length - 3}`} mono={false} />}
             </Box>
           </TableCell>
           <TableCell align="right">{fmtUsd(r.spend)}</TableCell>
           <TableCell align="right">{fmtInt(r.apiRequests)}</TableCell>
-          <TableCell align="right">{fmtInt(r.totalTokens)}</TableCell>
+          <TableCell align="right">{fmtCompact(r.totalTokens)}</TableCell>
           <TableCell align="right">{fmtInt(r.failedRequests)}</TableCell>
           <TableCell>
-            {r.apiRequests > 0 ? (
-              <Box display="flex" alignItems="center" gap={1}>
-                <LinearProgress
-                  variant="determinate"
-                  value={r.successRate * 100}
-                  sx={{ flex: 1, height: 6, borderRadius: 3 }}
-                />
-                <Typography variant="caption">{fmtPct(r.successRate)}</Typography>
-              </Box>
-            ) : '—'}
+            <SuccessRateCell rate={r.successRate} requests={r.apiRequests} />
           </TableCell>
         </TableRow>
       ));
@@ -306,298 +352,307 @@ export const UsageStats: React.FC<UsageStatsProps> = ({
 
   const renderModelRows = () => {
     if (loading) {
-      return <TableRow><TableCell colSpan={8}><LinearProgress /></TableCell></TableRow>;
+      return (
+        <TableRow>
+          <TableCell colSpan={8} sx={{ py: 3 }}>
+            <Skeleton variant="rounded" height={80} />
+          </TableCell>
+        </TableRow>
+      );
     }
     if (modelRows.length === 0) {
-      return <TableRow><TableCell colSpan={8} align="center">No model activity</TableCell></TableRow>;
+      return (
+        <TableRow>
+          <TableCell colSpan={8}><EmptyState message="No model activity in this period" /></TableCell>
+        </TableRow>
+      );
     }
     return [...modelRows]
       .sort((a, b) => b.spend - a.spend || b.totalTokens - a.totalTokens)
       .map(r => (
         <TableRow key={r.model}>
           <TableCell>
-            <Box display="flex" alignItems="center" gap={0.75}>
-              <Box sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: modelColor(r.model), flexShrink: 0 }} />
-              {r.model}
+            <Box display="flex" alignItems="center" gap={1}>
+              <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: chartColor(r.model), flexShrink: 0 }} />
+              <Typography variant="body2" sx={{ fontWeight: 600 }}>{r.model}</Typography>
             </Box>
           </TableCell>
           <TableCell align="right">{fmtUsd(r.spend)}</TableCell>
           <TableCell align="right">{fmtInt(r.apiRequests)}</TableCell>
           <TableCell align="right">{fmtInt(r.successfulRequests)}</TableCell>
           <TableCell align="right">{fmtInt(r.failedRequests)}</TableCell>
-          <TableCell align="right">{fmtInt(r.promptTokens)}</TableCell>
-          <TableCell align="right">{fmtInt(r.completionTokens)}</TableCell>
+          <TableCell align="right">{fmtCompact(r.promptTokens)}</TableCell>
+          <TableCell align="right">{fmtCompact(r.completionTokens)}</TableCell>
           <TableCell>
-            {r.apiRequests > 0 ? (
-              <Box display="flex" alignItems="center" gap={1}>
-                <LinearProgress
-                  variant="determinate"
-                  value={r.successRate * 100}
-                  sx={{ flex: 1, height: 6, borderRadius: 3 }}
-                />
-                <Typography variant="caption">{fmtPct(r.successRate)}</Typography>
-              </Box>
-            ) : '—'}
+            <SuccessRateCell rate={r.successRate} requests={r.apiRequests} />
           </TableCell>
         </TableRow>
       ));
   };
 
+  const periodSelect = (
+    <TextField
+      select
+      size="small"
+      label="Period"
+      value={selectedPreset}
+      onChange={e => handlePresetChange(e.target.value as DatePreset)}
+      sx={{ minWidth: 160 }}
+    >
+      {(Object.keys(PRESET_LABELS) as DatePreset[]).map(p => (
+        <MenuItem key={p} value={p}>{PRESET_LABELS[p]}</MenuItem>
+      ))}
+    </TextField>
+  );
+
   return (
-    <Paper sx={{ p: 2 }}>
-      {/* ── Header ── */}
-      <Box display="flex" justifyContent="space-between" alignItems="center" mb={2} flexWrap="wrap" gap={2}>
-        <Typography variant="h6">Usage Analytics</Typography>
-        <Box display="flex" gap={2} alignItems="center" flexWrap="wrap">
-          <FormControl size="small" sx={{ minWidth: 140 }}>
-            <InputLabel>Period</InputLabel>
-            <Select
-              value={selectedPreset}
-              label="Period"
-              onChange={e => handlePresetChange(e.target.value as DatePreset)}
-            >
-              <MenuItem value="today">Today</MenuItem>
-              <MenuItem value="24h">Last 24h</MenuItem>
-              <MenuItem value="7d">Last 7 days</MenuItem>
-              <MenuItem value="30d">Last 30 days</MenuItem>
-            </Select>
-          </FormControl>
-          {tab === 'models' && (
-            <FormControl size="small" sx={{ minWidth: 180 }}>
-              <InputLabel>Model</InputLabel>
-              <Select
-                value={selectedModel}
-                label="Model"
-                onChange={e => setSelectedModel(e.target.value)}
-              >
-                <MenuItem value="all">All Models</MenuItem>
-                {models.map(m => (
-                  <MenuItem key={m.model_name} value={m.model_name}>
-                    {m.model_name}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-          )}
-        </Box>
+    <SectionCard
+      title="Usage Analytics"
+      subtitle={`${PRESET_LABELS[selectedPreset]} · ${dateRange.start.toLocaleDateString()} – ${dateRange.end.toLocaleDateString()}`}
+      actions={periodSelect}
+    >
+      <MetricStrip metrics={metrics} />
+
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 2,
+          flexWrap: 'wrap',
+          mt: 2.5,
+          mb: 2,
+        }}
+      >
+        <SegmentedControl<TabKey>
+          value={tab}
+          onChange={setTab}
+          options={[
+            { value: 'costs', label: 'Costs' },
+            { value: 'models', label: 'Model Activity' },
+            { value: 'keys', label: 'Key Activity' },
+          ]}
+        />
+        {tab === 'models' && (
+          <TextField
+            select
+            size="small"
+            label="Model"
+            value={selectedModel}
+            onChange={e => setSelectedModel(e.target.value)}
+            sx={{ minWidth: 220 }}
+          >
+            <MenuItem value="all">All models</MenuItem>
+            {models.map(m => (
+              <MenuItem key={m.model_name} value={m.model_name}>{m.model_name}</MenuItem>
+            ))}
+          </TextField>
+        )}
       </Box>
-
-      {/* ── KPI row ── */}
-      <Grid container spacing={2} sx={{ mb: 2 }}>
-        <Grid item xs={6} sm={3}>
-          {loading ? <ChartSkeleton height={80} /> : <KpiCard label="Total Spend" value={fmtUsd(usage?.total_spend ?? 0)} />}
-        </Grid>
-        <Grid item xs={6} sm={3}>
-          {loading ? <ChartSkeleton height={80} /> : (
-            <KpiCard label="Total Requests" value={fmtInt(totalRequests)} hint={`${fmtInt(usage?.failed_requests ?? 0)} failed`} />
-          )}
-        </Grid>
-        <Grid item xs={6} sm={3}>
-          {loading ? <ChartSkeleton height={80} /> : (
-            <KpiCard label="Success Rate" value={totalRequests > 0 ? fmtPct(overallSuccessRate) : '—'} />
-          )}
-        </Grid>
-        <Grid item xs={6} sm={3}>
-          {loading ? <ChartSkeleton height={80} /> : (
-            <KpiCard
-              label="Total Tokens"
-              value={fmtInt(usage?.total_tokens ?? 0)}
-              hint={`${fmtInt(usage?.prompt_tokens ?? 0)} in · ${fmtInt(usage?.completion_tokens ?? 0)} out`}
-            />
-          )}
-        </Grid>
-      </Grid>
-
-      <Tabs value={tab} onChange={(_, v) => setTab(v as TabKey)} sx={{ mb: 2 }}>
-        <Tab value="costs" label="Costs" />
-        <Tab value="models" label="Model Activity" />
-        <Tab value="keys" label="Key Activity" />
-      </Tabs>
 
       {/* ══ COSTS TAB ════════════════════════════════════════════════════════ */}
       {tab === 'costs' && (
-        <Grid container spacing={3}>
-          {/* Daily Spend by Model */}
-          <Grid item xs={12} md={6}>
-            <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-              Daily Spend by Model
-            </Typography>
-            <ChartOrFallback loading={loading} empty={modelSpendByDate.length === 0}>
-              <Box height={260}>
+        <Grid container spacing={2}>
+          {/* Daily spend by model — the headline chart, given full width so the
+              stack and its colour key stay legible with up to seven series. */}
+          <Grid item xs={12}>
+            <ChartCard title="Daily spend by model" height={260}>
+              <ChartOrFallback loading={loading} empty={modelSpendByDate.length === 0} height={260}>
                 <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={modelSpendByDate}>
-                    <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
-                    <XAxis dataKey="date" tick={tickStyle} />
-                    <YAxis tick={tickStyle} tickFormatter={v => `$${v.toFixed(2)}`} />
-                    <Tooltip formatter={(v: number) => [`$${v.toFixed(4)}`, undefined]} />
-                    <Legend />
+                  <AreaChart data={modelSpendByDate} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+                    <CartesianGrid {...chart.grid} />
+                    <XAxis dataKey="date" tickFormatter={fmtDateShort} {...chart.axis} />
+                    <YAxis tickFormatter={fmtUsdCompact} width={56} {...chart.axis} />
+                    <Tooltip
+                      cursor={chart.cursor}
+                      content={<ChartTooltip valueFormatter={fmtUsd} hideZero />}
+                    />
                     {topSpendModels.map(m => (
                       <Area
                         key={m}
                         type="monotone"
                         dataKey={m}
                         stackId="spend"
-                        stroke={modelColor(m)}
-                        fill={modelColor(m)}
-                        fillOpacity={0.6}
+                        stroke={chartColor(m)}
+                        strokeWidth={1.5}
+                        fill={chartColor(m)}
+                        fillOpacity={0.28}
                       />
                     ))}
                   </AreaChart>
                 </ResponsiveContainer>
-              </Box>
-            </ChartOrFallback>
+              </ChartOrFallback>
+              {!loading && topSpendModels.length > 0 && (
+                <SeriesLegend series={topSpendModels.map(m => ({ name: m, color: chartColor(m) }))} />
+              )}
+            </ChartCard>
           </Grid>
 
-          {/* Token Usage Trend */}
           <Grid item xs={12} md={6}>
-            <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-              Daily Token Usage
-            </Typography>
-            <ChartOrFallback loading={loading} empty={dailyData.length === 0}>
-              <Box height={260}>
+            <ChartCard title="Daily token usage">
+              <ChartOrFallback loading={loading} empty={dailyData.length === 0}>
                 <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={dailyData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
-                    <XAxis dataKey="date" tick={tickStyle} />
-                    <YAxis tick={tickStyle} tickFormatter={fmtInt} />
-                    <Tooltip formatter={(v: number) => [fmtInt(v), undefined]} />
-                    <Legend />
-                    <Area type="monotone" dataKey="promptTokens" name="Input (prompt)" stackId="tok" stroke="#8884d8" fill="#8884d8" fillOpacity={0.5} />
-                    <Area type="monotone" dataKey="completionTokens" name="Output (completion)" stackId="tok" stroke="#82ca9d" fill="#82ca9d" fillOpacity={0.5} />
+                  <AreaChart data={dailyData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+                    <CartesianGrid {...chart.grid} />
+                    <XAxis dataKey="date" tickFormatter={fmtDateShort} {...chart.axis} />
+                    <YAxis tickFormatter={fmtCompact} width={48} {...chart.axis} />
+                    <Tooltip cursor={chart.cursor} content={<ChartTooltip valueFormatter={fmtInt} />} />
+                    <Legend {...chart.legend} />
+                    <Area type="monotone" dataKey="promptTokens" name="Input" stackId="tok" stroke={SERIES.input} strokeWidth={1.5} fill={SERIES.input} fillOpacity={0.25} />
+                    <Area type="monotone" dataKey="completionTokens" name="Output" stackId="tok" stroke={SERIES.output} strokeWidth={1.5} fill={SERIES.output} fillOpacity={0.25} />
                   </AreaChart>
                 </ResponsiveContainer>
-              </Box>
-            </ChartOrFallback>
+              </ChartOrFallback>
+            </ChartCard>
           </Grid>
 
-          {/* Daily Requests */}
           <Grid item xs={12} md={6}>
-            <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-              Daily Requests
-            </Typography>
-            <ChartOrFallback loading={loading} empty={dailyData.length === 0}>
-              <Box height={260}>
+            <ChartCard title="Daily requests">
+              <ChartOrFallback loading={loading} empty={dailyData.length === 0}>
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={dailyData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
-                    <XAxis dataKey="date" tick={tickStyle} />
-                    <YAxis tick={tickStyle} />
-                    <Tooltip />
-                    <Legend />
-                    <Bar dataKey="successfulRequests" name="Successful" fill="#82ca9d" stackId="r" />
-                    <Bar dataKey="failedRequests" name="Failed" fill="#e57373" stackId="r" />
+                  <BarChart data={dailyData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }} barCategoryGap="30%">
+                    <CartesianGrid {...chart.grid} />
+                    <XAxis dataKey="date" tickFormatter={fmtDateShort} {...chart.axis} />
+                    <YAxis tickFormatter={fmtCompact} width={48} {...chart.axis} />
+                    <Tooltip cursor={chart.cursor} content={<ChartTooltip valueFormatter={fmtInt} />} />
+                    <Legend {...chart.legend} />
+                    <Bar dataKey="successfulRequests" name="Successful" fill={SERIES.success} stackId="r" />
+                    <Bar dataKey="failedRequests" name="Failed" fill={SERIES.failure} stackId="r" radius={[3, 3, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
-              </Box>
-            </ChartOrFallback>
+              </ChartOrFallback>
+            </ChartCard>
           </Grid>
 
-          {/* Success Rate Trend */}
           <Grid item xs={12} md={6}>
-            <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-              Daily Success Rate
-            </Typography>
-            <ChartOrFallback loading={loading} empty={successRateData.length === 0}>
-              <Box height={260}>
+            <ChartCard title="Daily success rate">
+              <ChartOrFallback loading={loading} empty={successRateData.length === 0}>
                 <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={successRateData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
-                    <XAxis dataKey="date" tick={tickStyle} />
-                    <YAxis domain={[0, 100]} tick={tickStyle} tickFormatter={v => `${v}%`} />
-                    <Tooltip formatter={(v: number) => [`${v}%`, 'Success rate']} />
-                    <ReferenceLine y={100} stroke="#82ca9d" strokeDasharray="4 2" />
-                    <Line type="monotone" dataKey="successRate" name="Success rate" stroke="#8884d8" dot={{ r: 3 }} />
+                  <LineChart data={successRateData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+                    <CartesianGrid {...chart.grid} />
+                    <XAxis dataKey="date" tickFormatter={fmtDateShort} {...chart.axis} />
+                    <YAxis domain={[0, 100]} tickFormatter={v => `${v}%`} width={44} {...chart.axis} />
+                    <Tooltip
+                      cursor={chart.cursor}
+                      content={<ChartTooltip valueFormatter={(v: number) => `${v}%`} />}
+                    />
+                    <ReferenceLine y={100} stroke={SERIES.success} strokeDasharray="4 4" strokeOpacity={0.5} />
+                    <Line
+                      type="monotone"
+                      dataKey="successRate"
+                      name="Success rate"
+                      stroke={SERIES.input}
+                      strokeWidth={2}
+                      dot={{ r: 2.5, strokeWidth: 0, fill: SERIES.input }}
+                      activeDot={{ r: 4 }}
+                    />
                   </LineChart>
                 </ResponsiveContainer>
-              </Box>
-            </ChartOrFallback>
+              </ChartOrFallback>
+            </ChartCard>
           </Grid>
 
-          {/* Cumulative Spend — only when max_budget is set */}
-          {(maxBudget > 0 || cumulativeData.length > 0) && (
-            <Grid item xs={12}>
-              <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                Cumulative Spend{maxBudget > 0 ? ` vs Budget (${fmtUsd(maxBudget)})` : ''}
-                {maxBudget > 0 && (
-                  <Typography component="span" variant="caption" color="text.secondary" sx={{ ml: 1 }}>
-                    {fmtUsd(totalCumSpend)} used · {fmtUsd(Math.max(0, maxBudget - totalCumSpend))} remaining
-                  </Typography>
-                )}
-              </Typography>
-              <ChartOrFallback loading={loading} empty={cumulativeData.length === 0} height={180}>
-                <Box height={180}>
-                  <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={cumulativeData}>
-                      <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
-                      <XAxis dataKey="date" tick={tickStyle} />
-                      <YAxis tick={tickStyle} tickFormatter={v => `$${v.toFixed(2)}`} />
-                      <Tooltip formatter={(v: number) => [`$${v.toFixed(4)}`, 'Cumulative spend']} />
-                      {maxBudget > 0 && (
-                        <ReferenceLine y={maxBudget} stroke="#e57373" strokeDasharray="6 3" label={{ value: `Budget ${fmtUsd(maxBudget)}`, position: 'insideTopRight', fontSize: 11 }} />
-                      )}
-                      <Area type="monotone" dataKey="cumulative" name="Cumulative spend" stroke="#ffc658" fill="#ffc658" fillOpacity={0.3} />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                </Box>
+          <Grid item xs={12} md={6}>
+            <ChartCard
+              title={maxBudget > 0 ? 'Cumulative spend vs budget' : 'Cumulative spend'}
+              meta={
+                maxBudget > 0
+                  ? `${fmtUsd(totalCumSpend)} used · ${fmtUsd(Math.max(0, maxBudget - totalCumSpend))} left`
+                  : undefined
+              }
+            >
+              <ChartOrFallback loading={loading} empty={cumulativeData.length === 0}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={cumulativeData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+                    <CartesianGrid {...chart.grid} />
+                    <XAxis dataKey="date" tickFormatter={fmtDateShort} {...chart.axis} />
+                    <YAxis
+                      tickFormatter={fmtUsdCompact}
+                      width={56}
+                      domain={cumulativeDomain}
+                      {...chart.axis}
+                    />
+                    <Tooltip
+                      cursor={chart.cursor}
+                      content={<ChartTooltip valueFormatter={fmtUsd} />}
+                    />
+                    {maxBudget > 0 && (
+                      <ReferenceLine
+                        y={maxBudget}
+                        stroke={SERIES.budget}
+                        strokeDasharray="5 4"
+                        label={{ value: `Budget ${fmtUsd(maxBudget)}`, position: 'insideTopRight', fontSize: 10, fill: SERIES.budget }}
+                      />
+                    )}
+                    <Area
+                      type="monotone"
+                      dataKey="cumulative"
+                      name="Cumulative spend"
+                      stroke={SERIES.spend}
+                      strokeWidth={2}
+                      fill={SERIES.spend}
+                      fillOpacity={0.18}
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
               </ChartOrFallback>
-            </Grid>
-          )}
+            </ChartCard>
+          </Grid>
         </Grid>
       )}
 
       {/* ══ MODELS TAB ═══════════════════════════════════════════════════════ */}
       {tab === 'models' && (
-        <Grid container spacing={3}>
-          {/* Top models spend horizontal bar */}
-          <Grid item xs={12}>
-            <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-              Spend by Model
-            </Typography>
-            <ChartOrFallback loading={loading} empty={topModelSpendBars.length === 0}>
-              <Box height={Math.max(200, topModelSpendBars.length * 36)}>
+        <Grid container spacing={2}>
+          <Grid item xs={12} md={6}>
+            <ChartCard title="Spend by model" height={Math.max(200, topModelSpendBars.length * 34)}>
+              <ChartOrFallback
+                loading={loading}
+                empty={topModelSpendBars.length === 0}
+                height={Math.max(200, topModelSpendBars.length * 34)}
+              >
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={topModelSpendBars} layout="vertical" margin={{ left: 20 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
-                    <XAxis type="number" tick={tickStyle} tickFormatter={v => `$${v.toFixed(2)}`} />
-                    <YAxis type="category" dataKey="model" tick={tickStyleSmall} width={200} />
-                    <Tooltip formatter={(v: number) => [fmtUsd(v), 'Spend']} />
-                    <Bar dataKey="spend" name="Spend" radius={[0, 4, 4, 0]}>
+                  <BarChart data={topModelSpendBars} layout="vertical" margin={{ top: 0, right: 12, left: 0, bottom: 0 }}>
+                    <CartesianGrid {...chart.grid} vertical horizontal={false} />
+                    <XAxis type="number" tickFormatter={fmtUsdCompact} {...chart.axis} />
+                    <YAxis type="category" dataKey="model" width={170} {...chart.axis} tick={{ fontSize: 10.5, fill: chart.axis.tick.fill }} />
+                    <Tooltip cursor={chart.cursor} content={<ChartTooltip valueFormatter={fmtUsd} labelFormatter={l => l} />} />
+                    <Bar dataKey="spend" name="Spend" radius={[0, 3, 3, 0]} barSize={14}>
                       {topModelSpendBars.map(r => (
-                        <rect key={r.model} fill={modelColor(r.model)} />
+                        <Cell key={r.model} fill={chartColor(r.model)} />
                       ))}
                     </Bar>
                   </BarChart>
                 </ResponsiveContainer>
-              </Box>
-            </ChartOrFallback>
+              </ChartOrFallback>
+            </ChartCard>
           </Grid>
 
-          {/* Tokens by model stacked bar */}
-          <Grid item xs={12}>
-            <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-              Tokens by Model
-            </Typography>
-            <ChartOrFallback loading={loading} empty={modelRows.length === 0}>
-              <Box height={260}>
+          <Grid item xs={12} md={6}>
+            <ChartCard title="Tokens by model" height={Math.max(200, topModelSpendBars.length * 34)}>
+              <ChartOrFallback
+                loading={loading}
+                empty={modelRows.length === 0}
+                height={Math.max(200, topModelSpendBars.length * 34)}
+              >
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={modelRows}>
-                    <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
-                    <XAxis dataKey="model" tick={tickStyleTiny} interval={0} angle={-15} textAnchor="end" height={60} />
-                    <YAxis tick={tickStyle} />
-                    <Tooltip />
-                    <Legend />
-                    <Bar dataKey="promptTokens" name="Prompt" fill="#8884d8" stackId="t" />
-                    <Bar dataKey="completionTokens" name="Completion" fill="#82ca9d" stackId="t" />
+                  <BarChart data={topModelSpendBars} layout="vertical" margin={{ top: 0, right: 12, left: 0, bottom: 0 }}>
+                    <CartesianGrid {...chart.grid} vertical horizontal={false} />
+                    <XAxis type="number" tickFormatter={fmtCompact} {...chart.axis} />
+                    <YAxis type="category" dataKey="model" width={170} {...chart.axis} tick={{ fontSize: 10.5, fill: chart.axis.tick.fill }} />
+                    <Tooltip cursor={chart.cursor} content={<ChartTooltip valueFormatter={fmtInt} labelFormatter={l => l} />} />
+                    <Legend {...chart.legend} />
+                    <Bar dataKey="promptTokens" name="Input" fill={SERIES.input} stackId="t" barSize={14} />
+                    <Bar dataKey="completionTokens" name="Output" fill={SERIES.output} stackId="t" barSize={14} radius={[0, 3, 3, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
-              </Box>
-            </ChartOrFallback>
+              </ChartOrFallback>
+            </ChartCard>
           </Grid>
 
-          {/* Model table */}
           <Grid item xs={12}>
-            <TableContainer component={Paper} variant="outlined">
-              <Table size="small">
+            <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 2 }}>
+              <Table size="small" sx={dataTableSx}>
                 <TableHead>
                   <TableRow>
                     <TableCell>Model</TableCell>
@@ -605,9 +660,9 @@ export const UsageStats: React.FC<UsageStatsProps> = ({
                     <TableCell align="right">Requests</TableCell>
                     <TableCell align="right">Success</TableCell>
                     <TableCell align="right">Failed</TableCell>
-                    <TableCell align="right">Prompt</TableCell>
-                    <TableCell align="right">Completion</TableCell>
-                    <TableCell sx={{ minWidth: 120 }}>Success rate</TableCell>
+                    <TableCell align="right">Input</TableCell>
+                    <TableCell align="right">Output</TableCell>
+                    <TableCell sx={{ width: 160 }}>Success rate</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -621,33 +676,32 @@ export const UsageStats: React.FC<UsageStatsProps> = ({
 
       {/* ══ KEYS TAB ══════════════════════════════════════════════════════════ */}
       {tab === 'keys' && (
-        <Grid container spacing={3}>
-          {/* Top keys spend horizontal bar */}
+        <Grid container spacing={2}>
           {(loading || topKeySpendBars.length > 0) && (
             <Grid item xs={12}>
-              <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-                Spend by Key
-              </Typography>
-              {loading ? <ChartSkeleton /> : (
-                <Box height={Math.max(160, topKeySpendBars.length * 36)}>
+              <ChartCard title="Spend by key" height={Math.max(160, topKeySpendBars.length * 32)}>
+                <ChartOrFallback
+                  loading={loading}
+                  empty={topKeySpendBars.length === 0}
+                  height={Math.max(160, topKeySpendBars.length * 32)}
+                >
                   <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={topKeySpendBars} layout="vertical" margin={{ left: 20 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
-                      <XAxis type="number" tick={tickStyle} tickFormatter={v => `$${v.toFixed(2)}`} />
-                      <YAxis type="category" dataKey="keyAlias" tick={tickStyleSmall} width={160} />
-                      <Tooltip formatter={(v: number) => [fmtUsd(v), 'Spend']} />
-                      <Bar dataKey="spend" name="Spend" fill="#8884d8" radius={[0, 4, 4, 0]} />
+                    <BarChart data={topKeySpendBars} layout="vertical" margin={{ top: 0, right: 12, left: 0, bottom: 0 }}>
+                      <CartesianGrid {...chart.grid} vertical horizontal={false} />
+                      <XAxis type="number" tickFormatter={fmtUsdCompact} {...chart.axis} />
+                      <YAxis type="category" dataKey="keyAlias" width={160} {...chart.axis} tick={{ fontSize: 10.5, fill: chart.axis.tick.fill }} />
+                      <Tooltip cursor={chart.cursor} content={<ChartTooltip valueFormatter={fmtUsd} labelFormatter={l => l} />} />
+                      <Bar dataKey="spend" name="Spend" fill={SERIES.input} radius={[0, 3, 3, 0]} barSize={14} />
                     </BarChart>
                   </ResponsiveContainer>
-                </Box>
-              )}
+                </ChartOrFallback>
+              </ChartCard>
             </Grid>
           )}
 
-          {/* Keys table */}
           <Grid item xs={12}>
-            <TableContainer component={Paper} variant="outlined">
-              <Table size="small">
+            <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 2 }}>
+              <Table size="small" sx={dataTableSx}>
                 <TableHead>
                   <TableRow>
                     <TableCell>Key</TableCell>
@@ -656,7 +710,7 @@ export const UsageStats: React.FC<UsageStatsProps> = ({
                     <TableCell align="right">Requests</TableCell>
                     <TableCell align="right">Tokens</TableCell>
                     <TableCell align="right">Failed</TableCell>
-                    <TableCell sx={{ minWidth: 120 }}>Success rate</TableCell>
+                    <TableCell sx={{ width: 160 }}>Success rate</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -667,6 +721,6 @@ export const UsageStats: React.FC<UsageStatsProps> = ({
           </Grid>
         </Grid>
       )}
-    </Paper>
+    </SectionCard>
   );
 };

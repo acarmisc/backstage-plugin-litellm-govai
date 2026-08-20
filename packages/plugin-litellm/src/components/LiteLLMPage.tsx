@@ -268,28 +268,37 @@ export const LiteLLMPage: React.FC = () => {
     );
   }
 
-  return (
-    <Box p={3}>
-      <Box mb={2}>
-        <DashboardHeader
-          userInfo={userInfo}
-          teams={teams ?? []}
-          keys={keys ?? []}
-          loading={userLoading || teamsLoading}
-          onGenerateKeyClick={() => setGenerateDialogOpen(true)}
-        />
-      </Box>
+  const pageTabs = (
+    <Tabs
+      value={activeTab}
+      onChange={(_, v) => setActiveTab(v)}
+      variant="scrollable"
+      scrollButtons="auto"
+      // Substring class matching so these survive a host MUI classname prefix
+      // (Backstage renders `v5-MuiTabs-indicator`, not `MuiTabs-indicator`).
+      sx={{
+        minHeight: 44,
+        '& [class*="MuiTabs-indicator"]': { height: 2, borderRadius: '2px 2px 0 0' },
+        '& [class*="MuiTab-root"]': { minHeight: 44, textTransform: 'none', fontSize: 14 },
+      }}
+    >
+      <Tab label="Overview" value="overview" />
+      <Tab label="Keys" value="keys" />
+      <Tab label="Teams" value="teams" />
+      {userInfo.can_view_audit && <Tab label="Audit Log" value="audit" />}
+    </Tabs>
+  );
 
-      <Tabs
-        value={activeTab}
-        onChange={(_, v) => setActiveTab(v)}
-        sx={{ mb: 2, borderBottom: 1, borderColor: 'divider' }}
-      >
-        <Tab label="Overview" value="overview" />
-        <Tab label="Keys" value="keys" />
-        <Tab label="Teams" value="teams" />
-        {userInfo.can_view_audit && <Tab label="Audit Log" value="audit" />}
-      </Tabs>
+  return (
+    <Box sx={{ p: 3, display: 'flex', flexDirection: 'column', gap: 2 }}>
+      <DashboardHeader
+        userInfo={userInfo}
+        teams={teams ?? []}
+        keys={keys ?? []}
+        loading={userLoading || teamsLoading}
+        onGenerateKeyClick={() => setGenerateDialogOpen(true)}
+        tabs={pageTabs}
+      />
 
       {activeTab === 'overview' && (
         <UsageStats

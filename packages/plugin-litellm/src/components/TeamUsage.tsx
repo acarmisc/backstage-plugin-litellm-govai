@@ -2,10 +2,8 @@ import React, { useState } from 'react';
 import Paper from '@mui/material/Paper';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
-import LinearProgress from '@mui/material/LinearProgress';
-import Chip from '@mui/material/Chip';
+import Skeleton from '@mui/material/Skeleton';
 import Divider from '@mui/material/Divider';
-import Stack from '@mui/material/Stack';
 import Table from '@mui/material/Table';
 import TableBody from '@mui/material/TableBody';
 import TableCell from '@mui/material/TableCell';
@@ -15,8 +13,8 @@ import TableContainer from '@mui/material/TableContainer';
 import Collapse from '@mui/material/Collapse';
 import IconButton from '@mui/material/IconButton';
 import CircularProgress from '@mui/material/CircularProgress';
-import { useTheme } from '@mui/material/styles';
-import { ExpandMore, ExpandLess, Group, Speed, Memory } from '@mui/icons-material';
+import { alpha } from '@mui/material/styles';
+import { ExpandMore, Group } from '@mui/icons-material';
 import {
   AreaChart,
   Area,
@@ -27,23 +25,29 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import { TeamInfo, UsageMetrics } from '../types';
+import {
+  ChartTooltip,
+  EmptyState,
+  Meter,
+  SectionCard,
+  Stat,
+  StatusPill,
+  TagChip,
+  Tone,
+  dataTableSx,
+  fmtDateShort,
+  fmtUsdCompact,
+  useChartTheme,
+  SERIES,
+} from './ui';
 
-function budgetBarColor(isOver: boolean, isNear: boolean): 'error' | 'warning' | 'primary' {
-  if (isOver) return 'error';
+function budgetTone(isOver: boolean, isNear: boolean): Tone {
+  if (isOver) return 'danger';
   if (isNear) return 'warning';
-  return 'primary';
+  return 'accent';
 }
 
-const Stat: React.FC<{ label: string; value: string }> = ({ label, value }) => (
-  <Box>
-    <Typography variant="caption" color="text.secondary" display="block">
-      {label}
-    </Typography>
-    <Typography variant="body2" fontWeight={600} sx={{ fontFamily: 'monospace' }}>
-      {value}
-    </Typography>
-  </Box>
-);
+const fmtUsd2 = (n: number) => `$${(n ?? 0).toFixed(2)}`;
 
 interface TeamCardProps {
   team: TeamInfo;
@@ -53,9 +57,7 @@ interface TeamCardProps {
 
 const TeamCard: React.FC<TeamCardProps> = ({ team, usage, usageLoading }) => {
   const [expanded, setExpanded] = useState(false);
-  const theme = useTheme();
-  const gridStroke = theme.palette.divider;
-  const tickFill = theme.palette.text.secondary;
+  const chart = useChartTheme();
 
   const budget = team.max_budget ?? 0;
   const spend = team.spend ?? 0;
@@ -68,151 +70,168 @@ const TeamCard: React.FC<TeamCardProps> = ({ team, usage, usageLoading }) => {
   const renderDailySpendSection = () => {
     if (usageLoading) {
       return (
-        <Box display="flex" justifyContent="center" p={2}>
-          <CircularProgress size={24} />
+        <Box display="flex" justifyContent="center" py={3}>
+          <CircularProgress size={22} />
         </Box>
       );
     }
-    if (dailyData.length > 0) {
-      return (
-        <>
-          <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-            Daily Spend
-          </Typography>
-          <Box height={160} mb={2}>
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={dailyData}>
-                <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
-                <XAxis dataKey="date" tick={{ fontSize: 11, fill: tickFill }} />
-                <YAxis tick={{ fontSize: 11, fill: tickFill }} tickFormatter={v => `$${v.toFixed(2)}`} />
-                <Tooltip formatter={(v: number) => [`$${v.toFixed(4)}`, 'Spend']} />
-                <Area type="monotone" dataKey="spend" stroke="#8884d8" fill="#8884d8" fillOpacity={0.3} />
-              </AreaChart>
-            </ResponsiveContainer>
-          </Box>
-          <Divider sx={{ mb: 2 }} />
-        </>
-      );
-    }
-    return null;
+    if (dailyData.length === 0) return null;
+    return (
+      <Box mb={2.5}>
+        <Typography
+          variant="caption"
+          color="text.secondary"
+          sx={{ display: 'block', fontSize: 11, fontWeight: 700, letterSpacing: '0.07em', textTransform: 'uppercase', mb: 1 }}
+        >
+          Daily spend
+        </Typography>
+        <Box height={150}>
+          <ResponsiveContainer width="100%" height="100%">
+            <AreaChart data={dailyData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+              <CartesianGrid {...chart.grid} />
+              <XAxis dataKey="date" tickFormatter={fmtDateShort} {...chart.axis} />
+              <YAxis tickFormatter={fmtUsdCompact} width={52} {...chart.axis} />
+              <Tooltip
+                cursor={chart.cursor}
+                content={<ChartTooltip valueFormatter={v => `$${v.toFixed(4)}`} />}
+              />
+              <Area
+                type="monotone"
+                dataKey="spend"
+                name="Spend"
+                stroke={SERIES.spend}
+                strokeWidth={2}
+                fill={SERIES.spend}
+                fillOpacity={0.18}
+              />
+            </AreaChart>
+          </ResponsiveContainer>
+        </Box>
+      </Box>
+    );
   };
 
+  const sectionLabel = (label: string) => (
+    <Typography
+      variant="caption"
+      color="text.secondary"
+      sx={{ display: 'block', fontSize: 11, fontWeight: 700, letterSpacing: '0.07em', textTransform: 'uppercase', mb: 1 }}
+    >
+      {label}
+    </Typography>
+  );
+
   return (
-    <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
-      <Box display="flex" alignItems="center" gap={1}>
-        <Group color="action" />
-        <Box flexGrow={1}>
-          <Typography variant="subtitle1" fontWeight={600}>
+    <Paper variant="outlined" sx={{ borderRadius: 2, p: 2.5 }}>
+      <Box display="flex" alignItems="center" gap={1.5}>
+        <Box
+          sx={theme => ({
+            width: 36,
+            height: 36,
+            borderRadius: 1.5,
+            flexShrink: 0,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            bgcolor: alpha(theme.palette.primary.main, 0.1),
+            color: theme.palette.primary.main,
+          })}
+        >
+          <Group fontSize="small" />
+        </Box>
+        <Box flexGrow={1} minWidth={0}>
+          <Typography variant="subtitle1" sx={{ fontWeight: 600, lineHeight: 1.3 }}>
             {team.team_alias || 'Untitled team'}
           </Typography>
-          <Typography variant="caption" color="text.secondary" sx={{ fontFamily: 'monospace' }}>
+          <Typography
+            variant="caption"
+            color="text.secondary"
+            sx={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 11 }}
+          >
             {team.team_id}
           </Typography>
         </Box>
-        <IconButton size="small" onClick={() => setExpanded(e => !e)} aria-label="toggle details">
-          {expanded ? <ExpandLess /> : <ExpandMore />}
+        {isOver && <StatusPill label="Over budget" tone="danger" />}
+        {isNear && <StatusPill label="Near limit" tone="warning" />}
+        <IconButton
+          size="small"
+          onClick={() => setExpanded(e => !e)}
+          aria-label={expanded ? 'Hide team details' : 'Show team details'}
+          aria-expanded={expanded}
+          sx={theme => ({
+            color: theme.palette.text.secondary,
+            transform: expanded ? 'rotate(180deg)' : 'none',
+            transition: theme.transitions.create('transform'),
+          })}
+        >
+          <ExpandMore />
         </IconButton>
       </Box>
 
-      <Stack direction="row" spacing={3} mt={1.5} flexWrap="wrap" useFlexGap gap={1.5}>
-        <Stat
-          label="Members"
-          value={
-            team.members_with_roles?.length
-              ? String(team.members_with_roles.length)
-              : '—'
-          }
-        />
-        <Stat
-          label="Models"
-          value={
-            team.models?.length ? String(team.models.length) : 'All'
-          }
-        />
-        <Stat
-          label="Budget"
-          value={budget > 0 ? `$${budget.toFixed(2)}` : 'Unlimited'}
-        />
-        <Stat
-          label="Spend"
-          value={`$${spend.toFixed(2)}`}
-        />
-        <Stat
-          label="TPM"
-          value={typeof team.tpm_limit === 'number' && team.tpm_limit > 0 ? String(team.tpm_limit) : '—'}
-        />
-        <Stat
-          label="RPM"
-          value={typeof team.rpm_limit === 'number' && team.rpm_limit > 0 ? String(team.rpm_limit) : '—'}
-        />
-      </Stack>
+      {/* Fixed-track grid, capped in width, so the six stats line up across
+          every team card instead of stretching to fill the row. */}
+      <Box
+        sx={{
+          display: 'grid',
+          gridTemplateColumns: { xs: 'repeat(3, minmax(0, 1fr))', sm: 'repeat(6, minmax(0, 1fr))' },
+          gap: 2,
+          mt: 2.5,
+          maxWidth: 640,
+        }}
+      >
+        <Stat label="Members" value={team.members_with_roles?.length ?? '—'} />
+        <Stat label="Models" value={team.models?.length ? team.models.length : 'All'} />
+        <Stat label="Budget" value={budget > 0 ? fmtUsd2(budget) : 'Unlimited'} />
+        <Stat label="Spend" value={fmtUsd2(spend)} />
+        <Stat label="TPM" value={team.tpm_limit && team.tpm_limit > 0 ? team.tpm_limit.toLocaleString() : '—'} />
+        <Stat label="RPM" value={team.rpm_limit && team.rpm_limit > 0 ? team.rpm_limit.toLocaleString() : '—'} />
+      </Box>
 
       {budget > 0 && (
-        <Box mt={1.5}>
-          <Box display="flex" justifyContent="space-between" mb={0.5}>
-            <Typography variant="body2">
-              ${spend.toFixed(2)} / ${budget.toFixed(2)}
+        <Box mt={2} maxWidth={640}>
+          <Box display="flex" justifyContent="space-between" alignItems="baseline" mb={0.75}>
+            <Typography variant="caption" color="text.secondary" sx={{ fontVariantNumeric: 'tabular-nums' }}>
+              {fmtUsd2(spend)} of {fmtUsd2(budget)}
             </Typography>
-            {isOver && <Chip label="Over Budget" size="small" color="error" />}
-            {isNear && <Chip label="Near Limit" size="small" color="warning" />}
+            <Typography variant="caption" color="text.secondary" sx={{ fontVariantNumeric: 'tabular-nums' }}>
+              {budgetPct.toFixed(0)}%
+            </Typography>
           </Box>
-          <LinearProgress
-            variant="determinate"
-            value={budgetPct}
-            color={budgetBarColor(isOver, isNear)}
-            sx={{ height: 6, borderRadius: 1 }}
-          />
+          <Meter value={budgetPct} tone={budgetTone(isOver, isNear)} height={5} />
         </Box>
       )}
 
-      <Collapse in={expanded}>
-        <Box mt={2}>
-          <Box display="flex" alignItems="center" gap={1} mb={1}>
-            <Speed fontSize="small" color="action" />
-            <Typography variant="subtitle2" color="text.secondary">
-              Rate limits
-            </Typography>
-          </Box>
-          <Stack direction="row" spacing={3} flexWrap="wrap" useFlexGap gap={1.5} mb={2}>
-            <Stat label="TPM limit" value={typeof team.tpm_limit === 'number' && team.tpm_limit > 0 ? String(team.tpm_limit) : 'Unlimited'} />
-            <Stat label="RPM limit" value={typeof team.rpm_limit === 'number' && team.rpm_limit > 0 ? String(team.rpm_limit) : 'Unlimited'} />
-            <Stat label="Max budget" value={budget > 0 ? `$${budget.toFixed(2)}` : 'Unlimited'} />
-          </Stack>
+      <Collapse in={expanded} unmountOnExit>
+        <Divider sx={{ my: 2.5 }} />
 
-          <Divider sx={{ mb: 2 }} />
-
-          <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-            Models
-          </Typography>
+        <Box mb={2.5}>
+          {sectionLabel('Models')}
           {team.models?.length ? (
-            <Box display="flex" gap={0.5} flexWrap="wrap" mb={2}>
+            <Box display="flex" gap={0.5} flexWrap="wrap">
               {team.models.map(m => (
-                <Chip key={m} label={m} size="small" variant="outlined" />
+                <TagChip key={m} label={m} title={m} />
               ))}
             </Box>
           ) : (
-            <Typography variant="body2" color="text.secondary" mb={2}>
-              All models allowed
-            </Typography>
+            <Typography variant="body2" color="text.secondary">All models allowed</Typography>
           )}
+        </Box>
 
-          <Divider sx={{ mb: 2 }} />
+        {renderDailySpendSection()}
 
-          {renderDailySpendSection()}
-
-          <Box display="flex" alignItems="center" gap={1} mb={1}>
-            <Memory fontSize="small" color="action" />
-            <Typography variant="subtitle2" color="text.secondary">
-              Members
-            </Typography>
-          </Box>
+        <Box>
+          {sectionLabel('Members')}
           {team.members_with_roles?.length ? (
-            <TableContainer>
-              <Table size="small">
+            <TableContainer
+              component={Paper}
+              variant="outlined"
+              sx={{ borderRadius: 1.5 }}
+            >
+              <Table size="small" sx={dataTableSx}>
                 <TableHead>
                   <TableRow>
                     <TableCell>User</TableCell>
-                    <TableCell>Role</TableCell>
+                    <TableCell align="right">Role</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -225,22 +244,25 @@ const TeamCard: React.FC<TeamCardProps> = ({ team, usage, usageLoading }) => {
                             <Typography
                               variant="caption"
                               color="text.secondary"
-                              sx={{ fontFamily: 'monospace' }}
+                              sx={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 11 }}
                             >
                               {m.user_id}
                             </Typography>
                           </>
                         ) : (
-                          <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>
+                          <Typography
+                            variant="body2"
+                            sx={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' }}
+                          >
                             {m.user_id}
                           </Typography>
                         )}
                       </TableCell>
-                      <TableCell>
-                        <Chip
+                      <TableCell align="right">
+                        <StatusPill
                           label={m.role}
-                          size="small"
-                          color={m.role === 'admin' ? 'primary' : 'default'}
+                          tone={m.role === 'admin' ? 'accent' : 'neutral'}
+                          dot={false}
                         />
                       </TableCell>
                     </TableRow>
@@ -249,9 +271,7 @@ const TeamCard: React.FC<TeamCardProps> = ({ team, usage, usageLoading }) => {
               </Table>
             </TableContainer>
           ) : (
-            <Typography variant="body2" color="text.secondary">
-              No members assigned.
-            </Typography>
+            <Typography variant="body2" color="text.secondary">No members assigned.</Typography>
           )}
         </Box>
       </Collapse>
@@ -274,43 +294,36 @@ export const TeamUsage: React.FC<TeamUsageProps> = ({
 }) => {
   if (loading) {
     return (
-      <Paper sx={{ p: 2 }}>
-        <LinearProgress />
-      </Paper>
+      <SectionCard title="Teams">
+        <Skeleton variant="rounded" height={120} sx={{ mb: 2 }} />
+        <Skeleton variant="rounded" height={120} />
+      </SectionCard>
     );
   }
 
   if (!teams.length) {
     return (
-      <Paper sx={{ p: 2 }}>
-        <Box display="flex" alignItems="flex-start" gap={1.5}>
-          <Group color="disabled" sx={{ mt: 0.5 }} />
-          <Box>
-            <Typography color="text.secondary" variant="body2">
-              You're not a member of any LiteLLM team yet.
-            </Typography>
-            <Typography color="text.secondary" variant="body2" mt={0.5}>
-              That's fine — your account is provisioned, so you can still generate
-              personal keys and use models. If you need a shared budget with
-              colleagues, ask an admin to add you to a team.
-            </Typography>
-          </Box>
-        </Box>
-      </Paper>
+      <SectionCard title="Teams">
+        <EmptyState
+          message="You're not a member of any LiteLLM team yet."
+          hint="Your account is provisioned, so you can still generate personal keys and use models. Ask an admin to add you to a team if you need a shared budget."
+        />
+      </SectionCard>
     );
   }
 
   return (
-    <Box>
-      <Typography variant="h6" mb={1}>Teams</Typography>
-      {teams.map(team => (
-        <TeamCard
-          key={team.team_id}
-          team={team}
-          usage={getTeamUsage(team.team_id)}
-          usageLoading={getTeamUsageLoading(team.team_id)}
-        />
-      ))}
-    </Box>
+    <SectionCard title="Teams" subtitle={`${teams.length} team${teams.length === 1 ? '' : 's'}`}>
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+        {teams.map(team => (
+          <TeamCard
+            key={team.team_id}
+            team={team}
+            usage={getTeamUsage(team.team_id)}
+            usageLoading={getTeamUsageLoading(team.team_id)}
+          />
+        ))}
+      </Box>
+    </SectionCard>
   );
 };

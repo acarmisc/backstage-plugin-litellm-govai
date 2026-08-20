@@ -1,5 +1,4 @@
 import React, { useState, useMemo } from 'react';
-import Paper from '@mui/material/Paper';
 import Table from '@mui/material/Table';
 import TableBody from '@mui/material/TableBody';
 import TableCell from '@mui/material/TableCell';
@@ -15,18 +14,28 @@ import DialogTitle from '@mui/material/DialogTitle';
 import DialogContent from '@mui/material/DialogContent';
 import DialogActions from '@mui/material/DialogActions';
 import TextField from '@mui/material/TextField';
-import Chip from '@mui/material/Chip';
 import CircularProgress from '@mui/material/CircularProgress';
 import Autocomplete from '@mui/material/Autocomplete';
-import LinearProgress from '@mui/material/LinearProgress';
+import Skeleton from '@mui/material/Skeleton';
 import InputAdornment from '@mui/material/InputAdornment';
-import { ContentCopy, Delete, Add, Edit, Autorenew, Search, Warning, Lock, LockOpen } from '@mui/icons-material';
+import { alpha } from '@mui/material/styles';
+import { ContentCopy, Delete, Add, Edit, Autorenew, Search, Lock, LockOpen } from '@mui/icons-material';
 import { expiryStatus } from '../api';
 import {
   VirtualKey,
   ModelInfo,
   UpdateKeyRequest,
 } from '../types';
+import {
+  EmptyState,
+  Meter,
+  SectionCard,
+  StatusPill,
+  TagChip,
+  Tone,
+  dataTableSx,
+  quietIconButtonSx,
+} from './ui';
 
 interface KeysTableProps {
   keys: VirtualKey[];
@@ -67,25 +76,39 @@ function expiryChipLabel(status: 'expired' | 'soon' | 'ok', expiresAt: string): 
   return formatDate(expiresAt);
 }
 
-function expiryChipColor(status: 'expired' | 'soon' | 'ok'): 'error' | 'warning' | 'default' {
-  if (status === 'expired') return 'error';
+function expiryTone(status: 'expired' | 'soon' | 'ok'): Tone {
+  if (status === 'expired') return 'danger';
   if (status === 'soon') return 'warning';
-  return 'default';
+  return 'neutral';
 }
 
-function ExpiryChip({ expiresAt }: { expiresAt?: string }) {
+function ExpiryCell({ expiresAt }: { expiresAt?: string }) {
   const status = expiryStatus(expiresAt);
-  if (!status) return <Typography variant="body2" color="text.secondary">-</Typography>;
-  const label = expiryChipLabel(status, expiresAt!);
-  const color = expiryChipColor(status);
-  const icon = (status === 'expired' || status === 'soon') ? <Warning fontSize="small" /> : undefined;
-  return <Chip label={label} color={color} size="small" icon={icon} />;
+  if (!status) {
+    return <Typography variant="body2" color="text.secondary">Never</Typography>;
+  }
+  // A key that is simply valid needs no badge — plain text keeps the column
+  // quiet so the handful of expired/expiring rows actually stand out.
+  if (status === 'ok') {
+    return (
+      <Typography variant="body2" color="text.secondary">
+        {formatDate(expiresAt!)}
+      </Typography>
+    );
+  }
+  return (
+    <StatusPill
+      label={expiryChipLabel(status, expiresAt!)}
+      tone={expiryTone(status)}
+      title={`Expires ${formatDate(expiresAt!)}`}
+    />
+  );
 }
 
-function budgetColor(pct: number): 'error' | 'warning' | 'primary' {
-  if (pct >= 100) return 'error';
+function budgetTone(pct: number): Tone {
+  if (pct >= 100) return 'danger';
   if (pct >= 80) return 'warning';
-  return 'primary';
+  return 'accent';
 }
 
 function keyBlockIcon(isBlocking: boolean, blocked?: boolean) {
@@ -95,16 +118,26 @@ function keyBlockIcon(isBlocking: boolean, blocked?: boolean) {
 }
 
 function BudgetCell({ spend, maxBudget }: { spend: number; maxBudget?: number }) {
-  if (!maxBudget) return <Typography variant="body2" color="text.secondary">-</Typography>;
+  if (!maxBudget) {
+    return (
+      <Typography variant="body2" color="text.secondary" sx={{ fontVariantNumeric: 'tabular-nums' }}>
+        ${spend.toFixed(2)}
+        <Typography component="span" variant="caption" sx={{ ml: 0.5, opacity: 0.7 }}>
+          / ∞
+        </Typography>
+      </Typography>
+    );
+  }
   const pct = Math.min(100, (spend / maxBudget) * 100);
-  const color = budgetColor(pct);
   return (
-    <Box minWidth={100}>
-      <Box display="flex" justifyContent="space-between">
-        <Typography variant="caption">${spend.toFixed(2)}</Typography>
-        <Typography variant="caption" color="text.secondary">${maxBudget}</Typography>
-      </Box>
-      <LinearProgress variant="determinate" value={pct} color={color} sx={{ height: 5, borderRadius: 1, mt: 0.25 }} />
+    <Box minWidth={104}>
+      <Typography variant="body2" sx={{ fontVariantNumeric: 'tabular-nums', mb: 0.5 }}>
+        ${spend.toFixed(2)}
+        <Typography component="span" variant="caption" color="text.secondary" sx={{ ml: 0.5 }}>
+          / ${maxBudget}
+        </Typography>
+      </Typography>
+      <Meter value={pct} tone={budgetTone(pct)} height={4} />
     </Box>
   );
 }
@@ -298,8 +331,8 @@ export const KeysTable: React.FC<KeysTableProps> = ({
     if (loading) {
       return (
         <TableRow>
-          <TableCell colSpan={8} align="center">
-            <CircularProgress size={24} />
+          <TableCell colSpan={8} sx={{ py: 2 }}>
+            <Skeleton variant="rounded" height={140} />
           </TableCell>
         </TableRow>
       );
@@ -307,24 +340,30 @@ export const KeysTable: React.FC<KeysTableProps> = ({
     if (filteredKeys.length === 0) {
       return (
         <TableRow>
-          <TableCell colSpan={8} align="center" sx={{ py: 4 }}>
+          <TableCell colSpan={8}>
             {filterText ? (
-              <Typography color="text.secondary">No keys match filter</Typography>
+              <EmptyState
+                message="No keys match that filter"
+                hint="Try a different alias or model name."
+              />
             ) : (
-              <Box>
-                <Typography color="text.secondary" gutterBottom>
-                  No keys yet — generate your first key to start calling models.
-                </Typography>
-                <Button
-                  variant="contained"
-                  color="primary"
-                  size="small"
-                  startIcon={<Add />}
-                  onClick={onGenerateKeyClick}
-                >
-                  Generate Your First Key
-                </Button>
-              </Box>
+              <EmptyState
+                message="No keys yet"
+                hint="Generate your first key to start calling models."
+                action={
+                  <Button
+                    variant="contained"
+                    color="primary"
+                    size="small"
+                    disableElevation
+                    startIcon={<Add />}
+                    onClick={onGenerateKeyClick}
+                    sx={{ mt: 1 }}
+                  >
+                    Generate Your First Key
+                  </Button>
+                }
+              />
             )}
           </TableCell>
         </TableRow>
@@ -333,12 +372,27 @@ export const KeysTable: React.FC<KeysTableProps> = ({
     return filteredKeys.map((key) => {
       const keyId = key.token ?? key.key;
       const isBlocking = blockingKeyId === keyId;
+      const keyModels = key.models ?? [];
       return (
-        <TableRow key={keyId} sx={key.blocked ? { bgcolor: 'action.disabledBackground' } : undefined}>
+        <TableRow
+          key={keyId}
+          sx={
+            key.blocked
+              ? theme => ({
+                  // A left rule reads as "suspended" without greying the row into
+                  // illegibility the way a full background tint does.
+                  boxShadow: `inset 3px 0 0 0 ${theme.palette.error.main}`,
+                  '& td': { color: theme.palette.text.secondary },
+                })
+              : undefined
+          }
+        >
           <TableCell>
-            <Box display="flex" alignItems="center" gap={0.5}>
-              {key.key_alias || '-'}
-              {key.blocked && <Chip label="Blocked" color="error" size="small" />}
+            <Box display="flex" alignItems="center" gap={1} flexWrap="wrap">
+              <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                {key.key_alias || '—'}
+              </Typography>
+              {key.blocked && <StatusPill label="Blocked" tone="danger" />}
             </Box>
           </TableCell>
           <TableCell>
@@ -348,60 +402,87 @@ export const KeysTable: React.FC<KeysTableProps> = ({
                 component="code"
                 color="text.secondary"
                 title={keyId}
-                sx={{
-                  fontFamily: 'monospace',
-                  backgroundColor: 'background.default',
-                  px: 1,
-                  py: 0.5,
-                  borderRadius: 1,
-                }}
+                sx={theme => ({
+                  fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+                  fontSize: 12,
+                  bgcolor: alpha(theme.palette.text.primary, theme.palette.mode === 'dark' ? 0.08 : 0.05),
+                  px: 0.75,
+                  py: 0.375,
+                  borderRadius: '5px',
+                })}
               >
                 {shortKeyId(keyId)}
               </Typography>
-              <IconButton size="small" onClick={() => copyToClipboard(keyId)} title="Copy Key ID">
-                <ContentCopy fontSize="small" />
+              <IconButton
+                size="small"
+                onClick={() => copyToClipboard(keyId)}
+                title="Copy Key ID"
+                sx={quietIconButtonSx('accent')}
+              >
+                <ContentCopy sx={{ fontSize: 15 }} />
               </IconButton>
             </Box>
           </TableCell>
-          <TableCell>{formatDate(key.created_at)}</TableCell>
           <TableCell>
-            <ExpiryChip expiresAt={key.expires_at} />
+            <Typography variant="body2" color="text.secondary">{formatDate(key.created_at)}</Typography>
+          </TableCell>
+          <TableCell>
+            <ExpiryCell expiresAt={key.expires_at} />
           </TableCell>
           <TableCell>
             <BudgetCell spend={key.spend ?? 0} maxBudget={key.max_budget} />
           </TableCell>
           <TableCell>
-            <Typography variant="body2">{key.tpm_limit ?? '-'} / {key.rpm_limit ?? '-'}</Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ fontVariantNumeric: 'tabular-nums' }}>
+              {key.tpm_limit ?? '∞'} / {key.rpm_limit ?? '∞'}
+            </Typography>
           </TableCell>
           <TableCell>
-            <Box display="flex" gap={0.5} flexWrap="wrap">
-              {key.models?.slice(0, 2).map((model) => (
-                <Chip key={model} label={model} size="small" />
-              ))}
-              {(key.models?.length || 0) > 2 && (
-                <Chip label={`+${(key.models?.length || 0) - 2}`} size="small" variant="outlined" />
-              )}
-            </Box>
+            {keyModels.length === 0 ? (
+              <Typography variant="body2" color="text.secondary">All models</Typography>
+            ) : (
+              <Box display="flex" gap={0.5} flexWrap="wrap">
+                {keyModels.slice(0, 2).map((model) => (
+                  <TagChip key={model} label={model} title={model} />
+                ))}
+                {keyModels.length > 2 && (
+                  <TagChip
+                    label={`+${keyModels.length - 2}`}
+                    mono={false}
+                    title={keyModels.slice(2).join(', ')}
+                  />
+                )}
+              </Box>
+            )}
           </TableCell>
           <TableCell align="right">
-            <IconButton onClick={() => handleOpenEdit(key)} title="Edit key">
-              <Edit fontSize="small" />
-            </IconButton>
-            <IconButton
-              onClick={() => handleToggleBlock(key)}
-              disabled={isBlocking}
-              color={key.blocked ? 'warning' : 'default'}
-              title={key.blocked ? 'Unblock key' : 'Block key — suspends without revoking'}
-            >
-              {keyBlockIcon(isBlocking, key.blocked)}
-            </IconButton>
-            <IconButton
-              color="error"
-              onClick={() => setDeleteConfirmId(keyId)}
-              title="Revoke key"
-            >
-              <Delete />
-            </IconButton>
+            <Box display="flex" justifyContent="flex-end" gap={0.25}>
+              <IconButton
+                size="small"
+                onClick={() => handleOpenEdit(key)}
+                title="Edit key"
+                sx={quietIconButtonSx('accent')}
+              >
+                <Edit fontSize="small" />
+              </IconButton>
+              <IconButton
+                size="small"
+                onClick={() => handleToggleBlock(key)}
+                disabled={isBlocking}
+                title={key.blocked ? 'Unblock key' : 'Block key — suspends without revoking'}
+                sx={quietIconButtonSx('warning')}
+              >
+                {keyBlockIcon(isBlocking, key.blocked)}
+              </IconButton>
+              <IconButton
+                size="small"
+                onClick={() => setDeleteConfirmId(keyId)}
+                title="Revoke key"
+                sx={quietIconButtonSx('danger')}
+              >
+                <Delete fontSize="small" />
+              </IconButton>
+            </Box>
           </TableCell>
         </TableRow>
       );
@@ -410,10 +491,16 @@ export const KeysTable: React.FC<KeysTableProps> = ({
 
   return (
     <>
-      <Paper sx={{ mb: 2 }}>
-        <Box display="flex" justifyContent="space-between" alignItems="center" p={2} gap={2}>
-          <Typography variant="h6">Virtual Keys</Typography>
-          <Box display="flex" gap={1} alignItems="center" flex={1} justifyContent="flex-end">
+      <SectionCard
+        title="Virtual Keys"
+        subtitle={
+          loading
+            ? 'Loading…'
+            : `${filteredKeys.length}${filterText ? ` of ${keys.length}` : ''} key${filteredKeys.length === 1 ? '' : 's'}`
+        }
+        flush
+        actions={
+          <>
             <TextField
               size="small"
               placeholder="Filter by alias or model…"
@@ -423,7 +510,7 @@ export const KeysTable: React.FC<KeysTableProps> = ({
               InputProps={{
                 startAdornment: (
                   <InputAdornment position="start">
-                    <Search fontSize="small" />
+                    <Search fontSize="small" color="disabled" />
                   </InputAdornment>
                 ),
               }}
@@ -431,9 +518,18 @@ export const KeysTable: React.FC<KeysTableProps> = ({
             {expiredKeys.length > 0 && (
               <Button
                 variant="outlined"
-                color="error"
+                color="inherit"
                 startIcon={<Autorenew />}
                 onClick={() => setPruneConfirmCount(expiredKeys.length)}
+                sx={theme => ({
+                  color: theme.palette.text.secondary,
+                  borderColor: theme.palette.divider,
+                  '&:hover': {
+                    color: theme.palette.error.main,
+                    borderColor: alpha(theme.palette.error.main, 0.5),
+                    bgcolor: alpha(theme.palette.error.main, 0.06),
+                  },
+                })}
               >
                 Prune expired ({expiredKeys.length})
               </Button>
@@ -441,16 +537,17 @@ export const KeysTable: React.FC<KeysTableProps> = ({
             <Button
               variant="contained"
               color="primary"
+              disableElevation
               startIcon={<Add />}
               onClick={onGenerateKeyClick}
             >
               Generate New Key
             </Button>
-          </Box>
-        </Box>
-
+          </>
+        }
+      >
         <TableContainer>
-          <Table>
+          <Table size="small" sx={dataTableSx}>
             <TableHead>
               <TableRow>
                 <TableCell>Alias</TableCell>
@@ -468,7 +565,7 @@ export const KeysTable: React.FC<KeysTableProps> = ({
             </TableBody>
           </Table>
         </TableContainer>
-      </Paper>
+      </SectionCard>
 
 
       {/* Edit dialog */}
