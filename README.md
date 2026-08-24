@@ -331,7 +331,7 @@ Configuration (`app-config.yaml`):
 litellm:
   bridge:
     enabled: true                                   # default false
-    issuer: https://auth.ces.abssrv.it/realms/solution-innovation  # required when enabled
+    issuer: https://auth.example.com/realms/solution-innovation  # required when enabled
     clientId: abby-cli                              # default abby-cli
 ```
 

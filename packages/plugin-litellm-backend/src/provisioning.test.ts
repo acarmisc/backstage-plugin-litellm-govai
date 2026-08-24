@@ -63,7 +63,7 @@ function silentLogger(): any {
 
 describe('toLiteLLMUserId', () => {
   test('strips namespace and suffixes domain when configured', () => {
-    assert.strictEqual(toLiteLLMUserId('user:default/andrea.carmisciano', 'abstract.it'), 'andrea.carmisciano@abstract.it');
+    assert.strictEqual(toLiteLLMUserId('user:default/andrea.carmisciano', 'example.com'), 'andrea.carmisciano@example.com');
   });
 
   test('returns bare name when no domain is configured', () => {

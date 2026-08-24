@@ -10,8 +10,8 @@ import { UserInfo, ProvisioningDefaults, RoleConfig } from './types';
  *
  * When userIdDomain is configured, the entity name is suffixed with the domain
  * so that LiteLLM user_ids match the organisation's email addresses:
- *   "user:default/andrea.carmisciano" + "abstract.it"
- *   → "andrea.carmisciano@abstract.it"
+ *   "user:default/andrea.carmisciano" + "example.com"
+ *   → "andrea.carmisciano@example.com"
  *
  * Without a domain the bare entity name is returned unchanged, which works for
  * deployments where LiteLLM users were created with plain usernames.

@@ -104,7 +104,7 @@ describe('resolveBridgeUserId', () => {
     assert.equal(
       resolveBridgeUserId({
         sub: 's1',
-        email: 'alice@abstract.it',
+        email: 'alice@example.com',
         preferred_username: 'alice',
       }),
       'alice',
@@ -112,7 +112,7 @@ describe('resolveBridgeUserId', () => {
     // Username imported as a full email → rewritten to the local-part, like
     // the Keycloak user transformer does to the Backstage entity name.
     assert.equal(
-      resolveBridgeUserId({ sub: 's1', preferred_username: 'alice@abstract.it' }),
+      resolveBridgeUserId({ sub: 's1', preferred_username: 'alice@example.com' }),
       'alice',
     );
     // No username → falls back to email (also stripped), then sub.
@@ -124,9 +124,9 @@ describe('resolveBridgeUserId', () => {
     assert.equal(
       resolveBridgeUserId(
         { sub: 's1', preferred_username: 'alice@keycloak.local' },
-        'abstract.it',
+        'example.com',
       ),
-      'alice@abstract.it',
+      'alice@example.com',
     );
   });
 });
@@ -138,8 +138,8 @@ describe('resolveBridgeUserId', () => {
 describe('getOrProvisionUserFromClaims', () => {
   const claims = {
     sub: 's1',
-    email: 'alice@abstract.it',
-    preferred_username: 'alice@abstract.it',
+    email: 'alice@example.com',
+    preferred_username: 'alice@example.com',
     azp: 'abby-cli',
   };
 
@@ -180,7 +180,7 @@ describe('getOrProvisionUserFromClaims', () => {
     const c = mockClient({
       userInfo: [
         null,
-        { user_id: 'alice', user_email: 'alice@abstract.it' },
+        { user_id: 'alice', user_email: 'alice@example.com' },
       ],
     });
     const u = await getOrProvisionUserFromClaims(
@@ -194,7 +194,7 @@ describe('getOrProvisionUserFromClaims', () => {
     assert.equal(c.calls.createUser.length, 1);
     // The provision payload uses the rewritten user_id but carries the full
     // email from the JWT claims as user_email.
-    assert.equal(c.calls.createUser[0].user_email, 'alice@abstract.it');
+    assert.equal(c.calls.createUser[0].user_email, 'alice@example.com');
     assert.equal(c.calls.createUser[0].user_id, 'alice');
   });
 });
@@ -214,7 +214,7 @@ describe('bridgeListKeys', () => {
     });
     const keys = await bridgeListKeys(
       c,
-      { sub: 's1', email: 'alice@abstract.it', azp: 'abby-cli' },
+      { sub: 's1', email: 'alice@example.com', azp: 'abby-cli' },
       true,
       defaults,
       silentLogger(),
@@ -236,7 +236,7 @@ describe('bridgeGenerateKey', () => {
     });
     const res = await bridgeGenerateKey(
       c,
-      { sub: 's1', email: 'alice@abstract.it', azp: 'abby-cli' },
+      { sub: 's1', email: 'alice@example.com', azp: 'abby-cli' },
       true,
       defaults,
       silentLogger(),
@@ -267,8 +267,8 @@ describe('KeycloakJWTVerifier', () => {
   async function sign(overrides: Record<string, unknown> = {}, azp = 'abby-cli') {
     const payload = {
       sub: 's1',
-      email: 'alice@abstract.it',
-      preferred_username: 'alice@abstract.it',
+      email: 'alice@example.com',
+      preferred_username: 'alice@example.com',
       azp,
       ...overrides,
     };
@@ -306,7 +306,7 @@ describe('KeycloakJWTVerifier', () => {
 
     // valid
     const claims = await verifier.verify(await sign());
-    assert.equal(claims.email, 'alice@abstract.it');
+    assert.equal(claims.email, 'alice@example.com');
     assert.equal(claims.azp, 'abby-cli');
 
     // wrong azp

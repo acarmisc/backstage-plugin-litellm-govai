@@ -43,7 +43,7 @@ export interface TokenVerifier {
 
 export interface BridgeConfig {
   enabled: boolean;
-  /** Keycloak realm issuer, e.g. https://auth.ces.abssrv.it/realms/solution-innovation. */
+  /** Keycloak realm issuer, e.g. https://auth.example.com/realms/solution-innovation. */
   issuer?: string;
   /** OIDC public client the CLI uses; checked against azp / aud. */
   clientId: string;
@@ -131,7 +131,7 @@ export function newDefaultVerifier(cfg: BridgeConfig): TokenVerifier {
   if (!cfg.issuer) {
     throw new BridgeConfigError(
       'litellm.bridge.issuer is required when litellm.bridge.enabled is true ' +
-        '(e.g. https://auth.ces.abssrv.it/realms/solution-innovation)',
+        '(e.g. https://auth.example.com/realms/solution-innovation)',
     );
   }
   return new KeycloakJWTVerifier({ issuer: cfg.issuer, clientId: cfg.clientId });

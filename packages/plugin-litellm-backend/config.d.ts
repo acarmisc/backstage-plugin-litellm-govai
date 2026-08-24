@@ -158,7 +158,7 @@ export interface Config {
 
       /**
        * Keycloak realm issuer used to fetch JWKS and verify the token issuer,
-       * e.g. https://auth.ces.abssrv.it/realms/solution-innovation.
+       * e.g. https://auth.example.com/realms/solution-innovation.
        * Required when enabled.
        */
       issuer?: string;
