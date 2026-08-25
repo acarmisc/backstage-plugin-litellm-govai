@@ -59,15 +59,35 @@ function trimSlash(url: string): string {
   return url.replace(/\/+$/, '');
 }
 
+// LiteLLM sentinel: a team's `models` list is `["all-proxy-models"]` when the
+// team isn't restricted to specific models. A team's `models` entries can
+// also be access-group names (see litellm model_info.access_groups) rather
+// than literal model_name values. Treating either case as a literal
+// model_name allowlist matches nothing, which previously made the whole
+// "Models" field disappear for such teams.
+const ALL_PROXY_MODELS = 'all-proxy-models';
+
+function isModelAllowedByTeam(model: ModelInfo, teamModels?: string[]): boolean {
+  if (!teamModels || teamModels.length === 0) return true;
+  if (teamModels.includes(ALL_PROXY_MODELS)) return true;
+  if (teamModels.includes(model.model_name)) return true;
+  return !!model.access_groups?.some(group => teamModels.includes(group));
+}
+
 interface Snippets {
   curl: string;
   openai: string;
+  opencode: string;
+  pi: string;
+  publicEndpoint: string;
 }
 
 function buildSnippets(baseUrl: string, key: string, model: string): Snippets {
   const base = trimSlash(baseUrl);
+  const apiBase = `${base}/v1`;
   return {
-    curl: `curl ${base}/v1/chat/completions \\
+    publicEndpoint: apiBase,
+    curl: `curl ${apiBase}/chat/completions \\
   -H "Authorization: Bearer ${key}" \\
   -H "Content-Type: application/json" \\
   -d '{
@@ -78,7 +98,7 @@ function buildSnippets(baseUrl: string, key: string, model: string): Snippets {
 
 client = OpenAI(
   api_key="${key}",
-  base_url="${base}/v1",
+  base_url="${apiBase}",
 )
 
 response = client.chat.completions.create(
@@ -86,6 +106,32 @@ response = client.chat.completions.create(
   messages=[{ "role": "user", "content": "Hello!" }],
 )
 print(response.choices[0].message.content)`,
+    opencode: `{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "litellm": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "LiteLLM",
+      "options": {
+        "baseURL": "${apiBase}",
+        "apiKey": "${key}"
+      },
+      "models": {
+        "${model}": {}
+      }
+    }
+  }
+}`,
+    pi: `{
+  "litellm": {
+    "baseUrl": "${apiBase}",
+    "apiKey": "${key}",
+    "api": "openai-completions",
+    "models": [
+      { "id": "${model}", "name": "${model}" }
+    ]
+  }
+}`,
   };
 }
 
@@ -113,15 +159,30 @@ interface SnippetTabsProps {
   onCopy: (text: string) => void;
 }
 
+type SnippetTab = 'curl' | 'openai' | 'opencode' | 'pi';
+
+const SNIPPET_FILE_HINTS: Partial<Record<SnippetTab, string>> = {
+  opencode: 'Add to ~/.config/opencode/opencode.json',
+  pi: 'Add to ~/.pi/agent/models.json',
+};
+
 const SnippetTabs: React.FC<SnippetTabsProps> = ({ snippets, model, onCopy }) => {
-  const [tab, setTab] = useState<'curl' | 'openai'>('curl');
-  const code = tab === 'curl' ? snippets.curl : snippets.openai;
+  const [tab, setTab] = useState<SnippetTab>('curl');
+  const code = snippets[tab];
+  const fileHint = SNIPPET_FILE_HINTS[tab];
   return (
     <Box>
-      <Tabs value={tab} onChange={(_, v) => setTab(v as 'curl' | 'openai')} sx={{ mb: 1 }}>
+      <Tabs value={tab} onChange={(_, v) => setTab(v as SnippetTab)} sx={{ mb: 1 }} variant="scrollable">
         <Tab label="curl" value="curl" />
         <Tab label="OpenAI SDK" value="openai" />
+        <Tab label="opencode" value="opencode" />
+        <Tab label="pi" value="pi" />
       </Tabs>
+      {fileHint && (
+        <Typography variant="caption" color="text.secondary" display="block" mb={0.5}>
+          {fileHint}
+        </Typography>
+      )}
       <Box
         position="relative"
         p={1.5}
@@ -198,12 +259,7 @@ export const GenerateKeyDialog: React.FC<GenerateKeyDialogProps> = ({
   // Once a team is selected, only offer models that team is actually allowed
   // to use — `models` here is already scoped to what the user can access.
   const availableModels = useMemo(() => {
-    const teamModels = selectedTeam?.models;
-    if (teamModels && teamModels.length > 0) {
-      const allowed = new Set(teamModels);
-      return models.filter(m => allowed.has(m.model_name));
-    }
-    return models;
+    return models.filter(m => isModelAllowedByTeam(m, selectedTeam?.models));
   }, [models, selectedTeam]);
 
   const selectedModels = availableModels.filter(m => (formData.models || []).includes(m.model_name));
@@ -242,12 +298,15 @@ export const GenerateKeyDialog: React.FC<GenerateKeyDialogProps> = ({
         max_budget: unlimitedBudget ? null : formData.max_budget,
       };
       const response = await onGenerateKey(request);
+      // When the key allows all models (none explicitly picked), fall back to
+      // the first model actually allowed for the chosen team so snippets show
+      // a working example rather than an empty model name.
+      const model = formData.models?.[0] ?? availableModels[0]?.model_name ?? '';
       setNewKeyValue(response.key);
-      setNewKeyModel(formData.models?.[0] ?? '');
+      setNewKeyModel(model);
       setNewKeySnippets(null);
       try {
         const config = await onGetConfig();
-        const model = formData.models?.[0] ?? '';
         setNewKeySnippets(buildSnippets(config.baseUrl, response.key, model));
       } catch {
         // Snippets are a nice-to-have; the raw key is still shown.
@@ -305,11 +364,10 @@ export const GenerateKeyDialog: React.FC<GenerateKeyDialogProps> = ({
           getOptionLabel={t => t.team_alias || t.team_id}
           value={selectedTeam}
           onChange={(_e, team) => {
-            const teamModels = team?.models;
-            const restrictedModels =
-              teamModels && teamModels.length > 0
-                ? (formData.models || []).filter(m => teamModels.includes(m))
-                : formData.models;
+            const restrictedModels = (formData.models || []).filter(name => {
+              const model = models.find(m => m.model_name === name);
+              return model ? isModelAllowedByTeam(model, team?.models) : false;
+            });
             setFormData({ ...formData, team_id: team?.team_id, models: restrictedModels });
           }}
           renderInput={params => (
@@ -368,6 +426,37 @@ export const GenerateKeyDialog: React.FC<GenerateKeyDialogProps> = ({
                 <ContentCopy />
               </IconButton>
             </Box>
+
+            {newKeySnippets && (
+              <Box mt={2}>
+                <Typography variant="caption" color="text.secondary" display="block" gutterBottom>
+                  Public endpoint — paste into any tool's base URL / API base field
+                </Typography>
+                <Box
+                  display="flex"
+                  alignItems="center"
+                  gap={1}
+                  p={1.5}
+                  sx={{
+                    backgroundColor: 'action.hover',
+                    border: '1px solid',
+                    borderColor: 'divider',
+                    borderRadius: 1,
+                  }}
+                >
+                  <Typography
+                    component="code"
+                    color="text.primary"
+                    sx={{ fontFamily: 'monospace', fontSize: 13, wordBreak: 'break-all', flex: 1 }}
+                  >
+                    {newKeySnippets.publicEndpoint}
+                  </Typography>
+                  <IconButton size="small" onClick={() => copyToClipboard(newKeySnippets.publicEndpoint)}>
+                    <ContentCopy fontSize="small" />
+                  </IconButton>
+                </Box>
+              </Box>
+            )}
 
             {newKeySnippets && (
               <Box mt={3}>

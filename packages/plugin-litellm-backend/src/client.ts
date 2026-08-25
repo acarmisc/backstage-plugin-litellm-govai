@@ -306,6 +306,7 @@ export class LiteLLMClient {
             info.output_cost_per_token ?? params.output_cost_per_token,
           max_input_tokens: info.max_input_tokens ?? m.max_input_tokens,
           max_output_tokens: info.max_output_tokens ?? m.max_output_tokens,
+          access_groups: info.access_groups ?? m.access_groups,
         } as ModelInfo;
       });
       const filtered = normalised.filter(m => m.model_name);

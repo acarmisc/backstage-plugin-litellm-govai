@@ -54,6 +54,8 @@ export interface ModelInfo {
   output_cost_per_token?: number;
   max_input_tokens?: number;
   max_output_tokens?: number;
+  /** Access group names this model belongs to (litellm.model_info.access_groups). A team's `models` list can reference a group name instead of a literal model_name. */
+  access_groups?: string[];
 }
 
 export interface UsageModelBreakdown {
