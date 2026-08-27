@@ -14,6 +14,7 @@ import { KeysTable } from './KeysTable';
 import { GenerateKeyDialog } from './GenerateKeyDialog';
 import { UsageStats } from './UsageStats';
 import { TeamUsage } from './TeamUsage';
+import { ModelsTable } from './ModelsTable';
 import { AuditLog } from './AuditLog';
 import { liteLlmApiRef } from '../api';
 import { DateRange, GenerateKeyRequest, GenerateKeyResponse, UpdateKeyRequest, UsageMetrics } from '../types';
@@ -36,7 +37,7 @@ export const LiteLLMPage: React.FC = () => {
   const api = useApi(liteLlmApiRef);
 
   const [dateRange, setDateRange] = useState<DateRange>(initDateRange);
-  const [activeTab, setActiveTab] = useState<'overview' | 'keys' | 'teams' | 'audit'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'keys' | 'teams' | 'models' | 'audit'>('overview');
 
   const [snackbar, setSnackbar] = useState<{ message: string; severity: 'success' | 'warning' | 'error' } | null>(null);
   const [generateDialogOpen, setGenerateDialogOpen] = useState(false);
@@ -285,6 +286,7 @@ export const LiteLLMPage: React.FC = () => {
       <Tab label="Overview" value="overview" />
       <Tab label="Keys" value="keys" />
       <Tab label="Teams" value="teams" />
+      <Tab label="Models" value="models" />
       {userInfo.can_view_audit && <Tab label="Audit Log" value="audit" />}
     </Tabs>
   );
@@ -335,6 +337,14 @@ export const LiteLLMPage: React.FC = () => {
             return teamUsageCache[teamId] ?? null;
           }}
           getTeamUsageLoading={teamId => teamUsageLoading[teamId] ?? false}
+        />
+      )}
+
+      {activeTab === 'models' && (
+        <ModelsTable
+          allModels={allModels ?? []}
+          teams={teams ?? []}
+          loading={modelsLoading}
         />
       )}
 

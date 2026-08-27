@@ -19,8 +19,14 @@ const iso = (offsetDays: number) => new Date(now - offsetDays * day).toISOString
 
 const models: ModelInfo[] = [
   { model_name: 'gpt-4o', mode: 'chat', supports_function_calling: true, supports_vision: true, input_cost_per_token: 0.000005, output_cost_per_token: 0.000015, max_input_tokens: 128000, max_output_tokens: 16384 },
+  { model_name: 'gpt-4o-mini', mode: 'chat', supports_function_calling: true, supports_vision: true, input_cost_per_token: 0.00000015, output_cost_per_token: 0.0000006, max_input_tokens: 128000, max_output_tokens: 16384 },
   { model_name: 'claude-3-5-sonnet', mode: 'chat', supports_function_calling: true, supports_vision: true, input_cost_per_token: 0.000003, output_cost_per_token: 0.000015, max_input_tokens: 200000, max_output_tokens: 8192 },
+  { model_name: 'claude-3-haiku', mode: 'chat', supports_function_calling: true, supports_vision: false, input_cost_per_token: 0.00000025, output_cost_per_token: 0.00000125, max_input_tokens: 200000, max_output_tokens: 4096 },
+  { model_name: 'bedrock/meta.llama3-1-8b-instruct', mode: 'chat', supports_function_calling: false, supports_vision: false, input_cost_per_token: 0.0000001, output_cost_per_token: 0.0000001, max_input_tokens: 128000, max_output_tokens: 4096 },
+  { model_name: 'bedrock/amazon.titan-embed-text-v2:0', mode: 'embedding', input_cost_per_token: 0.0000001 },
   { model_name: 'text-embedding-3-large', mode: 'embedding', input_cost_per_token: 0.00000013 },
+  { model_name: 'text-embedding-3-small', mode: 'embedding', input_cost_per_token: 0.00000002 },
+  { model_name: 'dall-e-3', mode: 'image', input_cost_per_token: 0, output_cost_per_token: 0 },
 ];
 
 const keys: VirtualKey[] = [
@@ -98,7 +104,7 @@ export class MockLiteLlmApi implements LiteLlmApiInterface {
       user_id: 'user:default/jane.doe',
       user_email: 'jane.doe@example.com',
       teams: ['team-platform-eng'],
-      models: ['gpt-4o', 'claude-3-5-sonnet'],
+    models: ['gpt-4o', 'gpt-4o-mini', 'claude-3-5-sonnet', 'claude-3-haiku'],
       max_budget: 100,
       spend: 46.14,
       can_view_audit: true,

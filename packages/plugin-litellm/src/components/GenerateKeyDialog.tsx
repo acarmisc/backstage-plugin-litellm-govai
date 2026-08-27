@@ -79,6 +79,7 @@ interface Snippets {
   openai: string;
   opencode: string;
   pi: string;
+  claudeCode: string;
   publicEndpoint: string;
 }
 
@@ -132,6 +133,27 @@ print(response.choices[0].message.content)`,
     ]
   }
 }`,
+    claudeCode: `# Option 1 — Static key (Method 1: Unified Endpoint)
+export ANTHROPIC_AUTH_TOKEN="${key}"
+export ANTHROPIC_BASE_URL="${base}"
+claude --model ${model}
+
+# Option 2 — Dynamic key via helper script
+# 1. Create ~/bin/get-litellm-key.sh:
+cat > ~/bin/get-litellm-key.sh << 'SCRIPT'
+#!/bin/bash
+curl -s -X POST ${base}/key/generate \\
+  -H "Authorization: Bearer ${key}" \\
+  -H "Content-Type: application/json" \\
+  -d '{}' | jq -r '.key'
+SCRIPT
+chmod +x ~/bin/get-litellm-key.sh
+
+# 2. Add to ~/.claude/settings.json:
+#   { "apiKeyHelper": "~/bin/get-litellm-key.sh" }
+
+# 3. Set refresh interval (optional, default 1h):
+export CLAUDE_CODE_API_KEY_HELPER_TTL_MS=3600000`,
   };
 }
 
@@ -159,16 +181,18 @@ interface SnippetTabsProps {
   onCopy: (text: string) => void;
 }
 
-type SnippetTab = 'curl' | 'openai' | 'opencode' | 'pi';
+type SnippetTab = 'curl' | 'openai' | 'opencode' | 'pi' | 'claude-code';
 
 const SNIPPET_FILE_HINTS: Partial<Record<SnippetTab, string>> = {
   opencode: 'Add to ~/.config/opencode/opencode.json',
   pi: 'Add to ~/.pi/agent/models.json',
+  'claude-code': 'Requires Claude Code CLI installed',
 };
 
 const SnippetTabs: React.FC<SnippetTabsProps> = ({ snippets, model, onCopy }) => {
   const [tab, setTab] = useState<SnippetTab>('curl');
-  const code = snippets[tab];
+  const snippetKey = tab === 'claude-code' ? 'claudeCode' : tab;
+  const code = snippets[snippetKey as keyof Snippets];
   const fileHint = SNIPPET_FILE_HINTS[tab];
   return (
     <Box>
@@ -177,6 +201,7 @@ const SnippetTabs: React.FC<SnippetTabsProps> = ({ snippets, model, onCopy }) =>
         <Tab label="OpenAI SDK" value="openai" />
         <Tab label="opencode" value="opencode" />
         <Tab label="pi" value="pi" />
+        <Tab label="Claude Code" value="claude-code" />
       </Tabs>
       {fileHint && (
         <Typography variant="caption" color="text.secondary" display="block" mb={0.5}>
