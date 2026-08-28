@@ -16,9 +16,45 @@ This is a Backstage 1.50+ plugin providing a governance interface for LiteLLM pr
 
 ## Screenshots
 
-**Usage Analytics** — spend, token, and request trends for the signed-in user, with per-model and per-key breakdowns:
+### Home widget — at-a-glance usage on the Backstage homepage
 
-![Usage Analytics](docs/screenshots/usage-analytics.png)
+The `LiteLLMHomeWidget` card surfaces the signed-in user's KPIs (USD spent, tokens in/out, active key count) alongside a daily-spend sparkline, with a `Today` / `7d` / `30d` period selector.
+
+![LiteLLM Usage home widget](docs/screenshots/home-widget.png)
+
+### Overview tab — usage analytics
+
+The `Overview` tab is the default landing view. It shows the user's identity header (with team chips and key health counters), four KPI tiles (Total Spend, Total Requests, Success Rate, Total Tokens), and the `Costs` chart with per-model daily spend.
+
+![Usage Analytics overview](docs/screenshots/usage-analytics.png)
+
+The full-page version below shows the complete chart grid (Daily Spend by Model, Daily Token Usage, Daily Requests, Daily Success Rate, Cumulative Spend vs Budget):
+
+![Usage Analytics full page](docs/screenshots/usage-analytics-overview.png)
+
+### Keys tab — virtual key inventory
+
+Browse, edit, block, and revoke your virtual keys. Each row shows alias, key ID, creation/expiry dates, budget bar, TPM/RPM, and the models it can call.
+
+![Virtual Keys tab](docs/screenshots/keys-tab.png)
+
+### Generate New Key dialog
+
+Mint a scoped key with its own budget, team binding, model list, and TPM/RPM caps. Failures (e.g. duplicate alias) surface inline with the upstream error.
+
+![Generate New Key dialog](docs/screenshots/generate-key-dialog.png)
+
+### Models tab — available LLM models
+
+Browse every model the proxy exposes, with per-model input/output cost and max input/output token limits. The team filter scopes the list to the team the key will be bound to.
+
+![Models tab](docs/screenshots/models-tab.png)
+
+### Compact "Create Key" card
+
+A smaller variant of the home widget for surfaces that only need a one-click shortcut into the key-mint flow.
+
+![Create Key card](docs/screenshots/key-card.png)
 
 ## Installation
 

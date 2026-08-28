@@ -8,6 +8,17 @@ Pair this package with the backend, [`@acarmisc/backstage-plugin-litellm-backend
 
 Full setup docs, configuration reference, and architecture notes live in the [project README](https://github.com/acarmisc/backstage-plugin-litellm-govai#readme).
 
+## Screenshots
+
+| View | Preview |
+|------|---------|
+| Home widget — `LiteLLMHomeWidget` | ![Home widget](../../docs/screenshots/home-widget.png) |
+| Overview / Usage Analytics | ![Usage analytics](../../docs/screenshots/usage-analytics.png) |
+| Keys tab — virtual key inventory | ![Keys tab](../../docs/screenshots/keys-tab.png) |
+| Generate New Key dialog | ![Generate New Key dialog](../../docs/screenshots/generate-key-dialog.png) |
+| Models tab | ![Models tab](../../docs/screenshots/models-tab.png) |
+| Compact "Create Key" card | ![Create Key card](../../docs/screenshots/key-card.png) |
+
 ## Installation
 
 This plugin is designed to be used **within a Backstage monorepo**.
@@ -22,6 +33,8 @@ You'll also need the backend package installed and configured — see its [READM
 
 ### Full page
 
+The `LiteLLMPage` component renders the four-tab governance view: **Overview** (usage KPIs + charts), **Keys** (virtual key inventory), **Teams** (team-scoped usage), and **Models** (proxy model catalog).
+
 ```tsx
 import { litellmPlugin, LiteLLMPage } from '@acarmisc/backstage-plugin-litellm';
 
@@ -29,9 +42,11 @@ import { litellmPlugin, LiteLLMPage } from '@acarmisc/backstage-plugin-litellm';
 <Route path="/litellm" element={<LiteLLMPage />} />
 ```
 
+![Usage Analytics full page](../../docs/screenshots/usage-analytics-overview.png)
+
 ### Home page widget
 
-`LiteLLMHomeWidget` is a compact card for the Backstage homepage. It shows the signed-in user's own usage — identity is resolved server-side from the Backstage token, so no `userId` prop is required.
+`LiteLLMHomeWidget` is a compact card for the Backstage homepage. It shows the signed-in user's own usage — identity is resolved server-side from the Backstage token, so no `userId` prop is required. The header includes a `Today` / `7d` / `30d` period selector and a daily-spend sparkline.
 
 ```tsx
 import { LiteLLMHomeWidget } from '@acarmisc/backstage-plugin-litellm';
@@ -43,6 +58,28 @@ import { LiteLLMHomeWidget } from '@acarmisc/backstage-plugin-litellm';
 |------|------|---------|-------------|
 | `defaultPeriod` | `'today' \| '7d' \| '30d'` | `'7d'` | Period shown on first render |
 | `title` | `string` | `'LiteLLM Usage'` | Card title override |
+
+A slimmer **Create Key** card variant is available for surfaces that only need a one-click shortcut into the key-mint flow:
+
+![Create Key card](../../docs/screenshots/key-card.png)
+
+### Keys tab
+
+The **Keys** tab lists every virtual key you own with its alias, key ID, creation and expiry dates, budget bar (`$spent / $limit`), TPM/RPM, and model scope. Each row exposes inline actions: edit, block/unblock, reset spend, and delete.
+
+![Keys tab](../../docs/screenshots/keys-tab.png)
+
+### Generate New Key dialog
+
+The dialog walks the user through aliasing the key, picking a duration, binding a team, restricting model access, setting a max budget, and configuring per-key TPM/RPM caps. Failures (e.g. duplicate alias) surface inline with the upstream error code preserved.
+
+![Generate New Key dialog](../../docs/screenshots/generate-key-dialog.png)
+
+### Models tab
+
+The **Models** tab lists every model the LiteLLM proxy exposes, with per-model input/output cost, max input/output token limits, and capabilities. The team selector scopes the list to the models the bound team is allowed to call.
+
+![Models tab](../../docs/screenshots/models-tab.png)
 
 ## Exports
 
