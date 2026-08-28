@@ -25,6 +25,14 @@ interface ModelsTableProps {
   loading: boolean;
 }
 
+const ALL_PROXY_MODELS = 'all-proxy-models';
+
+function isModelAllowedByTeam(model: ModelInfo, teamModels?: string[]): boolean {
+  if (!teamModels || teamModels.length === 0 || teamModels.includes(ALL_PROXY_MODELS)) return true;
+  return teamModels.includes(model.model_name) ||
+    !!model.access_groups?.some(group => teamModels.includes(group));
+}
+
 function fmtCostPerToken(cost?: number): string {
   if (cost === undefined || cost === null) return '—';
   if (cost === 0) return '$0';
@@ -52,10 +60,7 @@ export const ModelsTable: React.FC<ModelsTableProps> = ({ allModels, teams, load
 
   const filteredModels = useMemo(() => {
     if (!selectedTeam) return [];
-    const teamModels = selectedTeam.models ?? [];
-    if (teamModels.length === 0) return allModels;
-    const allowed = new Set(teamModels);
-    return allModels.filter(m => allowed.has(m.model_name));
+    return allModels.filter(model => isModelAllowedByTeam(model, selectedTeam.models));
   }, [allModels, selectedTeam]);
 
   const handleCopyModelId = useCallback((modelId: string) => {

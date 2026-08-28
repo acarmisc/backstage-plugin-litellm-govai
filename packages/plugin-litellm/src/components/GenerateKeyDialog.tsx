@@ -14,9 +14,12 @@ import Autocomplete from '@mui/material/Autocomplete';
 import Checkbox from '@mui/material/Checkbox';
 import FormControlLabel from '@mui/material/FormControlLabel';
 import Alert from '@mui/material/Alert';
+import Accordion from '@mui/material/Accordion';
+import AccordionSummary from '@mui/material/AccordionSummary';
+import AccordionDetails from '@mui/material/AccordionDetails';
 import Tabs from '@mui/material/Tabs';
 import Tab from '@mui/material/Tab';
-import { ContentCopy, Code } from '@mui/icons-material';
+import { ContentCopy, Code, ExpandMore } from '@mui/icons-material';
 import { VirtualKey, ModelInfo, TeamInfo, GenerateKeyRequest, GenerateKeyResponse, LiteLlmConfig } from '../types';
 import { estimateTokensFromBudget, fmtInt } from '../format';
 
@@ -588,26 +591,33 @@ export const GenerateKeyDialog: React.FC<GenerateKeyDialogProps> = ({
               required
               fullWidth
             />
-            <TextField
-              label="TPM Limit"
-              type="number"
-              value={formData.tpm_limit ?? ''}
-              onChange={(e) =>
-                setFormData({ ...formData, tpm_limit: e.target.value ? Number(e.target.value) : undefined })
-              }
-              helperText="Max tokens per minute this key can consume across all models. Leave blank for no limit."
-              fullWidth
-            />
-            <TextField
-              label="RPM Limit"
-              type="number"
-              value={formData.rpm_limit ?? ''}
-              onChange={(e) =>
-                setFormData({ ...formData, rpm_limit: e.target.value ? Number(e.target.value) : undefined })
-              }
-              helperText="Max requests per minute this key can make across all models. Leave blank for no limit."
-              fullWidth
-            />
+            <Accordion disableGutters elevation={0} sx={{ border: '1px solid', borderColor: 'divider', '&:before': { display: 'none' } }}>
+              <AccordionSummary expandIcon={<ExpandMore />}>
+                <Typography variant="body2" fontWeight={600}>Advanced</Typography>
+              </AccordionSummary>
+              <AccordionDetails sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                <TextField
+                  label="TPM Limit"
+                  type="number"
+                  value={formData.tpm_limit ?? ''}
+                  onChange={(e) =>
+                    setFormData({ ...formData, tpm_limit: e.target.value ? Number(e.target.value) : undefined })
+                  }
+                  helperText="Max tokens per minute this key can consume across all models. Leave blank for no limit."
+                  fullWidth
+                />
+                <TextField
+                  label="RPM Limit"
+                  type="number"
+                  value={formData.rpm_limit ?? ''}
+                  onChange={(e) =>
+                    setFormData({ ...formData, rpm_limit: e.target.value ? Number(e.target.value) : undefined })
+                  }
+                  helperText="Max requests per minute this key can make across all models. Leave blank for no limit."
+                  fullWidth
+                />
+              </AccordionDetails>
+            </Accordion>
           </Box>
         )}
       </DialogContent>
@@ -658,4 +668,3 @@ function formatContextWindow(
   if (outPart) return `ctx ${outPart} out`;
   return null;
 }
-

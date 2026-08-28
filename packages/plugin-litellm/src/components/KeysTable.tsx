@@ -5,6 +5,7 @@ import TableCell from '@mui/material/TableCell';
 import TableContainer from '@mui/material/TableContainer';
 import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
+import TableSortLabel from '@mui/material/TableSortLabel';
 import Button from '@mui/material/Button';
 import IconButton from '@mui/material/IconButton';
 import Box from '@mui/material/Box';
@@ -175,6 +176,21 @@ const keyToEditForm = (k: VirtualKey): UpdateKeyRequest => ({
   rpm_limit: k.rpm_limit,
 });
 
+type SortKey = 'alias' | 'created' | 'expires' | 'budget' | 'limits' | 'models';
+type SortDirection = 'asc' | 'desc';
+
+function compareKeys(a: VirtualKey, b: VirtualKey, sortKey: SortKey): number {
+  switch (sortKey) {
+    case 'alias': return (a.key_alias ?? '').localeCompare(b.key_alias ?? '');
+    case 'created': return a.created_at.localeCompare(b.created_at);
+    case 'expires': return (a.expires_at ?? '').localeCompare(b.expires_at ?? '');
+    case 'budget': return (a.max_budget ?? Infinity) - (b.max_budget ?? Infinity);
+    case 'limits': return (a.tpm_limit ?? Infinity) - (b.tpm_limit ?? Infinity) || (a.rpm_limit ?? Infinity) - (b.rpm_limit ?? Infinity);
+    case 'models': return (a.models ?? []).join(',').localeCompare((b.models ?? []).join(','));
+    default: return 0;
+  }
+}
+
 export const KeysTable: React.FC<KeysTableProps> = ({
   keys,
   models,
@@ -204,15 +220,32 @@ export const KeysTable: React.FC<KeysTableProps> = ({
 
   // Filter
   const [filterText, setFilterText] = useState('');
+  const [sortKey, setSortKey] = useState<SortKey>('created');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
+
+  const handleSort = (nextSortKey: SortKey) => {
+    if (sortKey === nextSortKey) {
+      setSortDirection(current => current === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortKey(nextSortKey);
+      setSortDirection('asc');
+    }
+  };
 
   const filteredKeys = useMemo(() => {
-    if (!filterText.trim()) return keys;
-    const q = filterText.toLowerCase();
-    return keys.filter(k =>
-      (k.key_alias ?? '').toLowerCase().includes(q) ||
-      k.models?.some(m => m.toLowerCase().includes(q)),
-    );
-  }, [keys, filterText]);
+    let result = keys;
+    if (filterText.trim()) {
+      const q = filterText.toLowerCase();
+      result = keys.filter(k =>
+        (k.key_alias ?? '').toLowerCase().includes(q) ||
+        k.models?.some(m => m.toLowerCase().includes(q)),
+      );
+    }
+    return [...result].sort((a, b) => {
+      const comparison = compareKeys(a, b, sortKey);
+      return sortDirection === 'asc' ? comparison : -comparison;
+    });
+  }, [keys, filterText, sortKey, sortDirection]);
 
   const editSelectedModels = models.filter(m => (editForm.models || []).includes(m.model_name));
 
@@ -389,7 +422,7 @@ export const KeysTable: React.FC<KeysTableProps> = ({
         >
           <TableCell>
             <Box display="flex" alignItems="center" gap={1} flexWrap="wrap">
-              <Typography variant="body2" sx={{ fontWeight: 600 }}>
+              <Typography variant="body2">
                 {key.key_alias || '—'}
               </Typography>
               {key.blocked && <StatusPill label="Blocked" tone="danger" />}
@@ -503,7 +536,8 @@ export const KeysTable: React.FC<KeysTableProps> = ({
           <>
             <TextField
               size="small"
-              placeholder="Filter by alias or model…"
+              label="Search alias or model"
+              placeholder="Search alias or model…"
               value={filterText}
               onChange={e => setFilterText(e.target.value)}
               sx={{ minWidth: 240 }}
@@ -550,13 +584,25 @@ export const KeysTable: React.FC<KeysTableProps> = ({
           <Table size="small" sx={dataTableSx}>
             <TableHead>
               <TableRow>
-                <TableCell>Alias</TableCell>
+                <TableCell sortDirection={sortKey === 'alias' ? sortDirection : false}>
+                  <TableSortLabel active={sortKey === 'alias'} direction={sortKey === 'alias' ? sortDirection : 'asc'} onClick={() => handleSort('alias')}>Alias</TableSortLabel>
+                </TableCell>
                 <TableCell>Key ID</TableCell>
-                <TableCell>Created</TableCell>
-                <TableCell>Expires</TableCell>
-                <TableCell>Budget</TableCell>
-                <TableCell>TPM / RPM</TableCell>
-                <TableCell>Models</TableCell>
+                <TableCell sortDirection={sortKey === 'created' ? sortDirection : false}>
+                  <TableSortLabel active={sortKey === 'created'} direction={sortKey === 'created' ? sortDirection : 'asc'} onClick={() => handleSort('created')}>Created</TableSortLabel>
+                </TableCell>
+                <TableCell sortDirection={sortKey === 'expires' ? sortDirection : false}>
+                  <TableSortLabel active={sortKey === 'expires'} direction={sortKey === 'expires' ? sortDirection : 'asc'} onClick={() => handleSort('expires')}>Expires</TableSortLabel>
+                </TableCell>
+                <TableCell sortDirection={sortKey === 'budget' ? sortDirection : false}>
+                  <TableSortLabel active={sortKey === 'budget'} direction={sortKey === 'budget' ? sortDirection : 'asc'} onClick={() => handleSort('budget')}>Budget</TableSortLabel>
+                </TableCell>
+                <TableCell sortDirection={sortKey === 'limits' ? sortDirection : false}>
+                  <TableSortLabel active={sortKey === 'limits'} direction={sortKey === 'limits' ? sortDirection : 'asc'} onClick={() => handleSort('limits')}>TPM / RPM</TableSortLabel>
+                </TableCell>
+                <TableCell sortDirection={sortKey === 'models' ? sortDirection : false}>
+                  <TableSortLabel active={sortKey === 'models'} direction={sortKey === 'models' ? sortDirection : 'asc'} onClick={() => handleSort('models')}>Models</TableSortLabel>
+                </TableCell>
                 <TableCell align="right">Actions</TableCell>
               </TableRow>
             </TableHead>
@@ -724,4 +770,3 @@ export const KeysTable: React.FC<KeysTableProps> = ({
     </>
   );
 };
-
