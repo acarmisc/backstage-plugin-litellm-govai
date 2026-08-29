@@ -61,7 +61,8 @@ interface UsageStatsProps {
   usage: UsageMetrics | null;
   models: ModelInfo[];
   dateRange: DateRange;
-  onDateRangeChange: (range: DateRange) => void;
+  currentPreset: DatePreset;
+  onDateRangeChange: (range: DateRange, preset?: DatePreset) => void;
   loading: boolean;
   userInfo?: UserInfo;
 }
@@ -129,6 +130,7 @@ export const UsageStats: React.FC<UsageStatsProps> = ({
   usage,
   models,
   dateRange,
+  currentPreset,
   onDateRangeChange,
   loading,
   userInfo,
@@ -136,16 +138,6 @@ export const UsageStats: React.FC<UsageStatsProps> = ({
   const chart = useChartTheme();
   const [selectedModel, setSelectedModel] = useState<string>('all');
   const [tab, setTab] = useState<TabKey>('costs');
-
-  const selectedPreset = useMemo<DatePreset>(() => {
-    if (dateRange.start.toDateString() === dateRange.end.toDateString()) return 'today';
-    const diffMs = dateRange.end.getTime() - dateRange.start.getTime();
-    const diffHours = diffMs / (1000 * 60 * 60);
-    if (diffHours <= 26) return '24h';
-    const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
-    if (diffDays <= 7) return '7d';
-    return '30d';
-  }, [dateRange]);
 
   const handlePresetChange = (preset: DatePreset) => {
     const end = new Date();
@@ -155,7 +147,7 @@ export const UsageStats: React.FC<UsageStatsProps> = ({
     else if (preset === '7d') start.setDate(start.getDate() - 7);
     else if (preset === '30d') start.setDate(start.getDate() - 30);
     try { localStorage.setItem(PERIOD_LS_KEY, preset); } catch { /* ignore */ }
-    onDateRangeChange({ start, end });
+    onDateRangeChange({ start, end }, preset);
   };
 
   // ── daily_usage → base series ────────────────────────────────────────────
@@ -395,7 +387,7 @@ export const UsageStats: React.FC<UsageStatsProps> = ({
       select
       size="small"
       label="Period"
-      value={selectedPreset}
+      value={currentPreset}
       onChange={e => handlePresetChange(e.target.value as DatePreset)}
       sx={{ minWidth: 160 }}
     >
@@ -408,7 +400,7 @@ export const UsageStats: React.FC<UsageStatsProps> = ({
   return (
     <SectionCard
       title="Usage Analytics"
-      subtitle={`${PRESET_LABELS[selectedPreset]} · ${dateRange.start.toLocaleDateString()} – ${dateRange.end.toLocaleDateString()}`}
+      subtitle={`${PRESET_LABELS[currentPreset]} · ${dateRange.start.toLocaleDateString()} – ${dateRange.end.toLocaleDateString()}`}
       actions={periodSelect}
     >
       <MetricStrip metrics={metrics} />

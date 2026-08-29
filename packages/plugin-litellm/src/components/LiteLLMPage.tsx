@@ -20,6 +20,7 @@ import { liteLlmApiRef } from '../api';
 import { DateRange, GenerateKeyRequest, GenerateKeyResponse, UpdateKeyRequest, UsageMetrics } from '../types';
 
 const PERIOD_LS_KEY = 'litellm_usage_period';
+type DatePreset = 'today' | '24h' | '7d' | '30d';
 
 function initDateRange(): DateRange {
   let preset = '7d';
@@ -37,6 +38,9 @@ export const LiteLLMPage: React.FC = () => {
   const api = useApi(liteLlmApiRef);
 
   const [dateRange, setDateRange] = useState<DateRange>(initDateRange);
+  const [currentPreset, setCurrentPreset] = useState<DatePreset>(() => {
+    try { return (localStorage.getItem(PERIOD_LS_KEY) as DatePreset) ?? '7d'; } catch { return '7d'; }
+  });
   const [activeTab, setActiveTab] = useState<'overview' | 'keys' | 'teams' | 'models' | 'audit'>('overview');
 
   const [snackbar, setSnackbar] = useState<{ message: string; severity: 'success' | 'warning' | 'error' } | null>(null);
@@ -96,11 +100,14 @@ export const LiteLLMPage: React.FC = () => {
   }, [api, dateRange]);
 
   // Invalidate team usage cache when date range changes so stale data isn't shown
-  const handleDateRangeChange = useCallback((range: DateRange) => {
+  const handleDateRangeChange = useCallback((range: DateRange, preset?: DatePreset) => {
     setDateRange(range);
+    if (preset) {
+      setCurrentPreset(preset);
+    }
     setTeamUsageCache({});
     setTeamUsageLoading({});
-  }, [setDateRange]);
+  }, [setDateRange, setCurrentPreset]);
 
   // Fetch team usage on demand when a team card is expanded
   const loadTeamUsage = useCallback(async (teamId: string) => {
@@ -307,6 +314,7 @@ export const LiteLLMPage: React.FC = () => {
           usage={usage ?? null}
           models={allModels ?? []}
           dateRange={dateRange}
+          currentPreset={currentPreset}
           onDateRangeChange={handleDateRangeChange}
           loading={usageLoading}
           userInfo={userInfo}
