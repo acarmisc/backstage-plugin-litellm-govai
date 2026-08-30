@@ -1,6 +1,7 @@
 import express, { Router, Request, Response } from 'express';
 import { Config } from '@backstage/config';
-import { AuthService, DiscoveryService } from '@backstage/backend-plugin-api';
+import { AuthService, DiscoveryService, PermissionsService } from '@backstage/backend-plugin-api';
+import { AuthorizeResult, BasicPermission } from '@backstage/plugin-permission-common';
 import { CatalogClient } from '@backstage/catalog-client';
 import { LiteLLMClient, LiteLLMUpstreamError } from './client';
 import { openApiSpec } from './openapi';
@@ -16,6 +17,7 @@ import {
 import {
   toLiteLLMUserId,
   resolveUserId,
+  resolveCredentials,
   resolveUserProfile,
   getOrProvisionUser,
   readProvisioningDefaults,
@@ -33,6 +35,12 @@ import {
   newDefaultVerifier,
   readBridgeConfig,
 } from './bridge';
+import {
+  litellmKeyCreatePermission,
+  litellmKeyRevokePermission,
+  litellmKeyManagePermission,
+  litellmAuditReadPermission,
+} from './permissions';
 
 export { ProvisioningError };
 
@@ -41,6 +49,7 @@ export interface RouterOptions {
   logger: any;
   auth: AuthService;
   discovery: DiscoveryService;
+  permissions: PermissionsService;
   /** Override the LiteLLM client (tests). Defaults to one built from config. */
   client?: LiteLLMClient;
   /** Override the bridge token verifier (tests). Defaults to a Keycloak JWKS verifier. */
@@ -48,7 +57,7 @@ export interface RouterOptions {
 }
 
 export async function createRouter(options: RouterOptions): Promise<Router> {
-  const { config, logger, auth, discovery } = options;
+  const { config, logger, auth, discovery, permissions } = options;
 
   const baseUrl = config.getString('litellm.baseUrl');
   const masterKey = config.getString('litellm.masterKey');
@@ -272,6 +281,31 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
     return false;
   }
 
+  // ── Permission-framework guard ───────────────────────────────────────────
+  //
+  // Coarse-grained "is this identity allowed to do this at all" check, layered
+  // on top of (not replacing) the ownership guard above. With no permission
+  // policy installed (the default for a fresh Backstage instance) this always
+  // resolves ALLOW, so behavior is unchanged until an operator wires up
+  // @backstage-community/plugin-rbac or a custom PermissionPolicy.
+  async function assertPermission(
+    req: Request,
+    permission: BasicPermission,
+  ): Promise<boolean> {
+    const credentials = await resolveCredentials(req, auth);
+    if (!credentials) return false;
+    const [decision] = await permissions.authorize([{ permission }], {
+      credentials,
+    });
+    return decision.result === AuthorizeResult.ALLOW;
+  }
+
+  function sendPermissionDenied(res: Response, permission: BasicPermission): void {
+    res.status(403).json({
+      error: `Access denied: missing permission "${permission.name}"`,
+    });
+  }
+
   router.post('/keys/generate', async (req: Request, res: Response) => {
     try {
       // Only alias is hard-required. max_budget is optional: a positive
@@ -295,6 +329,11 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
           error: 'Missing required fields',
           hint: `Required: ${missing.join(', ')}`,
         });
+        return;
+      }
+
+      if (!(await assertPermission(req, litellmKeyCreatePermission))) {
+        sendPermissionDenied(res, litellmKeyCreatePermission);
         return;
       }
 
@@ -392,6 +431,12 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
         res.status(400).json({ error: 'keyId is required' });
         return;
       }
+
+      if (!(await assertPermission(req, litellmKeyManagePermission))) {
+        sendPermissionDenied(res, litellmKeyManagePermission);
+        return;
+      }
+
       const { tokenEntityRef } = await authorizeKeyAction(req, keyId);
       const request: UpdateKeyRequest = { ...req.body, key: keyId };
       const result = await client.updateKey(request);
@@ -411,6 +456,12 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
         res.status(400).json({ error: 'keyId is required' });
         return;
       }
+
+      if (!(await assertPermission(req, litellmKeyRevokePermission))) {
+        sendPermissionDenied(res, litellmKeyRevokePermission);
+        return;
+      }
+
       const { tokenEntityRef } = await authorizeKeyAction(req, keyId);
       await client.deleteKeys({ keys: [keyId] });
       logger.info({ action: 'key.delete', userId: tokenEntityRef ?? 'unknown', keyId });
@@ -425,6 +476,12 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
   router.post('/keys/:keyId/block', async (req: Request, res: Response) => {
     try {
       const { keyId } = req.params;
+
+      if (!(await assertPermission(req, litellmKeyManagePermission))) {
+        sendPermissionDenied(res, litellmKeyManagePermission);
+        return;
+      }
+
       const { tokenEntityRef } = await authorizeKeyAction(req, keyId);
       await client.blockKey(keyId);
       logger.info({ action: 'key.block', userId: tokenEntityRef ?? 'unknown', keyId });
@@ -439,6 +496,12 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
   router.post('/keys/:keyId/unblock', async (req: Request, res: Response) => {
     try {
       const { keyId } = req.params;
+
+      if (!(await assertPermission(req, litellmKeyManagePermission))) {
+        sendPermissionDenied(res, litellmKeyManagePermission);
+        return;
+      }
+
       const { tokenEntityRef } = await authorizeKeyAction(req, keyId);
       await client.unblockKey(keyId);
       logger.info({ action: 'key.unblock', userId: tokenEntityRef ?? 'unknown', keyId });
@@ -453,6 +516,12 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
   router.post('/keys/:keyId/reset_spend', async (req: Request, res: Response) => {
     try {
       const { keyId } = req.params;
+
+      if (!(await assertPermission(req, litellmKeyManagePermission))) {
+        sendPermissionDenied(res, litellmKeyManagePermission);
+        return;
+      }
+
       const { tokenEntityRef } = await authorizeKeyAction(req, keyId);
       await client.resetKeySpend(keyId);
       logger.info({ action: 'key.reset_spend', userId: tokenEntityRef ?? 'unknown', keyId });
@@ -485,6 +554,12 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
       res.status(403).json({ error: 'Access denied: not a member of the audit group' });
       return;
     }
+
+    if (!(await assertPermission(req, litellmAuditReadPermission))) {
+      sendPermissionDenied(res, litellmAuditReadPermission);
+      return;
+    }
+
     try {
       const { page, page_size, start_date, end_date, action, table_name, changed_by } =
         req.query as Record<string, string | undefined>;

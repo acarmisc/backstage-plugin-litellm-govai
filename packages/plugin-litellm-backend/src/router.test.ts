@@ -6,6 +6,7 @@ import express from 'express';
 import { createRouter } from './router';
 import { LiteLLMUpstreamError } from './client';
 import { VirtualKey, ModelInfo, UsageMetrics } from './types';
+import { AuthorizeResult } from '@backstage/plugin-permission-common';
 
 // ---------------------------------------------------------------------------
 // Minimal mock factories — mirror provisioning.test.ts / bridge.test.ts style.
@@ -50,6 +51,18 @@ function mockDiscovery(): any {
   // fast with ECONNREFUSED instead of hanging on DNS/TCP timeout. The router
   // catches these and degrades gracefully; tests just need them quick.
   return { getBaseUrl: () => Promise.resolve('http://127.0.0.1:1') };
+}
+
+function mockPermissions(overrides?: {
+  authorize?: (queries: any[]) => Promise<any[]>;
+}): any {
+  return {
+    authorize:
+      overrides?.authorize ??
+      (async (queries: any[]) =>
+        queries.map(() => ({ result: AuthorizeResult.ALLOW }))),
+    authorizeConditional: async () => [],
+  };
 }
 
 /**
@@ -189,6 +202,7 @@ interface Harness {
 async function startHarness(opts: {
   config?: Record<string, any>;
   client?: any;
+  permissions?: any;
 }): Promise<Harness> {
   const cfg = mockConfig({
     'litellm.baseUrl': 'http://litellm.local',
@@ -201,6 +215,7 @@ async function startHarness(opts: {
     logger: silentLogger(),
     auth: mockAuth(),
     discovery: mockDiscovery(),
+    permissions: opts.permissions ?? mockPermissions(),
     client,
   });
   // Mount the plugin router inside an express app so req/res get the
@@ -453,6 +468,56 @@ describe('router /keys/generate — team duration override failure', () => {
     });
     assert.strictEqual(status, 500);
     assert.match(body.error, /Invalid duration format/);
+  });
+});
+
+describe('router /keys/generate — permission denied', () => {
+  test('403 when permission denied', async () => {
+    const h = await startHarness({
+      config: { 'litellm.userIdDomain': 'example.com' },
+      client: mockClient({}),
+      permissions: mockPermissions({
+        authorize: async queries =>
+          queries.map(() => ({ result: AuthorizeResult.DENY })),
+      }),
+    });
+    try {
+      const { status, body } = await req(h.baseUrl, 'POST', '/keys/generate', {
+        authRef: 'user:default/someone',
+        body: { alias: 'test-key', max_budget: 100 },
+      });
+      assert.strictEqual(status, 403);
+      assert.match(body.error, /litellm\.key\.create/);
+    } finally {
+      await new Promise<void>(r => h.server.close(() => r()));
+    }
+  });
+});
+
+describe('router /keys/:keyId (delete) — permission denied', () => {
+  test('403 when permission denied', async () => {
+    const h = await startHarness({
+      config: { 'litellm.userIdDomain': 'example.com' },
+      client: mockClient({
+        listKeys: (uid?: string) =>
+          Promise.resolve([
+            { key: 'sk-...own', token: 'hash-own', key_alias: 'alice-key', user_id: uid, created_at: '', spend: 0 } as VirtualKey,
+          ]),
+      }),
+      permissions: mockPermissions({
+        authorize: async queries =>
+          queries.map(() => ({ result: AuthorizeResult.DENY })),
+      }),
+    });
+    try {
+      const { status, body } = await req(h.baseUrl, 'DELETE', '/keys/hash-own', {
+        authRef: 'user:default/someone',
+      });
+      assert.strictEqual(status, 403);
+      assert.match(body.error, /litellm\.key\.revoke/);
+    } finally {
+      await new Promise<void>(r => h.server.close(() => r()));
+    }
   });
 });
 

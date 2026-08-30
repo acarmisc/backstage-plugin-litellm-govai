@@ -1,5 +1,5 @@
 import { Config } from '@backstage/config';
-import { AuthService } from '@backstage/backend-plugin-api';
+import { AuthService, BackstageCredentials } from '@backstage/backend-plugin-api';
 import { CatalogClient } from '@backstage/catalog-client';
 import { Request } from 'express';
 import { LiteLLMClient } from './client';
@@ -136,6 +136,23 @@ export async function resolveUserId(
     // invalid or service token — caller gets query-param fallback
   }
   return undefined;
+}
+
+/**
+ * Like resolveUserId, but returns the raw BackstageCredentials object
+ * (rather than just the entity ref) for passing into PermissionsService.authorize().
+ */
+export async function resolveCredentials(
+  req: Request,
+  auth: AuthService,
+): Promise<BackstageCredentials | undefined> {
+  const rawToken = req.headers.authorization?.slice(7);
+  if (!rawToken) return undefined;
+  try {
+    return await auth.authenticate(rawToken);
+  } catch {
+    return undefined;
+  }
 }
 
 /**

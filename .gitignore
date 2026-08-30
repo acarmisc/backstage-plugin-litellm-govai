@@ -13,6 +13,10 @@ yarn.lock
 # Build outputs (built separately in monorepo and copied)
 dist/
 
+# API Extractor intermediate doc-model output (report.api.md is the
+# committed artifact; this is scratch it regenerates each run)
+temp/
+
 # Testing
 coverage
 

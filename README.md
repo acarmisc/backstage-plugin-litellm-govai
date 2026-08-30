@@ -273,6 +273,25 @@ litellm:
       budgetDuration: 30d
 ```
 
+## Permissions
+
+The backend registers the following permissions with Backstage's
+[permission framework](https://backstage.io/docs/permissions/overview).
+Without a permission policy installed (e.g.
+[`@backstage-community/plugin-rbac`](https://github.com/backstage/community-plugins/tree/main/workspaces/rbac)
+or a custom `PermissionPolicy`), every request is allowed by default —
+wiring these up only restricts behavior once you opt in.
+
+| Permission | Guards | Notes |
+|---|---|---|
+| `litellm.key.create` | `POST /keys/generate` | |
+| `litellm.key.revoke` | `DELETE /keys/:keyId` | |
+| `litellm.key.manage` | `POST /keys/:keyId/update`, `/block`, `/unblock`, `/reset_spend` | |
+| `litellm.audit.read` | `GET /audit` | Additive to the existing `litellm.audit.group` check — both must pass |
+
+All key-mutation routes still enforce the existing ownership guard (a caller
+can only ever act on keys they own) regardless of permission policy.
+
 ## Development
 
 ### Build
@@ -289,6 +308,20 @@ yarn workspace @acarmisc/backstage-plugin-litellm-backend build
 ```bash
 yarn workspace @acarmisc/backstage-plugin-litellm test
 ```
+
+### API Reports
+
+Public API surface for both packages is tracked with
+[API Extractor](https://api-extractor.com/). After changing exports in
+either package's `src/index.ts`, regenerate the report and commit the diff:
+
+```bash
+cd packages/plugin-litellm && npm run api-report
+cd ../plugin-litellm-backend && npm run api-report
+```
+
+This isn't enforced in CI yet — treat a `report.api.md` diff as a review
+signal for accidental breaking changes to the public API.
 
 ### Standalone Dev Mode
 

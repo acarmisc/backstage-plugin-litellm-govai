@@ -31,3 +31,10 @@ export type {
   BridgeConfig,
   KeycloakJWTVerifierOptions,
 } from './bridge';
+export {
+  litellmPermissions,
+  litellmKeyCreatePermission,
+  litellmKeyRevokePermission,
+  litellmKeyManagePermission,
+  litellmAuditReadPermission,
+} from './permissions';
