@@ -10,6 +10,30 @@ commit/PR that bumps the version in `package.json`. Format follows the
 Earlier history: `git log -- packages/plugin-litellm` or the
 [GitHub tags](https://github.com/acarmisc/backstage-plugin-litellm-govai/tags).
 
+## 0.18.0
+
+### Minor Changes
+
+- feat(TeamUsage): the **Create Team** action moved from a standalone button
+  above the Teams tab into the "Teams" section card's own header, alongside
+  the team count — matching the placement of "Generate New Key" on the Keys
+  tab. It now also renders in the empty state, not just once teams exist.
+- feat(ManageTeamDialog): the **Members** section got a UX pass:
+  - Adding a member is now a catalog-backed `Autocomplete` (search by name
+    or email) instead of a free-text entity-ref field, using `catalogApiRef`
+    to look up `User` entities — the same check the backend already runs on
+    add. Typing a raw `user:namespace/name` ref still works as a fallback.
+    Users already on the team are filtered out of the suggestions.
+  - The member list itself is now a table (User / Role / Remove) styled like
+    the read-only team card elsewhere in the app, replacing the plain
+    bulleted list.
+  - The **Models** field now explains, via helper text, why at least one
+    model is required in this delegated-admin flow (it can only grant
+    access to the configured `teamAdmin.allowedModels` allowlist, never to
+    every proxy model) — clarifying it against teams shown elsewhere with no
+    model restriction, which were configured directly in LiteLLM.
+- New dependencies: `@backstage/plugin-catalog-react`, `@backstage/catalog-model`.
+
 ## 0.17.0
 
 ### Minor Changes
