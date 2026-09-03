@@ -84,6 +84,7 @@ function mockClient(overrides: {
   getUsage?: (s: string, e: string, uid?: string) => Promise<UsageMetrics>;
   getAuditLogs?: (p: any) => Promise<any>;
   createTeam?: (r: any) => Promise<any>;
+  updateTeam?: (r: any) => Promise<any>;
 }): any {
   const calls: Record<string, any[]> = {
     getUserInfo: [],
@@ -99,6 +100,7 @@ function mockClient(overrides: {
     getUsage: [],
     getAuditLogs: [],
     createTeam: [],
+    updateTeam: [],
   };
   return {
     calls,
@@ -192,6 +194,12 @@ function mockClient(overrides: {
       return overrides.createTeam
         ? overrides.createTeam(r)
         : Promise.resolve({ team_id: 't_new' });
+    },
+    updateTeam: (r: any) => {
+      calls.updateTeam.push(r);
+      return overrides.updateTeam
+        ? overrides.updateTeam(r)
+        : Promise.resolve({ team_id: r.team_id });
     },
   };
 }
@@ -1019,6 +1027,219 @@ describe('router POST /teams', () => {
       assert.strictEqual(payload.metadata.created_by_backstage_user, 'user:default/alice');
       assert.strictEqual(payload.metadata.created_via, 'backstage');
       assert.ok(payload.metadata.created_at_iso);
+    } finally {
+      await new Promise<void>(r => h.server.close(() => r()));
+    }
+  });
+});
+
+describe('router PATCH /teams/:id', () => {
+  test('disabled => 403', async () => {
+    const h = await startHarness({});
+    try {
+      const { status, body } = await req(h.baseUrl, 'PATCH', '/teams/t1', {
+        authRef: 'user:default/alice',
+        body: { max_budget: 250 },
+      });
+      assert.strictEqual(status, 403);
+      assert.match(body.error, /disabled/i);
+    } finally {
+      await new Promise<void>(r => h.server.close(() => r()));
+    }
+  });
+
+  test('not in group => 403', async () => {
+    const h = await startHarness({
+      config: {
+        'permission.enabled': true,
+        'litellm.teamAdmin.group': 'group:default/admins',
+        'litellm.teamAdmin.allowedModels': ['gpt-4o'],
+        'litellm.teamAdmin.maxBudgetCeiling': 1000,
+      },
+      catalogClient: mockCatalog([]),
+    });
+    try {
+      const { status, body } = await req(h.baseUrl, 'PATCH', '/teams/t1', {
+        authRef: 'user:default/alice',
+        body: { max_budget: 250 },
+      });
+      assert.strictEqual(status, 403);
+      assert.match(body.error, /not a member/i);
+    } finally {
+      await new Promise<void>(r => h.server.close(() => r()));
+    }
+  });
+
+  test('permission DENY => 403', async () => {
+    const h = await startHarness({
+      config: {
+        'permission.enabled': true,
+        'litellm.teamAdmin.group': 'group:default/admins',
+        'litellm.teamAdmin.allowedModels': ['gpt-4o'],
+        'litellm.teamAdmin.maxBudgetCeiling': 1000,
+      },
+      catalogClient: mockCatalog(['group:default/admins']),
+      permissions: mockPermissions({
+        authorize: async () => [{ result: AuthorizeResult.DENY }],
+      }),
+    });
+    try {
+      const { status, body } = await req(h.baseUrl, 'PATCH', '/teams/t1', {
+        authRef: 'user:default/alice',
+        body: { max_budget: 250 },
+      });
+      assert.strictEqual(status, 403);
+      assert.match(body.error, /missing permission/i);
+    } finally {
+      await new Promise<void>(r => h.server.close(() => r()));
+    }
+  });
+
+  test('team not found => 404', async () => {
+    const h = await startHarness({
+      config: {
+        'permission.enabled': true,
+        'litellm.teamAdmin.group': 'group:default/admins',
+        'litellm.teamAdmin.allowedModels': ['gpt-4o'],
+        'litellm.teamAdmin.maxBudgetCeiling': 1000,
+      },
+      catalogClient: mockCatalog(['group:default/admins']),
+      client: mockClient({
+        getTeamInfo: async () => { throw new LiteLLMUpstreamError(404, 'Not Found', '{}'); },
+      }),
+    });
+    try {
+      const { status, body } = await req(h.baseUrl, 'PATCH', '/teams/t1', {
+        authRef: 'user:default/alice',
+        body: { max_budget: 250 },
+      });
+      assert.strictEqual(status, 404);
+      assert.match(body.error, /not found/i);
+    } finally {
+      await new Promise<void>(r => h.server.close(() => r()));
+    }
+  });
+
+  test('team has no owning_group => 403', async () => {
+    const h = await startHarness({
+      config: {
+        'permission.enabled': true,
+        'litellm.teamAdmin.group': 'group:default/admins',
+        'litellm.teamAdmin.allowedModels': ['gpt-4o'],
+        'litellm.teamAdmin.maxBudgetCeiling': 1000,
+      },
+      catalogClient: mockCatalog(['group:default/admins']),
+      client: mockClient({
+        getTeamInfo: async () => ({ team_id: 't1', spend: 0, metadata: {} }),
+      }),
+    });
+    try {
+      const { status, body } = await req(h.baseUrl, 'PATCH', '/teams/t1', {
+        authRef: 'user:default/alice',
+        body: { max_budget: 250 },
+      });
+      assert.strictEqual(status, 403);
+      assert.match(body.error, /not managed/i);
+    } finally {
+      await new Promise<void>(r => h.server.close(() => r()));
+    }
+  });
+
+  test('team owned by different group => 403', async () => {
+    const h = await startHarness({
+      config: {
+        'permission.enabled': true,
+        'litellm.teamAdmin.group': 'group:default/admins',
+        'litellm.teamAdmin.allowedModels': ['gpt-4o'],
+        'litellm.teamAdmin.maxBudgetCeiling': 1000,
+      },
+      catalogClient: mockCatalog(['group:default/admins']),
+      client: mockClient({
+        getTeamInfo: async () => ({
+          team_id: 't1',
+          spend: 0,
+          metadata: { owning_group: 'group:default/other' },
+        }),
+      }),
+    });
+    try {
+      const { status, body } = await req(h.baseUrl, 'PATCH', '/teams/t1', {
+        authRef: 'user:default/alice',
+        body: { max_budget: 250 },
+      });
+      assert.strictEqual(status, 403);
+      assert.match(body.error, /owned by/i);
+    } finally {
+      await new Promise<void>(r => h.server.close(() => r()));
+    }
+  });
+
+  test('authorized + invalid model in patch => 400', async () => {
+    const h = await startHarness({
+      config: {
+        'permission.enabled': true,
+        'litellm.teamAdmin.group': 'group:default/admins',
+        'litellm.teamAdmin.allowedModels': ['gpt-4o'],
+        'litellm.teamAdmin.maxBudgetCeiling': 1000,
+      },
+      catalogClient: mockCatalog(['group:default/admins']),
+      client: mockClient({
+        getTeamInfo: async () => ({
+          team_id: 't1',
+          spend: 0,
+          metadata: { owning_group: 'group:default/admins' },
+        }),
+      }),
+    });
+    try {
+      const { status, body } = await req(h.baseUrl, 'PATCH', '/teams/t1', {
+        authRef: 'user:default/alice',
+        body: { models: ['claude-3-opus'] },
+      });
+      assert.strictEqual(status, 400);
+      assert.match(body.error, /not in the allowed set/i);
+    } finally {
+      await new Promise<void>(r => h.server.close(() => r()));
+    }
+  });
+
+  test('authorized happy path: update max_budget with metadata merge', async () => {
+    const h = await startHarness({
+      config: {
+        'permission.enabled': true,
+        'litellm.teamAdmin.group': 'group:default/admins',
+        'litellm.teamAdmin.allowedModels': ['gpt-4o'],
+        'litellm.teamAdmin.maxBudgetCeiling': 1000,
+      },
+      catalogClient: mockCatalog(['group:default/admins']),
+      client: mockClient({
+        getTeamInfo: async () => ({
+          team_id: 't1',
+          spend: 0,
+          metadata: {
+            owning_group: 'group:default/admins',
+            created_by_backstage_user: 'user:default/bob',
+          },
+        }),
+        updateTeam: async (r: any) => ({ team_id: 't1', ...r }),
+      }),
+    });
+    try {
+      const { status, body } = await req(h.baseUrl, 'PATCH', '/teams/t1', {
+        authRef: 'user:default/alice',
+        body: { max_budget: 250 },
+      });
+      assert.strictEqual(status, 200);
+      assert.strictEqual(body.team_id, 't1');
+
+      assert.strictEqual(h.client.calls.updateTeam.length, 1);
+      const payload = h.client.calls.updateTeam[0];
+      assert.strictEqual(payload.team_id, 't1');
+      assert.strictEqual(payload.max_budget, 250);
+      assert.strictEqual(payload.metadata.owning_group, 'group:default/admins');
+      assert.strictEqual(payload.metadata.created_by_backstage_user, 'user:default/bob');
+      assert.strictEqual(payload.metadata.updated_by_backstage_user, 'user:default/alice');
+      assert.ok(payload.metadata.updated_at_iso);
     } finally {
       await new Promise<void>(r => h.server.close(() => r()));
     }
