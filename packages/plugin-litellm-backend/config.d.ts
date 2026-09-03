@@ -148,6 +148,88 @@ export interface Config {
       teamRequired?: boolean;
     };
 
+    /**
+     * Team administration governance. Allows a designated Backstage group to
+     * create and manage LiteLLM teams. The feature is disabled (fail-closed)
+     * when unset — all fields default to empty/false to prevent accidental
+     * delegation of capabilities. Set this block only when you have reviewed
+     * the governance policy and are ready to enable the feature.
+     */
+    teamAdmin?: {
+      /**
+       * Backstage group entity ref whose members may manage teams,
+       * e.g. "group:default/litellm-team-admins".
+       * The plugin ships a group template at catalog/litellm-team-admins.yaml.
+       * When omitted the feature is disabled entirely.
+       * @visibility backend
+       */
+      group?: string;
+
+      /**
+       * LiteLLM model names an admin may assign to a team.
+       * Empty array => none assignable (fail-closed).
+       * @default []
+       * @visibility backend
+       */
+      allowedModels?: string[];
+
+      /**
+       * LiteLLM model access-group names an admin may assign to a team.
+       * References access_groups defined in litellm.model_info configuration.
+       * Empty array => none allowed.
+       * @default []
+       * @visibility backend
+       */
+      allowedModelAccessGroups?: string[];
+
+      /**
+       * Hard USD ceiling for max_budget an admin may set on a team.
+       * When omitted, no admin-settable budget is allowed unless
+       * allowUnlimitedBudget is true.
+       * @visibility backend
+       */
+      maxBudgetCeiling?: number;
+
+      /**
+       * Allow an admin to create a team with no budget cap.
+       * @default false
+       * @visibility backend
+       */
+      allowUnlimitedBudget?: boolean;
+
+      /**
+       * Vector-store ids/names an admin may attach as team knowledge bases.
+       * Empty array => none allowed.
+       * @default []
+       * @visibility backend
+       */
+      allowedVectorStores?: string[];
+
+      /**
+       * MCP server ids/names an admin may attach to a team.
+       * Empty array => none allowed.
+       * @default []
+       * @visibility backend
+       */
+      allowedMcpServers?: string[];
+
+      /**
+       * MCP access-group names an admin may attach to a team.
+       * References access_groups defined in litellm.mcp_info configuration.
+       * Empty array => none allowed.
+       * @default []
+       * @visibility backend
+       */
+      allowedMcpAccessGroups?: string[];
+
+      /**
+       * Allow an admin to delete a team (vs. only block/deactivate).
+       * @default false
+       * @visibility backend
+       */
+      allowTeamDelete?: boolean;
+    };
+
     bridge?: {
       /**
        * When true, mount the /bridge/keys, /bridge/keys (POST), /bridge/models
