@@ -83,6 +83,7 @@ function mockClient(overrides: {
   getTeamInfo?: (id: string) => Promise<any>;
   getUsage?: (s: string, e: string, uid?: string) => Promise<UsageMetrics>;
   getAuditLogs?: (p: any) => Promise<any>;
+  createTeam?: (r: any) => Promise<any>;
 }): any {
   const calls: Record<string, any[]> = {
     getUserInfo: [],
@@ -97,6 +98,7 @@ function mockClient(overrides: {
     getTeamInfo: [],
     getUsage: [],
     getAuditLogs: [],
+    createTeam: [],
   };
   return {
     calls,
@@ -185,6 +187,12 @@ function mockClient(overrides: {
         ? overrides.getAuditLogs(p)
         : Promise.resolve({ audit_logs: [], total: 0, page: 1, page_size: 25, total_pages: 0 });
     },
+    createTeam: (r: any) => {
+      calls.createTeam.push(r);
+      return overrides.createTeam
+        ? overrides.createTeam(r)
+        : Promise.resolve({ team_id: 't_new' });
+    },
   };
 }
 
@@ -203,6 +211,7 @@ async function startHarness(opts: {
   config?: Record<string, any>;
   client?: any;
   permissions?: any;
+  catalogClient?: any;
 }): Promise<Harness> {
   const cfg = mockConfig({
     'litellm.baseUrl': 'http://litellm.local',
@@ -217,6 +226,7 @@ async function startHarness(opts: {
     discovery: mockDiscovery(),
     permissions: opts.permissions ?? mockPermissions(),
     client,
+    catalogClient: opts.catalogClient,
   });
   // Mount the plugin router inside an express app so req/res get the
   // express augmentations (res.json, req.body parsing, etc.) that Backstage's
@@ -262,6 +272,14 @@ function req(
     if (bodyStr) r.write(bodyStr);
     r.end();
   });
+}
+
+function mockCatalog(memberOf: string[] = []): any {
+  return {
+    getEntityByRef: async () => ({
+      relations: memberOf.map(t => ({ type: 'memberOf', targetRef: t })),
+    }),
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -813,6 +831,194 @@ describe('router /teams', () => {
       });
       assert.strictEqual(status, 200);
       assert.deepStrictEqual(body, []);
+    } finally {
+      await new Promise<void>(r => h.server.close(() => r()));
+    }
+  });
+});
+
+describe('router POST /teams', () => {
+  test('feature disabled (no permission.enabled) => 403', async () => {
+    const h = await startHarness({});
+    try {
+      const { status, body } = await req(h.baseUrl, 'POST', '/teams', {
+        authRef: 'user:default/alice',
+        body: { team_alias: 'squad-a', models: ['gpt-4o'], max_budget: 500 },
+      });
+      assert.strictEqual(status, 403);
+      assert.match(body.error, /disabled/i);
+    } finally {
+      await new Promise<void>(r => h.server.close(() => r()));
+    }
+  });
+
+  test('enabled + caller not in group => 403', async () => {
+    const h = await startHarness({
+      config: {
+        'permission.enabled': true,
+        'litellm.teamAdmin.group': 'group:default/admins',
+        'litellm.teamAdmin.allowedModels': ['gpt-4o'],
+        'litellm.teamAdmin.maxBudgetCeiling': 1000,
+      },
+      catalogClient: mockCatalog([]),
+    });
+    try {
+      const { status, body } = await req(h.baseUrl, 'POST', '/teams', {
+        authRef: 'user:default/alice',
+        body: { team_alias: 'squad-a', models: ['gpt-4o'], max_budget: 500 },
+      });
+      assert.strictEqual(status, 403);
+      assert.match(body.error, /not a member/i);
+    } finally {
+      await new Promise<void>(r => h.server.close(() => r()));
+    }
+  });
+
+  test('enabled + in group + missing permission => 403', async () => {
+    const h = await startHarness({
+      config: {
+        'permission.enabled': true,
+        'litellm.teamAdmin.group': 'group:default/admins',
+        'litellm.teamAdmin.allowedModels': ['gpt-4o'],
+        'litellm.teamAdmin.maxBudgetCeiling': 1000,
+      },
+      catalogClient: mockCatalog(['group:default/admins']),
+      permissions: mockPermissions({
+        authorize: async () => [{ result: AuthorizeResult.DENY }],
+      }),
+    });
+    try {
+      const { status, body } = await req(h.baseUrl, 'POST', '/teams', {
+        authRef: 'user:default/alice',
+        body: { team_alias: 'squad-a', models: ['gpt-4o'], max_budget: 500 },
+      });
+      assert.strictEqual(status, 403);
+      assert.match(body.error, /missing permission/i);
+    } finally {
+      await new Promise<void>(r => h.server.close(() => r()));
+    }
+  });
+
+  test('authorized + missing team_alias => 400', async () => {
+    const h = await startHarness({
+      config: {
+        'permission.enabled': true,
+        'litellm.teamAdmin.group': 'group:default/admins',
+        'litellm.teamAdmin.allowedModels': ['gpt-4o'],
+        'litellm.teamAdmin.maxBudgetCeiling': 1000,
+      },
+      catalogClient: mockCatalog(['group:default/admins']),
+    });
+    try {
+      const { status, body } = await req(h.baseUrl, 'POST', '/teams', {
+        authRef: 'user:default/alice',
+        body: { models: ['gpt-4o'], max_budget: 500 },
+      });
+      assert.strictEqual(status, 400);
+      assert.match(body.error, /team_alias/i);
+    } finally {
+      await new Promise<void>(r => h.server.close(() => r()));
+    }
+  });
+
+  test('authorized + non-allowlisted model => 400', async () => {
+    const h = await startHarness({
+      config: {
+        'permission.enabled': true,
+        'litellm.teamAdmin.group': 'group:default/admins',
+        'litellm.teamAdmin.allowedModels': ['gpt-4o'],
+        'litellm.teamAdmin.maxBudgetCeiling': 1000,
+      },
+      catalogClient: mockCatalog(['group:default/admins']),
+    });
+    try {
+      const { status, body } = await req(h.baseUrl, 'POST', '/teams', {
+        authRef: 'user:default/alice',
+        body: { team_alias: 'squad-a', models: ['claude-3-opus'], max_budget: 500 },
+      });
+      assert.strictEqual(status, 400);
+      assert.match(body.error, /not in the allowed set/i);
+    } finally {
+      await new Promise<void>(r => h.server.close(() => r()));
+    }
+  });
+
+  test('authorized + empty models => 400', async () => {
+    const h = await startHarness({
+      config: {
+        'permission.enabled': true,
+        'litellm.teamAdmin.group': 'group:default/admins',
+        'litellm.teamAdmin.allowedModels': ['gpt-4o'],
+        'litellm.teamAdmin.maxBudgetCeiling': 1000,
+      },
+      catalogClient: mockCatalog(['group:default/admins']),
+    });
+    try {
+      const { status, body } = await req(h.baseUrl, 'POST', '/teams', {
+        authRef: 'user:default/alice',
+        body: { team_alias: 'squad-a', models: [], max_budget: 500 },
+      });
+      assert.strictEqual(status, 400);
+      assert.match(body.error, /at least one/i);
+    } finally {
+      await new Promise<void>(r => h.server.close(() => r()));
+    }
+  });
+
+  test('authorized + max_budget over ceiling => 400', async () => {
+    const h = await startHarness({
+      config: {
+        'permission.enabled': true,
+        'litellm.teamAdmin.group': 'group:default/admins',
+        'litellm.teamAdmin.allowedModels': ['gpt-4o'],
+        'litellm.teamAdmin.maxBudgetCeiling': 1000,
+      },
+      catalogClient: mockCatalog(['group:default/admins']),
+    });
+    try {
+      const { status, body } = await req(h.baseUrl, 'POST', '/teams', {
+        authRef: 'user:default/alice',
+        body: { team_alias: 'squad-a', models: ['gpt-4o'], max_budget: 1500 },
+      });
+      assert.strictEqual(status, 400);
+      assert.match(body.error, /exceeds the ceiling/i);
+    } finally {
+      await new Promise<void>(r => h.server.close(() => r()));
+    }
+  });
+
+  test('authorized happy path: records metadata and calls client.createTeam', async () => {
+    const h = await startHarness({
+      config: {
+        'permission.enabled': true,
+        'litellm.teamAdmin.group': 'group:default/admins',
+        'litellm.teamAdmin.allowedModels': ['gpt-4o'],
+        'litellm.teamAdmin.maxBudgetCeiling': 1000,
+      },
+      catalogClient: mockCatalog(['group:default/admins']),
+      client: mockClient({
+        createTeam: async (r: any) => ({ team_id: 't_new', ...r }),
+      }),
+    });
+    try {
+      const { status, body } = await req(h.baseUrl, 'POST', '/teams', {
+        authRef: 'user:default/alice',
+        body: { team_alias: 'squad-a', models: ['gpt-4o'], max_budget: 500 },
+      });
+      assert.strictEqual(status, 200);
+      assert.strictEqual(body.team_id, 't_new');
+
+      // Check that createTeam was called with correct payload
+      assert.strictEqual(h.client.calls.createTeam.length, 1);
+      const payload = h.client.calls.createTeam[0];
+      assert.strictEqual(payload.team_alias, 'squad-a');
+      assert.deepStrictEqual(payload.models, ['gpt-4o']);
+      assert.strictEqual(payload.max_budget, 500);
+      assert.strictEqual(payload.budget_duration, '30d');
+      assert.strictEqual(payload.metadata.owning_group, 'group:default/admins');
+      assert.strictEqual(payload.metadata.created_by_backstage_user, 'user:default/alice');
+      assert.strictEqual(payload.metadata.created_via, 'backstage');
+      assert.ok(payload.metadata.created_at_iso);
     } finally {
       await new Promise<void>(r => h.server.close(() => r()));
     }

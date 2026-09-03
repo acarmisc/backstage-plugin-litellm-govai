@@ -661,6 +661,18 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
     return true;
   }
 
+  function sendTeamError(err: any, res: Response): void {
+    if (err instanceof LiteLLMUpstreamError) {
+      res.status(err.status).json({
+        error: err.message,
+        ...(err.param ? { param: err.param } : {}),
+      });
+    } else {
+      logger.error('Failed to create team', err);
+      res.status(500).json({ error: err.message });
+    }
+  }
+
   router.post('/teams', async (req: Request, res: Response) => {
     if (!requireTeamMgmt(res)) return;
 
@@ -693,14 +705,7 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
         const result = await pending;
         res.json(result);
       } catch (err: any) {
-        if (err instanceof LiteLLMUpstreamError) {
-          res.status(err.status).json({
-            error: err.message,
-            ...(err.param ? { param: err.param } : {}),
-          });
-        } else {
-          res.status(500).json({ error: err.message });
-        }
+        sendTeamError(err, res);
       }
       return;
     }
@@ -721,18 +726,14 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
     };
 
     const createPromise = (async () => {
-      try {
-        const result = await client.createTeam(payload);
-        logger.info({
-          action: 'team.create',
-          actor: check.userEntityRef,
-          teamAlias: v.value.team_alias,
-          owningGroup: teamAdminCfg.group,
-        });
-        return result;
-      } catch (err: any) {
-        throw err;
-      }
+      const result = await client.createTeam(payload);
+      logger.info({
+        action: 'team.create',
+        actor: check.userEntityRef,
+        teamAlias: v.value.team_alias,
+        owningGroup: teamAdminCfg.group,
+      });
+      return result;
     })();
 
     teamCreateInFlight.set(key, createPromise);
@@ -740,15 +741,7 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
       const result = await createPromise;
       res.json(result);
     } catch (err: any) {
-      if (err instanceof LiteLLMUpstreamError) {
-        res.status(err.status).json({
-          error: err.message,
-          ...(err.param ? { param: err.param } : {}),
-        });
-      } else {
-        logger.error('Failed to create team', err);
-        res.status(500).json({ error: err.message });
-      }
+      sendTeamError(err, res);
     } finally {
       teamCreateInFlight.delete(key);
     }
