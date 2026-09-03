@@ -29,6 +29,7 @@ export interface TeamInfo {
   team_id: string;
   team_alias?: string;
   max_budget?: number;
+  budget_duration?: string;
   spend: number;
   members_with_roles?: TeamMember[];
   models?: string[];
@@ -180,8 +181,8 @@ export interface LiteLlmConfig {
   teamManagement?: {
     /** True only when the permission framework is enabled AND an admin group is configured. */
     enabled: boolean;
-    /** USD ceiling an admin may set as a team budget; null when unset. */
-    maxBudgetCeiling: number | null;
+    /** USD ceiling an admin may set as a team budget (defaults to 1000). */
+    maxBudgetCeiling: number;
     /** Whether an admin may create a team with no budget cap. */
     allowUnlimitedBudget: boolean;
     /** Whether knowledge-base / MCP management routes are enabled (opt-in). */

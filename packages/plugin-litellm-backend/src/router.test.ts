@@ -407,7 +407,7 @@ describe('router /config', () => {
     const { body } = await req(h.baseUrl, 'GET', '/config');
     assert.strictEqual(body.teamManagement.enabled, false);
     assert.strictEqual(body.teamManagement.allowUnlimitedBudget, false);
-    assert.strictEqual(body.teamManagement.maxBudgetCeiling, null);
+    assert.strictEqual(body.teamManagement.maxBudgetCeiling, 1000);
     assert.strictEqual(body.teamManagement.objectPermissionsEnabled, false);
   });
 

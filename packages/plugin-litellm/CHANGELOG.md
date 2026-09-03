@@ -10,6 +10,18 @@ commit/PR that bumps the version in `package.json`. Format follows the
 Earlier history: `git log -- packages/plugin-litellm` or the
 [GitHub tags](https://github.com/acarmisc/backstage-plugin-litellm-govai/tags).
 
+## 0.17.0
+
+### Minor Changes
+
+- feat(ManageTeamDialog): the **Max Budget** field is now bounded by the
+  server ceiling (`teamManagement.maxBudgetCeiling`, default 1000) via a
+  native `max` and a new team's budget pre-fills to that ceiling.
+- feat(ManageTeamDialog): **Budget Duration** is now a dropdown
+  (Daily / Weekly / Monthly / Quarterly / Yearly) instead of free text; an
+  unusual existing value stays selectable. `TeamInfo` gains `budget_duration`
+  so edit mode pre-selects the team's current period.
+
 ## 0.16.0
 
 ### Minor Changes

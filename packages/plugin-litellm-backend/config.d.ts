@@ -184,8 +184,7 @@ export interface Config {
 
       /**
        * Hard USD ceiling for max_budget an admin may set on a team.
-       * When omitted, no admin-settable budget is allowed unless
-       * allowUnlimitedBudget is true.
+       * @default 1000
        * @visibility backend
        */
       maxBudgetCeiling?: number;

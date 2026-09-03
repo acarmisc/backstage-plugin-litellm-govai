@@ -10,6 +10,17 @@ commit/PR that bumps the version in `package.json`. Format follows the
 Earlier history: `git log -- packages/plugin-litellm-backend` or the
 [GitHub tags](https://github.com/acarmisc/backstage-plugin-litellm-govai/tags).
 
+## 0.11.0
+
+### Minor Changes
+
+- feat: `litellm.teamAdmin.maxBudgetCeiling` now defaults to **1000** (USD) when
+  unset, instead of leaving the ceiling unconfigured. `TeamAdminConfig.maxBudgetCeiling`
+  is consequently always a number; the "ceiling is not configured" validation
+  branch is removed. `GET /config` returns the numeric ceiling (never null),
+  and `DEFAULT_TEAM_BUDGET_CEILING` is exported.
+- feat: `TeamInfo` / `LiteLLMClient` now surface `budget_duration`.
+
 ## 0.10.0
 
 ### Minor Changes

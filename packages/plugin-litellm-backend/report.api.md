@@ -543,7 +543,7 @@ export interface TeamAdminConfig {
     allowTeamDelete: boolean;
     allowUnlimitedBudget: boolean;
     group?: string;
-    maxBudgetCeiling?: number;
+    maxBudgetCeiling: number;
 }
 
 // @public (undocumented)

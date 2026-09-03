@@ -32,6 +32,8 @@ export interface TeamInfo {
   team_id: string;
   team_alias?: string;
   max_budget?: number;
+  /** Spend-reset period for max_budget, e.g. "30d". */
+  budget_duration?: string;
   spend: number;
   members_with_roles?: TeamMember[];
   models?: string[];

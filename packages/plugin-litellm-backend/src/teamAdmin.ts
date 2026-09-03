@@ -6,6 +6,14 @@ import { CatalogClient } from '@backstage/catalog-client';
 import { resolveUserId, resolveCredentials, isUserMemberOfGroup } from './provisioning';
 
 /**
+ * Default hard ceiling (USD) for an admin-set team budget when
+ * `litellm.teamAdmin.maxBudgetCeiling` is not configured. Chosen so the
+ * feature is usable out of the box without letting an admin set an unbounded
+ * team budget by omission.
+ */
+export const DEFAULT_TEAM_BUDGET_CEILING = 1000;
+
+/**
  * Governance limits for the team-administration feature. Every field is
  * fail-closed: an unset array means "nothing allowed", an unset boolean means
  * "deny", and an unset ceiling means "no admin-settable budget". An absent
@@ -32,10 +40,10 @@ export interface TeamAdminConfig {
   allowedModelAccessGroups: string[];
 
   /**
-   * Hard USD ceiling for a team's max_budget an admin may set.
-   * Undefined => no admin-settable budget allowed unless allowUnlimitedBudget.
+   * Hard USD ceiling for a team's max_budget an admin may set. Always a
+   * number — defaults to DEFAULT_TEAM_BUDGET_CEILING when not configured.
    */
-  maxBudgetCeiling?: number;
+  maxBudgetCeiling: number;
 
   /**
    * Allow an admin to create a team with no budget cap.
@@ -196,9 +204,9 @@ export function readTeamAdminConfig(config: Config): TeamAdminConfig {
       config.getOptionalStringArray(
         'litellm.teamAdmin.allowedModelAccessGroups',
       ) ?? [],
-    maxBudgetCeiling: config.getOptionalNumber(
-      'litellm.teamAdmin.maxBudgetCeiling',
-    ),
+    maxBudgetCeiling:
+      config.getOptionalNumber('litellm.teamAdmin.maxBudgetCeiling') ??
+      DEFAULT_TEAM_BUDGET_CEILING,
     allowUnlimitedBudget:
       config.getOptionalBoolean('litellm.teamAdmin.allowUnlimitedBudget') ??
       false,
@@ -263,13 +271,10 @@ export function validateTeamWriteInput(input: TeamWriteInput, cfg: TeamAdminConf
     if (maxBudget === undefined) {
       return { ok: false, error: 'max_budget is required' };
     }
-    if (cfg.maxBudgetCeiling === undefined) {
-      return { ok: false, error: 'team budget ceiling is not configured (litellm.teamAdmin.maxBudgetCeiling)' };
-    }
     if (maxBudget > cfg.maxBudgetCeiling) {
       return { ok: false, error: `max_budget $${maxBudget} exceeds the ceiling $${cfg.maxBudgetCeiling}` };
     }
-  } else if (maxBudget !== undefined && cfg.maxBudgetCeiling !== undefined && maxBudget > cfg.maxBudgetCeiling) {
+  } else if (maxBudget !== undefined && maxBudget > cfg.maxBudgetCeiling) {
     return { ok: false, error: `max_budget $${maxBudget} exceeds the ceiling $${cfg.maxBudgetCeiling}` };
   }
 
@@ -344,7 +349,7 @@ export function validateTeamPatchInput(input: TeamWriteInput & { blocked?: boole
       if (!Number.isFinite(input.max_budget) || input.max_budget <= 0) {
         return { ok: false, error: 'max_budget must be a positive number' };
       }
-      if (cfg.maxBudgetCeiling !== undefined && input.max_budget > cfg.maxBudgetCeiling) {
+      if (input.max_budget > cfg.maxBudgetCeiling) {
         return { ok: false, error: `max_budget $${input.max_budget} exceeds the ceiling $${cfg.maxBudgetCeiling}` };
       }
       result.max_budget = input.max_budget;
