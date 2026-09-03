@@ -826,6 +826,44 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
     }
   });
 
+  // Scoped listing for team admins: returns ONLY the teams whose
+  // `metadata.owning_group` equals the configured admin group, so a team admin
+  // can see and edit teams their group owns even when they are not a member.
+  // This deliberately never returns a global team list. Registered before any
+  // `/teams/:param` route so the literal path is not shadowed.
+  router.get('/teams/managed', async (req: Request, res: Response) => {
+    if (!requireTeamMgmt(res)) return;
+
+    const check = await assertTeamAdmin({
+      req,
+      auth,
+      permissions,
+      catalogClient,
+      teamAdminGroup: teamAdminCfg.group!,
+      permission: litellmTeamManagePermission,
+      logger,
+    });
+
+    if (!check.ok) {
+      res.status(check.status).json({ error: check.error });
+      return;
+    }
+
+    try {
+      const all = await client.listTeams();
+      // TODO(multi-group): when litellm.teamAdmin.group becomes a list, resolve
+      // the caller's group set and filter with includes().
+      const owned = all.filter(
+        t =>
+          typeof t.metadata?.owning_group === 'string' &&
+          t.metadata.owning_group === teamAdminCfg.group,
+      );
+      res.json(owned);
+    } catch (err) {
+      sendTeamError(err, res);
+    }
+  });
+
   router.get('/teams/:teamId/usage', async (req: Request, res: Response) => {
     try {
       const { teamId } = req.params;

@@ -293,6 +293,7 @@ export class LiteLLMClient {
     getUserInfo(userId?: string): Promise<UserInfo | null>;
     listKeys(userId?: string): Promise<VirtualKey[]>;
     listModels(): Promise<ModelInfo[]>;
+    listTeams(): Promise<TeamInfo[]>;
     // (undocumented)
     resetKeySpend(key: string): Promise<unknown>;
     // (undocumented)

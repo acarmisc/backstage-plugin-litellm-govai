@@ -189,4 +189,41 @@ describe('LiteLLMClient team CRUD methods', () => {
     const auth = (fetchCalls[0].init.headers as Record<string, string>)?.Authorization;
     assert.strictEqual(auth, `Bearer ${mockConfig.masterKey}`);
   });
+
+  test('listTeams GETs /team/list and surfaces metadata on each row', async () => {
+    stubFetch([
+      { team_id: 't1', spend: 0, metadata: { owning_group: 'group:default/admins' } },
+      { team_info: { team_id: 't2', spend: 5, metadata: { owning_group: 'group:default/other' } } },
+    ]);
+
+    const client = new LiteLLMClient(mockConfig);
+    const result = await client.listTeams();
+
+    assert.ok(fetchCalls[0].url.endsWith('/team/list'), fetchCalls[0].url);
+    assert.strictEqual(result.length, 2);
+    assert.strictEqual(result[0].team_id, 't1');
+    assert.deepStrictEqual(result[0].metadata, { owning_group: 'group:default/admins' });
+    // second row was wrapped in a team_info envelope — must be unwrapped
+    assert.strictEqual(result[1].team_id, 't2');
+    assert.deepStrictEqual(result[1].metadata, { owning_group: 'group:default/other' });
+  });
+
+  test('listTeams tolerates { teams: [...] } and { data: [...] } shapes', async () => {
+    stubFetch({ teams: [{ team_id: 'a', spend: 0 }] });
+    let client = new LiteLLMClient(mockConfig);
+    let result = await client.listTeams();
+    assert.deepStrictEqual(result.map(t => t.team_id), ['a']);
+
+    stubFetch({ data: [{ team_id: 'b', spend: 0 }, { team_id: 'c', spend: 0 }] });
+    client = new LiteLLMClient(mockConfig);
+    result = await client.listTeams();
+    assert.deepStrictEqual(result.map(t => t.team_id), ['b', 'c']);
+  });
+
+  test('listTeams returns [] for an unrecognised shape', async () => {
+    stubFetch({ unexpected: true });
+    const client = new LiteLLMClient(mockConfig);
+    const result = await client.listTeams();
+    assert.deepStrictEqual(result, []);
+  });
 });

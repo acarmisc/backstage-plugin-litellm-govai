@@ -81,6 +81,7 @@ function mockClient(overrides: {
   resetKeySpend?: (k: string) => Promise<any>;
   listModels?: () => Promise<ModelInfo[]>;
   getTeamInfo?: (id: string) => Promise<any>;
+  listTeams?: () => Promise<any[]>;
   getUsage?: (s: string, e: string, uid?: string) => Promise<UsageMetrics>;
   getAuditLogs?: (p: any) => Promise<any>;
   createTeam?: (r: any) => Promise<any>;
@@ -97,6 +98,7 @@ function mockClient(overrides: {
     resetKeySpend: [],
     listModels: [],
     getTeamInfo: [],
+    listTeams: [],
     getUsage: [],
     getAuditLogs: [],
     createTeam: [],
@@ -165,6 +167,12 @@ function mockClient(overrides: {
       return overrides.getTeamInfo
         ? overrides.getTeamInfo(id)
         : Promise.resolve({ team_id: id, spend: 0 });
+    },
+    listTeams: () => {
+      calls.listTeams.push(null);
+      return overrides.listTeams
+        ? overrides.listTeams()
+        : Promise.resolve([]);
     },
     getUsage: (s: string, e: string, uid?: string) => {
       calls.getUsage.push({ s, e, uid });
@@ -1240,6 +1248,91 @@ describe('router PATCH /teams/:id', () => {
       assert.strictEqual(payload.metadata.created_by_backstage_user, 'user:default/bob');
       assert.strictEqual(payload.metadata.updated_by_backstage_user, 'user:default/alice');
       assert.ok(payload.metadata.updated_at_iso);
+    } finally {
+      await new Promise<void>(r => h.server.close(() => r()));
+    }
+  });
+});
+
+describe('router GET /teams/managed', () => {
+  test('team management disabled => 403', async () => {
+    const h = await startHarness({});
+    try {
+      const { status, body } = await req(h.baseUrl, 'GET', '/teams/managed', {
+        authRef: 'user:default/alice',
+      });
+      assert.strictEqual(status, 403);
+      assert.match(body.error, /disabled/i);
+    } finally {
+      await new Promise<void>(r => h.server.close(() => r()));
+    }
+  });
+
+  test('enabled + caller not in group => 403', async () => {
+    const h = await startHarness({
+      config: {
+        'permission.enabled': true,
+        'litellm.teamAdmin.group': 'group:default/admins',
+      },
+      catalogClient: mockCatalog([]),
+    });
+    try {
+      const { status, body } = await req(h.baseUrl, 'GET', '/teams/managed', {
+        authRef: 'user:default/alice',
+      });
+      assert.strictEqual(status, 403);
+      assert.match(body.error, /not a member/i);
+    } finally {
+      await new Promise<void>(r => h.server.close(() => r()));
+    }
+  });
+
+  test('enabled + in group + permission DENY => 403', async () => {
+    const h = await startHarness({
+      config: {
+        'permission.enabled': true,
+        'litellm.teamAdmin.group': 'group:default/admins',
+      },
+      catalogClient: mockCatalog(['group:default/admins']),
+      permissions: mockPermissions({
+        authorize: async () => [{ result: AuthorizeResult.DENY }],
+      }),
+    });
+    try {
+      const { status, body } = await req(h.baseUrl, 'GET', '/teams/managed', {
+        authRef: 'user:default/alice',
+      });
+      assert.strictEqual(status, 403);
+      assert.match(body.error, /missing permission/i);
+    } finally {
+      await new Promise<void>(r => h.server.close(() => r()));
+    }
+  });
+
+  test('authorized => returns only teams owned by the admin group', async () => {
+    const h = await startHarness({
+      config: {
+        'permission.enabled': true,
+        'litellm.teamAdmin.group': 'group:default/admins',
+      },
+      catalogClient: mockCatalog(['group:default/admins']),
+      client: mockClient({
+        listTeams: async () => [
+          { team_id: 't1', spend: 0, metadata: { owning_group: 'group:default/admins' } },
+          { team_id: 't2', spend: 0, metadata: { owning_group: 'group:default/other' } },
+          { team_id: 't3', spend: 0, metadata: {} },
+        ],
+      }),
+    });
+    try {
+      const { status, body } = await req(h.baseUrl, 'GET', '/teams/managed', {
+        authRef: 'user:default/alice',
+      });
+      assert.strictEqual(status, 200);
+      assert.deepStrictEqual(body, [
+        { team_id: 't1', spend: 0, metadata: { owning_group: 'group:default/admins' } },
+      ]);
+      assert.strictEqual(h.client.calls.listTeams.length, 1);
     } finally {
       await new Promise<void>(r => h.server.close(() => r()));
     }
