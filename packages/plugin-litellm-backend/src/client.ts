@@ -341,9 +341,19 @@ export class LiteLLMClient {
     const raw = await this.request<any>(
       `/team/info?team_id=${encodeURIComponent(teamId)}`,
     );
+    return this.toTeamInfo(raw, teamId);
+  }
+
+  /**
+   * Normalises a single team row into the TeamInfo contract. Tolerates both
+   * the `/team/info` shape (row wrapped in a `team_info` envelope alongside
+   * sibling arrays) and a bare row as returned per-item by `/team/list`.
+   * `metadata` is always surfaced so callers can read `owning_group`.
+   */
+  private toTeamInfo(raw: any, fallbackId?: string): TeamInfo {
     const inner = raw?.team_info ?? {};
     return {
-      team_id: raw?.team_id ?? inner.team_id ?? teamId,
+      team_id: raw?.team_id ?? inner.team_id ?? fallbackId ?? '',
       team_alias: inner.team_alias ?? raw?.team_alias,
       max_budget: inner.max_budget ?? raw?.max_budget,
       spend: inner.spend ?? raw?.spend ?? 0,
@@ -356,6 +366,24 @@ export class LiteLLMClient {
       blocked: inner.blocked ?? raw?.blocked,
       team_member_budget: inner.team_member_budget ?? raw?.team_member_budget,
     };
+  }
+
+  /**
+   * Lists every team known to the LiteLLM proxy. Tolerates the observed
+   * response shapes — a bare array, `{ teams: [...] }`, or `{ data: [...] }` —
+   * and normalises each row through the same unwrap as `getTeamInfo`.
+   *
+   * This returns the GLOBAL team list and must never be exposed directly to
+   * end users; callers are responsible for scoping the result (e.g. to teams
+   * whose `metadata.owning_group` matches the caller's admin group).
+   */
+  async listTeams(): Promise<TeamInfo[]> {
+    const raw = await this.request<any>('/team/list');
+    let rows: any[] = [];
+    if (Array.isArray(raw)) rows = raw;
+    else if (Array.isArray(raw?.teams)) rows = raw.teams;
+    else if (Array.isArray(raw?.data)) rows = raw.data;
+    return rows.map(row => this.toTeamInfo(row));
   }
 
   async createTeam(payload: CreateTeamRequest): Promise<CreateTeamResponse> {

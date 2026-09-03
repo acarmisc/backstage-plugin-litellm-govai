@@ -118,6 +118,16 @@ describe('LiteLlmApi routing', () => {
     assert.ok(calls[0].url.includes('start_date='), calls[0].url);
   });
 
+  test('getManagedTeams → GET /teams/managed', async () => {
+    const teams = [{ team_id: 't1', spend: 0 }];
+    const { api, calls } = makeApi(200, teams);
+    const result = await api.getManagedTeams();
+    assert.strictEqual(calls.length, 1);
+    assert.ok(calls[0].url.endsWith('/teams/managed'), calls[0].url);
+    assert.strictEqual(calls[0].init, undefined);
+    assert.deepStrictEqual(result, teams);
+  });
+
   test('getConfig → GET /config', async () => {
     const { api, calls } = makeApi(200, { baseUrl: 'https://llm-gw.example.com' });
     const config = await api.getConfig();

@@ -84,6 +84,16 @@ export const LiteLLMPage: React.FC = () => {
 
   const { value: liteLlmConfig } = useAsync(() => api.getConfig(), [api]);
 
+  // Teams the caller administers by group ownership (not membership). Only
+  // fetched when team management is enabled; failures degrade to an empty list.
+  const { value: managedTeams } = useAsync(
+    async () =>
+      liteLlmConfig?.teamManagement?.enabled
+        ? api.getManagedTeams().catch(() => [])
+        : [],
+    [api, liteLlmConfig],
+  );
+
   const { allowed: canCreateTeam } = usePermission({ permission: litellmTeamCreatePermission });
   const { allowed: canManageTeam } = usePermission({ permission: litellmTeamManagePermission });
 
@@ -346,6 +356,12 @@ export const LiteLLMPage: React.FC = () => {
 
       {activeTab === 'teams' && (() => {
         const teamMgmtEnabled = liteLlmConfig?.teamManagement?.enabled ?? false;
+        // Union of teams the user is a member of and teams their group owns,
+        // de-duplicated by team_id (membership entries win on conflict).
+        const teamsById = new Map<string, TeamInfo>();
+        for (const t of managedTeams ?? []) teamsById.set(t.team_id, t);
+        for (const t of teams ?? []) teamsById.set(t.team_id, t);
+        const visibleTeams = Array.from(teamsById.values());
         return (
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
             {teamMgmtEnabled && canCreateTeam && (
@@ -359,7 +375,7 @@ export const LiteLLMPage: React.FC = () => {
               </Box>
             )}
             <TeamUsage
-              teams={teams ?? []}
+              teams={visibleTeams}
               loading={teamsLoading}
               getTeamUsage={teamId => {
                 if (teamUsageCache[teamId] === undefined) loadTeamUsage(teamId);

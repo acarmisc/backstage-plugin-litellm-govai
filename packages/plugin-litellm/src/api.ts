@@ -38,6 +38,7 @@ export interface LiteLlmApiInterface {
   pruneExpiredKeys(): Promise<{ pruned: number }>;
   listModels(): Promise<ModelInfo[]>;
   getTeams(): Promise<TeamInfo[]>;
+  getManagedTeams(): Promise<TeamInfo[]>;
   getUsage(startDate: string, endDate: string): Promise<UsageMetrics>;
   getTeamUsage(teamId: string, startDate: string, endDate: string): Promise<UsageMetrics>;
   getAuditLogs(params: AuditLogsParams): Promise<PaginatedAuditLogs>;
@@ -188,6 +189,12 @@ export class LiteLlmApi implements LiteLlmApiInterface {
 
   async getTeams(): Promise<TeamInfo[]> {
     return this.get<TeamInfo[]>('/teams');
+  }
+
+  // Teams whose owning_group the caller administers (server-scoped). Distinct
+  // from getTeams(), which returns only the teams the caller is a member of.
+  async getManagedTeams(): Promise<TeamInfo[]> {
+    return this.get<TeamInfo[]>('/teams/managed');
   }
 
   async getUsage(startDate: string, endDate: string): Promise<UsageMetrics> {
