@@ -1217,6 +1217,14 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
         const updated = await client.updateTeam({
           team_id: teamId,
           object_permission: objectPermission,
+          // /team/update replaces metadata wholesale — re-send the merged
+          // object so owning_group / created_* survive and the change is
+          // attributed.
+          metadata: {
+            ...(team.metadata ?? {}),
+            updated_by_backstage_user: actor,
+            updated_at_iso: new Date().toISOString(),
+          },
         });
         logger.info({
           action: 'team.knowledgebase.set',
@@ -1308,6 +1316,14 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
         const updated = await client.updateTeam({
           team_id: teamId,
           object_permission: objectPermission,
+          // /team/update replaces metadata wholesale — re-send the merged
+          // object so owning_group / created_* survive and the change is
+          // attributed.
+          metadata: {
+            ...(team.metadata ?? {}),
+            updated_by_backstage_user: actor,
+            updated_at_iso: new Date().toISOString(),
+          },
         });
         logger.info({
           action: 'team.mcp.set',
