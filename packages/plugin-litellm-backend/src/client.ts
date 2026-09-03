@@ -356,6 +356,7 @@ export class LiteLLMClient {
       team_id: raw?.team_id ?? inner.team_id ?? fallbackId ?? '',
       team_alias: inner.team_alias ?? raw?.team_alias,
       max_budget: inner.max_budget ?? raw?.max_budget,
+      budget_duration: inner.budget_duration ?? raw?.budget_duration,
       spend: inner.spend ?? raw?.spend ?? 0,
       members_with_roles: inner.members_with_roles ?? raw?.members_with_roles,
       models: inner.models ?? raw?.models,

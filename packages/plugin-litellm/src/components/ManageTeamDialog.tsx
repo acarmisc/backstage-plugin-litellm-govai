@@ -9,6 +9,7 @@ import Alert from '@mui/material/Alert';
 import Checkbox from '@mui/material/Checkbox';
 import FormControlLabel from '@mui/material/FormControlLabel';
 import Autocomplete from '@mui/material/Autocomplete';
+import MenuItem from '@mui/material/MenuItem';
 import Box from '@mui/material/Box';
 import Divider from '@mui/material/Divider';
 import Typography from '@mui/material/Typography';
@@ -18,6 +19,17 @@ import ListItem from '@mui/material/ListItem';
 import ListItemText from '@mui/material/ListItemText';
 import { Delete as DeleteIcon } from '@mui/icons-material';
 import { TeamInfo, ModelInfo, LiteLlmConfig, CreateTeamRequest, UpdateTeamRequest, VectorStoreInfo, McpServerInfo } from '../types';
+
+/** Spend-reset periods offered for a team budget (LiteLLM `budget_duration`). */
+const BUDGET_DURATION_OPTIONS: Array<{ value: string; label: string }> = [
+  { value: '1d', label: 'Daily (1d)' },
+  { value: '7d', label: 'Weekly (7d)' },
+  { value: '30d', label: 'Monthly (30d)' },
+  { value: '90d', label: 'Quarterly (90d)' },
+  { value: '365d', label: 'Yearly (365d)' },
+];
+const DEFAULT_BUDGET_DURATION = '30d';
+const FALLBACK_BUDGET_CEILING = 1000;
 
 interface ManageTeamDialogProps {
   open: boolean;
@@ -87,22 +99,26 @@ export const ManageTeamDialog: FC<ManageTeamDialogProps> = ({
   const [mcpError, setMcpError] = useState<string | null>(null);
 
   const allowUnlimitedBudget = config?.teamManagement?.allowUnlimitedBudget ?? false;
-  const maxBudgetCeiling = config?.teamManagement?.maxBudgetCeiling;
+  const maxBudgetCeiling =
+    config?.teamManagement?.maxBudgetCeiling ?? FALLBACK_BUDGET_CEILING;
 
   useEffect(() => {
     if (open) {
       if (mode === 'edit' && team) {
         setAlias(team.team_alias ?? '');
         setModels(team.models ?? []);
-        setMaxBudget(team.max_budget ? String(team.max_budget) : '');
+        setMaxBudget(
+          team.max_budget ? String(team.max_budget) : String(maxBudgetCeiling),
+        );
         setUnlimited(allowUnlimitedBudget && !team.max_budget);
-        setBudgetDuration('');
+        setBudgetDuration(team.budget_duration ?? DEFAULT_BUDGET_DURATION);
       } else {
         setAlias('');
         setModels([]);
-        setMaxBudget('');
+        // Default a new team's budget to the ceiling; the admin can lower it.
+        setMaxBudget(String(maxBudgetCeiling));
         setUnlimited(allowUnlimitedBudget);
-        setBudgetDuration('');
+        setBudgetDuration(DEFAULT_BUDGET_DURATION);
       }
       setError(null);
       setMemberRef('');
@@ -113,7 +129,7 @@ export const ManageTeamDialog: FC<ManageTeamDialogProps> = ({
       setMcpIds(team?.object_permission?.mcp_servers ?? []);
       setMcpError(null);
     }
-  }, [open, mode, team, allowUnlimitedBudget]);
+  }, [open, mode, team, allowUnlimitedBudget, maxBudgetCeiling]);
 
   const handleSubmit = async () => {
     setError(null);
@@ -138,7 +154,7 @@ export const ManageTeamDialog: FC<ManageTeamDialogProps> = ({
         setError('Budget must be a positive number');
         return;
       }
-      if (maxBudgetCeiling !== null && maxBudgetCeiling !== undefined && budget > maxBudgetCeiling) {
+      if (budget > maxBudgetCeiling) {
         setError(`Budget cannot exceed $${maxBudgetCeiling}`);
         return;
       }
@@ -233,6 +249,11 @@ export const ManageTeamDialog: FC<ManageTeamDialogProps> = ({
   };
 
   const modelNames = allModels.map(m => m.model_name);
+  // Keep an unusual existing value (e.g. "14d", "1mo") selectable so editing a
+  // team doesn't silently rewrite its duration.
+  const durationOptions = BUDGET_DURATION_OPTIONS.some(o => o.value === budgetDuration)
+    ? BUDGET_DURATION_OPTIONS
+    : [...BUDGET_DURATION_OPTIONS, { value: budgetDuration, label: budgetDuration }];
   const members = team?.members_with_roles ?? [];
   const showMembers = mode === 'edit' && !!canManageMembers;
   const showKnowledgeBases = mode === 'edit' && !!canManageKnowledgeBases;
@@ -273,11 +294,8 @@ export const ManageTeamDialog: FC<ManageTeamDialogProps> = ({
           value={maxBudget}
           onChange={e => setMaxBudget(e.target.value)}
           disabled={submitting || unlimited}
-          helperText={
-            maxBudgetCeiling !== null && maxBudgetCeiling !== undefined
-              ? `Maximum: $${maxBudgetCeiling}`
-              : undefined
-          }
+          inputProps={{ min: 0, max: maxBudgetCeiling }}
+          helperText={`Maximum: $${maxBudgetCeiling}`}
           fullWidth
         />
 
@@ -289,13 +307,20 @@ export const ManageTeamDialog: FC<ManageTeamDialogProps> = ({
         )}
 
         <TextField
+          select
           label="Budget Duration"
           value={budgetDuration}
           onChange={e => setBudgetDuration(e.target.value)}
-          placeholder="30d"
-          disabled={submitting}
+          disabled={submitting || unlimited}
+          helperText="Spend-reset period for the team budget"
           fullWidth
-        />
+        >
+          {durationOptions.map(o => (
+            <MenuItem key={o.value} value={o.value}>
+              {o.label}
+            </MenuItem>
+          ))}
+        </TextField>
 
         {showMembers && (
           <Box>

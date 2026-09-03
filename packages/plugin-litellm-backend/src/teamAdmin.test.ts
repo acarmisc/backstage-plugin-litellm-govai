@@ -21,7 +21,7 @@ describe('readTeamAdminConfig', () => {
     assert.strictEqual(result.group, undefined);
     assert.deepStrictEqual(result.allowedModels, []);
     assert.deepStrictEqual(result.allowedModelAccessGroups, []);
-    assert.strictEqual(result.maxBudgetCeiling, undefined);
+    assert.strictEqual(result.maxBudgetCeiling, 1000); // DEFAULT_TEAM_BUDGET_CEILING
     assert.strictEqual(result.allowUnlimitedBudget, false);
     assert.deepStrictEqual(result.allowedVectorStores, []);
     assert.deepStrictEqual(result.allowedMcpServers, []);
@@ -88,7 +88,7 @@ describe('readTeamAdminConfig', () => {
     assert.strictEqual(result.group, 'group:default/admins');
     assert.deepStrictEqual(result.allowedModels, ['gpt-4']);
     assert.deepStrictEqual(result.allowedModelAccessGroups, []);
-    assert.strictEqual(result.maxBudgetCeiling, undefined);
+    assert.strictEqual(result.maxBudgetCeiling, 1000); // DEFAULT_TEAM_BUDGET_CEILING
     assert.strictEqual(result.allowUnlimitedBudget, false);
     assert.deepStrictEqual(result.allowedVectorStores, []);
   });

@@ -132,7 +132,7 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
       keyGeneration: { allowUnlimitedBudget, teamRequired },
       teamManagement: {
         enabled: teamMgmtEnabled,
-        maxBudgetCeiling: teamAdminCfg.maxBudgetCeiling ?? null,
+        maxBudgetCeiling: teamAdminCfg.maxBudgetCeiling,
         allowUnlimitedBudget: teamAdminCfg.allowUnlimitedBudget,
         objectPermissionsEnabled: objectPermsEnabled,
       },
