@@ -40,10 +40,13 @@ import {
   litellmKeyRevokePermission,
   litellmKeyManagePermission,
   litellmAuditReadPermission,
+  litellmTeamCreatePermission,
 } from './permissions';
-import { isTeamManagementEnabled, readTeamAdminConfig } from './teamAdmin';
+import { isTeamManagementEnabled, readTeamAdminConfig, assertTeamAdmin, validateTeamWriteInput } from './teamAdmin';
 
 export { ProvisioningError };
+
+const teamCreateInFlight = new Map<string, Promise<unknown>>();
 
 export interface RouterOptions {
   config: Config;
@@ -53,6 +56,8 @@ export interface RouterOptions {
   permissions: PermissionsService;
   /** Override the LiteLLM client (tests). Defaults to one built from config. */
   client?: LiteLLMClient;
+  /** Override the catalog client (tests). Defaults to one built from discovery. */
+  catalogClient?: CatalogClient;
   /** Override the bridge token verifier (tests). Defaults to a Keycloak JWKS verifier. */
   tokenVerifier?: TokenVerifier;
 }
@@ -76,7 +81,7 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
   const teamRequired = config.getOptionalBoolean('litellm.keyGeneration.teamRequired') ?? true;
   const teamMgmtEnabled = isTeamManagementEnabled(config);
   const teamAdminCfg = readTeamAdminConfig(config);
-  const catalogClient = new CatalogClient({ discoveryApi: discovery });
+  const catalogClient = options.catalogClient ?? new CatalogClient({ discoveryApi: discovery });
 
   if (provisioningEnabled) {
     logger.info(
@@ -643,6 +648,109 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
       }
       logger.error('Failed to fetch teams', error);
       res.status(500).json({ error: error.message });
+    }
+  });
+
+  function requireTeamMgmt(res: Response): boolean {
+    if (!teamMgmtEnabled) {
+      res.status(403).json({
+        error: 'Team management is disabled (requires permission.enabled and litellm.teamAdmin.group)',
+      });
+      return false;
+    }
+    return true;
+  }
+
+  router.post('/teams', async (req: Request, res: Response) => {
+    if (!requireTeamMgmt(res)) return;
+
+    const check = await assertTeamAdmin({
+      req,
+      auth,
+      permissions,
+      catalogClient,
+      teamAdminGroup: teamAdminCfg.group!,
+      permission: litellmTeamCreatePermission,
+      logger,
+    });
+
+    if (!check.ok) {
+      res.status(check.status).json({ error: check.error });
+      return;
+    }
+
+    const v = validateTeamWriteInput(req.body ?? {}, teamAdminCfg);
+    if (!v.ok) {
+      res.status(400).json({ error: v.error });
+      return;
+    }
+
+    const key = v.value.team_alias.trim().toLowerCase();
+    const pending = teamCreateInFlight.get(key);
+    if (pending) {
+      logger.info(`Team creation already in flight for ${key} — joining`);
+      try {
+        const result = await pending;
+        res.json(result);
+      } catch (err: any) {
+        if (err instanceof LiteLLMUpstreamError) {
+          res.status(err.status).json({
+            error: err.message,
+            ...(err.param ? { param: err.param } : {}),
+          });
+        } else {
+          res.status(500).json({ error: err.message });
+        }
+      }
+      return;
+    }
+
+    const payload = {
+      team_alias: v.value.team_alias,
+      models: v.value.models,
+      ...(v.value.max_budget !== undefined && { max_budget: v.value.max_budget }),
+      ...(v.value.budget_duration && { budget_duration: v.value.budget_duration }),
+      ...(v.value.tpm_limit !== undefined && { tpm_limit: v.value.tpm_limit }),
+      ...(v.value.rpm_limit !== undefined && { rpm_limit: v.value.rpm_limit }),
+      metadata: {
+        owning_group: teamAdminCfg.group,
+        created_by_backstage_user: check.userEntityRef,
+        created_via: 'backstage',
+        created_at_iso: new Date().toISOString(),
+      },
+    };
+
+    const createPromise = (async () => {
+      try {
+        const result = await client.createTeam(payload);
+        logger.info({
+          action: 'team.create',
+          actor: check.userEntityRef,
+          teamAlias: v.value.team_alias,
+          owningGroup: teamAdminCfg.group,
+        });
+        return result;
+      } catch (err: any) {
+        throw err;
+      }
+    })();
+
+    teamCreateInFlight.set(key, createPromise);
+    try {
+      const result = await createPromise;
+      res.json(result);
+    } catch (err: any) {
+      if (err instanceof LiteLLMUpstreamError) {
+        res.status(err.status).json({
+          error: err.message,
+          ...(err.param ? { param: err.param } : {}),
+        });
+      } else {
+        logger.error('Failed to create team', err);
+        res.status(500).json({ error: err.message });
+      }
+    } finally {
+      teamCreateInFlight.delete(key);
     }
   });
 
