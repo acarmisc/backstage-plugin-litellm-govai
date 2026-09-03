@@ -1,6 +1,6 @@
 import { describe, test, afterEach } from 'node:test';
 import assert from 'node:assert';
-import { readTeamAdminConfig, isTeamManagementEnabled, assertTeamAdmin } from './teamAdmin';
+import { readTeamAdminConfig, isTeamManagementEnabled, assertTeamAdmin, validateTeamWriteInput } from './teamAdmin';
 import * as provisioning from './provisioning';
 import { AuthorizeResult } from '@backstage/plugin-permission-common';
 
@@ -244,6 +244,92 @@ describe('assertTeamAdmin', () => {
     const result = await assertTeamAdmin(opts);
     assert.strictEqual(result.ok, false);
     assert.strictEqual(result.status, 401);
+  });
+});
+
+describe('validateTeamWriteInput', () => {
+  const cfg: any = {
+    allowedModels: ['gpt-4o', 'gpt-4-turbo'],
+    allowedModelAccessGroups: ['premium'],
+    maxBudgetCeiling: 1000,
+    allowUnlimitedBudget: false,
+  };
+
+  test('missing team_alias fails', () => {
+    const result = validateTeamWriteInput({ models: ['gpt-4o'] }, cfg);
+    assert.strictEqual(result.ok, false);
+    assert.ok(result.error.includes('team_alias is required'));
+  });
+
+  test('empty models fails', () => {
+    const result = validateTeamWriteInput({ team_alias: 'squad-a', models: [] }, cfg);
+    assert.strictEqual(result.ok, false);
+    assert.ok(result.error.includes('must list at least one'));
+  });
+
+  test('model not in allowlist fails', () => {
+    const result = validateTeamWriteInput(
+      { team_alias: 'squad-a', models: ['claude-3-opus'] },
+      cfg
+    );
+    assert.strictEqual(result.ok, false);
+    assert.ok(result.error.includes('not in the allowed set'));
+  });
+
+  test('max_budget over ceiling fails', () => {
+    const result = validateTeamWriteInput(
+      { team_alias: 'squad-a', models: ['gpt-4o'], max_budget: 1500 },
+      cfg
+    );
+    assert.strictEqual(result.ok, false);
+    assert.ok(result.error.includes('exceeds the ceiling'));
+  });
+
+  test('missing max_budget when required fails', () => {
+    const result = validateTeamWriteInput(
+      { team_alias: 'squad-a', models: ['gpt-4o'] },
+      cfg
+    );
+    assert.strictEqual(result.ok, false);
+    assert.ok(result.error.includes('max_budget is required'));
+  });
+
+  test('happy path with named model', () => {
+    const result = validateTeamWriteInput(
+      { team_alias: '  squad-a  ', models: ['gpt-4o'], max_budget: 500 },
+      cfg
+    );
+    assert.strictEqual(result.ok, true);
+    assert.strictEqual(result.value.team_alias, 'squad-a');
+    assert.strictEqual(result.value.budget_duration, '30d');
+  });
+
+  test('happy path with access-group name', () => {
+    const result = validateTeamWriteInput(
+      { team_alias: 'squad-b', models: ['premium'], max_budget: 500 },
+      cfg
+    );
+    assert.strictEqual(result.ok, true);
+  });
+
+  test('unlimited budget when configured', () => {
+    const cfgUnlimited = { ...cfg, allowUnlimitedBudget: true };
+    const result = validateTeamWriteInput(
+      { team_alias: 'squad-c', models: ['gpt-4o'] },
+      cfgUnlimited
+    );
+    assert.strictEqual(result.ok, true);
+    assert.strictEqual(result.value.max_budget, undefined);
+  });
+
+  test('passes through tpm/rpm limits', () => {
+    const result = validateTeamWriteInput(
+      { team_alias: 'squad-d', models: ['gpt-4o'], max_budget: 500, tpm_limit: 1000, rpm_limit: 100 },
+      cfg
+    );
+    assert.strictEqual(result.ok, true);
+    assert.strictEqual(result.value.tpm_limit, 1000);
+    assert.strictEqual(result.value.rpm_limit, 100);
   });
 });
 

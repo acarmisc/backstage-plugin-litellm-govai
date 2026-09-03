@@ -200,3 +200,83 @@ export function readTeamAdminConfig(config: Config): TeamAdminConfig {
       config.getOptionalBoolean('litellm.teamAdmin.allowTeamDelete') ?? false,
   };
 }
+
+export interface TeamWriteInput {
+  team_alias?: string;
+  models?: string[];
+  max_budget?: number | null;
+  budget_duration?: string;
+  tpm_limit?: number;
+  rpm_limit?: number;
+}
+
+export type TeamWriteValidation =
+  | { ok: true; value: { team_alias: string; models: string[]; max_budget?: number; budget_duration?: string; tpm_limit?: number; rpm_limit?: number } }
+  | { ok: false; error: string };
+
+export function validateTeamWriteInput(input: TeamWriteInput, cfg: TeamAdminConfig): TeamWriteValidation {
+  const trimmedAlias = (input.team_alias ?? '').trim();
+  if (!trimmedAlias) {
+    return { ok: false, error: 'team_alias is required' };
+  }
+
+  const models = input.models ?? [];
+  if (!Array.isArray(models) || models.length === 0) {
+    return { ok: false, error: 'models must list at least one allowed model (a team with no explicit models grants access to every proxy model)' };
+  }
+
+  const allowedSet = new Set([...cfg.allowedModels, ...cfg.allowedModelAccessGroups]);
+  if (allowedSet.size === 0) {
+    return { ok: false, error: 'models are not allowed (team admin has configured no allowlist)' };
+  }
+
+  for (const model of models) {
+    if (!allowedSet.has(model)) {
+      return { ok: false, error: `model "${model}" is not in the allowed set for team admins` };
+    }
+  }
+
+  let maxBudget: number | undefined;
+  if (input.max_budget !== undefined && input.max_budget !== null) {
+    if (!Number.isFinite(input.max_budget) || input.max_budget <= 0) {
+      return { ok: false, error: 'max_budget must be a positive number' };
+    }
+    maxBudget = input.max_budget;
+  }
+
+  if (!cfg.allowUnlimitedBudget) {
+    if (maxBudget === undefined) {
+      return { ok: false, error: 'max_budget is required' };
+    }
+    if (cfg.maxBudgetCeiling === undefined) {
+      return { ok: false, error: 'team budget ceiling is not configured (litellm.teamAdmin.maxBudgetCeiling)' };
+    }
+    if (maxBudget > cfg.maxBudgetCeiling) {
+      return { ok: false, error: `max_budget $${maxBudget} exceeds the ceiling $${cfg.maxBudgetCeiling}` };
+    }
+  } else if (maxBudget !== undefined && cfg.maxBudgetCeiling !== undefined && maxBudget > cfg.maxBudgetCeiling) {
+    return { ok: false, error: `max_budget $${maxBudget} exceeds the ceiling $${cfg.maxBudgetCeiling}` };
+  }
+
+  let budgetDuration = input.budget_duration;
+  if (!budgetDuration || typeof budgetDuration !== 'string' || budgetDuration.trim() === '') {
+    if (maxBudget !== undefined) {
+      budgetDuration = '30d';
+    }
+  }
+
+  const tpmLimit = input.tpm_limit !== undefined && Number.isFinite(input.tpm_limit) && input.tpm_limit >= 0 ? input.tpm_limit : undefined;
+  const rpmLimit = input.rpm_limit !== undefined && Number.isFinite(input.rpm_limit) && input.rpm_limit >= 0 ? input.rpm_limit : undefined;
+
+  return {
+    ok: true,
+    value: {
+      team_alias: trimmedAlias,
+      models,
+      ...(maxBudget !== undefined && { max_budget: maxBudget }),
+      ...(budgetDuration && { budget_duration: budgetDuration }),
+      ...(tpmLimit !== undefined && { tpm_limit: tpmLimit }),
+      ...(rpmLimit !== undefined && { rpm_limit: rpmLimit }),
+    },
+  };
+}

@@ -20,8 +20,9 @@ export {
   readTeamAdminConfig,
   isTeamManagementEnabled,
   assertTeamAdmin,
+  validateTeamWriteInput,
 } from './teamAdmin';
-export type { TeamAdminConfig, TeamAdminCheck } from './teamAdmin';
+export type { TeamAdminConfig, TeamAdminCheck, TeamWriteInput, TeamWriteValidation } from './teamAdmin';
 export {
   KeycloakJWTVerifier,
   newDefaultVerifier,

@@ -567,6 +567,38 @@ export interface TeamObjectPermission {
     vector_stores?: string[];
 }
 
+// @public (undocumented)
+export interface TeamWriteInput {
+    // (undocumented)
+    budget_duration?: string;
+    // (undocumented)
+    max_budget?: number | null;
+    // (undocumented)
+    models?: string[];
+    // (undocumented)
+    rpm_limit?: number;
+    // (undocumented)
+    team_alias?: string;
+    // (undocumented)
+    tpm_limit?: number;
+}
+
+// @public (undocumented)
+export type TeamWriteValidation = {
+    ok: true;
+    value: {
+        team_alias: string;
+        models: string[];
+        max_budget?: number;
+        budget_duration?: string;
+        tpm_limit?: number;
+        rpm_limit?: number;
+    };
+} | {
+    ok: false;
+    error: string;
+};
+
 // @public
 export interface TokenVerifier {
     // (undocumented)
@@ -738,6 +770,9 @@ export interface UserInfo {
     // (undocumented)
     user_id: string;
 }
+
+// @public (undocumented)
+export function validateTeamWriteInput(input: TeamWriteInput, cfg: TeamAdminConfig): TeamWriteValidation;
 
 // @public (undocumented)
 export interface VirtualKey {
