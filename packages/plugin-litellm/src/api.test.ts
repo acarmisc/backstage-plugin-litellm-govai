@@ -304,3 +304,28 @@ describe('updateTeam', () => {
     assert.ok(calls[0].url.includes('team%2Fid'), calls[0].url);
   });
 });
+
+describe('team members', () => {
+  test('addTeamMember → POST /teams/:id/members with body round-trip', async () => {
+    const { api, calls } = makeApi(200, { team_id: 't1', members_with_roles: [] });
+    const body = { userEntityRef: 'user:default/alice', maxBudgetInTeam: 25 };
+    const result = await api.addTeamMember('t1', body);
+    assert.strictEqual(calls.length, 1);
+    assert.ok(calls[0].url.endsWith('/teams/t1/members'), calls[0].url);
+    assert.strictEqual(calls[0].init?.method, 'POST');
+    assert.deepStrictEqual(JSON.parse(calls[0].init?.body as string), body);
+    assert.strictEqual(result.team_id, 't1');
+  });
+
+  test('removeTeamMember → DELETE with userEntityRef query param, encoded', async () => {
+    const { api, calls } = makeApi(200, { team_id: 't1' });
+    await api.removeTeamMember('t1', 'user:default/alice');
+    assert.strictEqual(calls[0].init?.method, 'DELETE');
+    assert.ok(
+      calls[0].url.includes(
+        '/teams/t1/members?userEntityRef=user%3Adefault%2Falice',
+      ),
+      calls[0].url,
+    );
+  });
+});

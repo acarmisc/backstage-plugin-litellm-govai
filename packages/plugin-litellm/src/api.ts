@@ -39,6 +39,11 @@ export interface LiteLlmApiInterface {
   listModels(): Promise<ModelInfo[]>;
   getTeams(): Promise<TeamInfo[]>;
   getManagedTeams(): Promise<TeamInfo[]>;
+  addTeamMember(
+    teamId: string,
+    body: { userEntityRef: string; maxBudgetInTeam?: number },
+  ): Promise<TeamInfo>;
+  removeTeamMember(teamId: string, userEntityRef: string): Promise<TeamInfo>;
   getUsage(startDate: string, endDate: string): Promise<UsageMetrics>;
   getTeamUsage(teamId: string, startDate: string, endDate: string): Promise<UsageMetrics>;
   getAuditLogs(params: AuditLogsParams): Promise<PaginatedAuditLogs>;
@@ -195,6 +200,27 @@ export class LiteLlmApi implements LiteLlmApiInterface {
   // from getTeams(), which returns only the teams the caller is a member of.
   async getManagedTeams(): Promise<TeamInfo[]> {
     return this.get<TeamInfo[]>('/teams/managed');
+  }
+
+  async addTeamMember(
+    teamId: string,
+    body: { userEntityRef: string; maxBudgetInTeam?: number },
+  ): Promise<TeamInfo> {
+    return this.post<TeamInfo>(
+      `/teams/${encodeURIComponent(teamId)}/members`,
+      body,
+    );
+  }
+
+  async removeTeamMember(
+    teamId: string,
+    userEntityRef: string,
+  ): Promise<TeamInfo> {
+    return this.del<TeamInfo>(
+      `/teams/${encodeURIComponent(teamId)}/members?userEntityRef=${encodeURIComponent(
+        userEntityRef,
+      )}`,
+    );
   }
 
   async getUsage(startDate: string, endDate: string): Promise<UsageMetrics> {

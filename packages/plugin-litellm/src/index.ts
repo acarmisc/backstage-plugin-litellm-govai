@@ -9,6 +9,10 @@ export type { LiteLLMHomeWidgetProps } from './components/LiteLLMHomeWidget';
 export { GenerateKeyDialog } from './components/GenerateKeyDialog';
 export { ManageTeamDialog } from './components/ManageTeamDialog';
 export { LiteLlmApi, liteLlmApiRef } from './api';
-export { litellmTeamCreatePermission, litellmTeamManagePermission } from './permissions';
+export {
+  litellmTeamCreatePermission,
+  litellmTeamManagePermission,
+  litellmTeamMembersManagePermission,
+} from './permissions';
 export type { LiteLlmApiInterface } from './api';
 export * from './types';
