@@ -39,4 +39,10 @@ export {
   litellmKeyRevokePermission,
   litellmKeyManagePermission,
   litellmAuditReadPermission,
+  litellmTeamCreatePermission,
+  litellmTeamManagePermission,
+  litellmTeamMembersManagePermission,
+  litellmTeamKnowledgebaseManagePermission,
+  litellmTeamMcpManagePermission,
+  litellmTeamDeletePermission,
 } from './permissions';

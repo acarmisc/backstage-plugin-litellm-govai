@@ -281,6 +281,24 @@ const litellmPlugin: BackendFeature;
 export default litellmPlugin;
 export { litellmPlugin }
 
+// @public (undocumented)
+export const litellmTeamCreatePermission: BasicPermission;
+
+// @public (undocumented)
+export const litellmTeamDeletePermission: BasicPermission;
+
+// @public (undocumented)
+export const litellmTeamKnowledgebaseManagePermission: BasicPermission;
+
+// @public (undocumented)
+export const litellmTeamManagePermission: BasicPermission;
+
+// @public (undocumented)
+export const litellmTeamMcpManagePermission: BasicPermission;
+
+// @public (undocumented)
+export const litellmTeamMembersManagePermission: BasicPermission;
+
 // @public
 export interface LiteLLMUserKey {
     // (undocumented)
@@ -397,6 +415,9 @@ export function readProvisioningDefaults(config: Config): {
 export function readRoleConfigs(config: Config): RoleConfig[];
 
 // @public
+export function readTeamAdminConfig(config: Config): TeamAdminConfig;
+
+// @public
 export function resolveBridgeUserId(claims: BridgeClaims, userIdDomain?: string): string;
 
 // @public
@@ -428,6 +449,19 @@ export interface RoleConfig {
     tpmLimit?: number;
     // (undocumented)
     userRole?: string;
+}
+
+// @public
+export interface TeamAdminConfig {
+    allowedMcpAccessGroups: string[];
+    allowedMcpServers: string[];
+    allowedModelAccessGroups: string[];
+    allowedModels: string[];
+    allowedVectorStores: string[];
+    allowTeamDelete: boolean;
+    allowUnlimitedBudget: boolean;
+    group?: string;
+    maxBudgetCeiling?: number;
 }
 
 // @public (undocumented)
