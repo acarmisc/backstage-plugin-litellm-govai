@@ -10,6 +10,7 @@ import Tab from '@mui/material/Tab';
 import Button from '@mui/material/Button';
 import { useAsync, useAsyncRetry } from 'react-use';
 import { useApi } from '@backstage/core-plugin-api';
+import { usePermission } from '@backstage/plugin-permission-react';
 import { DashboardHeader } from './DashboardHeader';
 import { KeysTable } from './KeysTable';
 import { GenerateKeyDialog } from './GenerateKeyDialog';
@@ -19,6 +20,7 @@ import { TeamUsage } from './TeamUsage';
 import { ModelsTable } from './ModelsTable';
 import { AuditLog } from './AuditLog';
 import { liteLlmApiRef } from '../api';
+import { litellmTeamCreatePermission, litellmTeamManagePermission } from '../permissions';
 import { DateRange, GenerateKeyRequest, GenerateKeyResponse, UpdateKeyRequest, UsageMetrics, CreateTeamRequest, UpdateTeamRequest, TeamInfo } from '../types';
 
 const PERIOD_LS_KEY = 'litellm_usage_period';
@@ -81,6 +83,9 @@ export const LiteLLMPage: React.FC = () => {
   );
 
   const { value: liteLlmConfig } = useAsync(() => api.getConfig(), [api]);
+
+  const { allowed: canCreateTeam } = usePermission({ permission: litellmTeamCreatePermission });
+  const { allowed: canManageTeam } = usePermission({ permission: litellmTeamManagePermission });
 
   // Filter to teams the current user belongs to
   const teams = useMemo(() => {
@@ -343,7 +348,7 @@ export const LiteLLMPage: React.FC = () => {
         const teamMgmtEnabled = liteLlmConfig?.teamManagement?.enabled ?? false;
         return (
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            {teamMgmtEnabled && (
+            {teamMgmtEnabled && canCreateTeam && (
               <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
                 <Button
                   variant="contained"
@@ -361,7 +366,7 @@ export const LiteLLMPage: React.FC = () => {
                 return teamUsageCache[teamId] ?? null;
               }}
               getTeamUsageLoading={teamId => teamUsageLoading[teamId] ?? false}
-              canManage={teamMgmtEnabled}
+              canManage={teamMgmtEnabled && canManageTeam}
               onEditTeam={t => setManageTeam({ mode: 'edit', team: t })}
             />
           </Box>
