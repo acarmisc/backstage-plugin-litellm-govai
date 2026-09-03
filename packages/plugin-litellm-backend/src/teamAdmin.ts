@@ -1,4 +1,9 @@
+import { Request } from 'express';
 import { Config } from '@backstage/config';
+import { AuthService, PermissionsService } from '@backstage/backend-plugin-api';
+import { BasicPermission, AuthorizeResult } from '@backstage/plugin-permission-common';
+import { CatalogClient } from '@backstage/catalog-client';
+import { resolveUserId, resolveCredentials, isUserMemberOfGroup } from './provisioning';
 
 /**
  * Governance limits for the team-administration feature. Every field is
@@ -59,6 +64,101 @@ export interface TeamAdminConfig {
    * Allow an admin to delete a team (vs. only block/deactivate).
    */
   allowTeamDelete: boolean;
+}
+
+/**
+ * Whether team-management routes should be mounted.
+ * Requires permission.enabled AND a designated admin group.
+ * Returns false when either is missing (fail-closed).
+ */
+export function isTeamManagementEnabled(config: Config): boolean {
+  const permEnabled = config.getOptionalBoolean('permission.enabled') ?? false;
+  const adminConfig = readTeamAdminConfig(config);
+  return permEnabled && !!adminConfig.group;
+}
+
+/**
+ * Discriminated result: either successful auth or a failure with HTTP status + error message.
+ */
+export type TeamAdminCheck =
+  | { ok: true; userEntityRef: string }
+  | { ok: false; status: 401 | 403; error: string };
+
+/**
+ * Layered fail-closed authz check for team-management operations.
+ *
+ * This is the security primitive that gates all team-write routes. It checks in order:
+ * 1. Authentication (user identity from token)
+ * 2. Group membership (user in the designated litellm-team-admins group)
+ * 3. Permission framework decision (via assertPermission, defaults to DENY if no policy)
+ *
+ * ALL three must pass. The group membership check exists because the permission
+ * framework alone cannot be trusted — its default depends on the policy engine
+ * (permissive if unconfigured), so we layer a guaranteed group check on top.
+ *
+ * Callers: check `result.ok` and respond with `status` + `error` when false.
+ */
+export async function assertTeamAdmin(opts: {
+  req: Request;
+  auth: AuthService;
+  permissions: PermissionsService;
+  catalogClient: CatalogClient;
+  teamAdminGroup: string;
+  permission: BasicPermission;
+  logger: any;
+}): Promise<TeamAdminCheck> {
+  const {
+    req,
+    auth,
+    permissions,
+    catalogClient,
+    teamAdminGroup,
+    permission,
+    logger,
+  } = opts;
+
+  // Step 1: Resolve authenticated user
+  const userEntityRef = await resolveUserId(req, auth);
+  if (!userEntityRef) {
+    return { ok: false, status: 401, error: 'Authentication required' };
+  }
+
+  // Step 2: Verify credentials can be resolved (needed for permission check)
+  const credentials = await resolveCredentials(req, auth);
+  if (!credentials) {
+    return { ok: false, status: 401, error: 'Authentication required' };
+  }
+
+  // Step 3: Check group membership
+  const isMember = await isUserMemberOfGroup(
+    userEntityRef,
+    teamAdminGroup,
+    catalogClient,
+    auth,
+    logger,
+  );
+  if (!isMember) {
+    return {
+      ok: false,
+      status: 403,
+      error: `Access denied: not a member of ${teamAdminGroup}`,
+    };
+  }
+
+  // Step 4: Check permission framework decision
+  const [decision] = await permissions.authorize([{ permission }], {
+    credentials,
+  });
+  if (decision.result !== AuthorizeResult.ALLOW) {
+    return {
+      ok: false,
+      status: 403,
+      error: `Access denied: missing permission "${permission.name}"`,
+    };
+  }
+
+  // All checks passed
+  return { ok: true, userEntityRef };
 }
 
 /**
