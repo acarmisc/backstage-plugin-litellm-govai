@@ -14,6 +14,7 @@ export {
   litellmTeamManagePermission,
   litellmTeamMembersManagePermission,
   litellmTeamKnowledgebaseManagePermission,
+  litellmTeamMcpManagePermission,
 } from './permissions';
 export type { LiteLlmApiInterface } from './api';
 export * from './types';

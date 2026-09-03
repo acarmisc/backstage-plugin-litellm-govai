@@ -89,6 +89,7 @@ function mockClient(overrides: {
   teamMemberAdd?: (r: any) => Promise<any>;
   teamMemberDelete?: (r: any) => Promise<any>;
   listVectorStores?: () => Promise<any[]>;
+  listMcpServers?: () => Promise<any[]>;
 }): any {
   const calls: Record<string, any[]> = {
     getUserInfo: [],
@@ -109,6 +110,7 @@ function mockClient(overrides: {
     teamMemberAdd: [],
     teamMemberDelete: [],
     listVectorStores: [],
+    listMcpServers: [],
   };
   return {
     calls,
@@ -231,6 +233,12 @@ function mockClient(overrides: {
       calls.listVectorStores.push(null);
       return overrides.listVectorStores
         ? overrides.listVectorStores()
+        : Promise.resolve([]);
+    },
+    listMcpServers: () => {
+      calls.listMcpServers.push(null);
+      return overrides.listMcpServers
+        ? overrides.listMcpServers()
         : Promise.resolve([]);
     },
   };
@@ -1851,6 +1859,120 @@ describe('router knowledge-base (vector store) routes', () => {
         object_permission: {
           mcp_servers: ['keep-me'],
           vector_stores: ['vs_hr', 'vs_eng'],
+        },
+      });
+    } finally {
+      await new Promise<void>(r => h.server.close(() => r()));
+    }
+  });
+});
+
+describe('router MCP server routes', () => {
+  const objectPermsConfig = {
+    'permission.enabled': true,
+    'litellm.teamAdmin.group': 'group:default/admins',
+    'litellm.teamAdmin.objectPermissions.enabled': true,
+    'litellm.teamAdmin.allowedMcpServers': ['mcp_gh', 'mcp_jira'],
+  };
+  const ownedTeam = {
+    getTeamInfo: async () => ({
+      team_id: 't1',
+      spend: 0,
+      metadata: { owning_group: 'group:default/admins' },
+      object_permission: { vector_stores: ['vs_keep'], mcp_servers: ['mcp_gh'] },
+    }),
+  };
+
+  test('GET /mcp-servers => 403 when object permissions are not enabled', async () => {
+    const h = await startHarness({
+      config: {
+        'permission.enabled': true,
+        'litellm.teamAdmin.group': 'group:default/admins',
+      },
+      catalogClient: mockCatalog(['group:default/admins']),
+    });
+    try {
+      const { status } = await req(h.baseUrl, 'GET', '/mcp-servers', {
+        authRef: 'user:default/alice',
+      });
+      assert.strictEqual(status, 403);
+    } finally {
+      await new Promise<void>(r => h.server.close(() => r()));
+    }
+  });
+
+  test('GET /mcp-servers returns only allowlisted servers', async () => {
+    const h = await startHarness({
+      config: objectPermsConfig,
+      catalogClient: mockCatalog(['group:default/admins']),
+      client: mockClient({
+        listMcpServers: async () => [
+          { id: 'mcp_gh', name: 'GitHub' },
+          { id: 'mcp_jira', name: 'Jira' },
+          { id: 'mcp_prod_db', name: 'Prod DB' },
+        ],
+      }),
+    });
+    try {
+      const { status, body } = await req(h.baseUrl, 'GET', '/mcp-servers', {
+        authRef: 'user:default/alice',
+      });
+      assert.strictEqual(status, 200);
+      assert.deepStrictEqual(
+        body.map((s: any) => s.id),
+        ['mcp_gh', 'mcp_jira'],
+      );
+    } finally {
+      await new Promise<void>(r => h.server.close(() => r()));
+    }
+  });
+
+  test('PUT /teams/:id/mcp-servers rejects a server outside the allowlist', async () => {
+    const h = await startHarness({
+      config: objectPermsConfig,
+      catalogClient: mockCatalog(['group:default/admins']),
+      client: mockClient(ownedTeam),
+    });
+    try {
+      const { status, body } = await req(
+        h.baseUrl,
+        'PUT',
+        '/teams/t1/mcp-servers',
+        {
+          authRef: 'user:default/alice',
+          body: { mcp_servers: ['mcp_gh', 'mcp_prod_db'] },
+        },
+      );
+      assert.strictEqual(status, 400);
+      assert.match(body.error, /not in the allowed set/i);
+    } finally {
+      await new Promise<void>(r => h.server.close(() => r()));
+    }
+  });
+
+  test('PUT /teams/:id/mcp-servers happy path: sets mcp_servers, preserves vector_stores', async () => {
+    const h = await startHarness({
+      config: objectPermsConfig,
+      catalogClient: mockCatalog(['group:default/admins']),
+      client: mockClient(ownedTeam),
+    });
+    try {
+      const { status } = await req(
+        h.baseUrl,
+        'PUT',
+        '/teams/t1/mcp-servers',
+        {
+          authRef: 'user:default/alice',
+          body: { mcp_servers: ['mcp_gh', 'mcp_jira'] },
+        },
+      );
+      assert.strictEqual(status, 200);
+      assert.strictEqual(h.client.calls.updateTeam.length, 1);
+      assert.deepStrictEqual(h.client.calls.updateTeam[0], {
+        team_id: 't1',
+        object_permission: {
+          vector_stores: ['vs_keep'],
+          mcp_servers: ['mcp_gh', 'mcp_jira'],
         },
       });
     } finally {

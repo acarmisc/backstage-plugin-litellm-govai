@@ -479,6 +479,29 @@ export class LiteLLMClient {
       .filter(r => r.id);
   }
 
+  /**
+   * Lists the MCP servers registered on the LiteLLM proxy. Path is
+   * `/mcp/server/list`; tolerates a bare array, `{ data: [...] }` or
+   * `{ servers: [...] }`. Normalised to `{ id, name?, url? }` — `id` prefers
+   * `server_id` then `id` then `alias`/`name`.
+   */
+  async listMcpServers(): Promise<
+    Array<{ id: string; name?: string; url?: string }>
+  > {
+    const raw = await this.request<any>('/mcp/server/list');
+    let rows: any[] = [];
+    if (Array.isArray(raw)) rows = raw;
+    else if (Array.isArray(raw?.data)) rows = raw.data;
+    else if (Array.isArray(raw?.servers)) rows = raw.servers;
+    return rows
+      .map(r => ({
+        id: r?.server_id ?? r?.id ?? r?.alias ?? r?.name ?? '',
+        name: r?.alias ?? r?.name ?? undefined,
+        url: r?.url ?? undefined,
+      }))
+      .filter(r => r.id);
+  }
+
   private emptyUsage(): UsageMetrics {
     return {
       total_spend: 0,

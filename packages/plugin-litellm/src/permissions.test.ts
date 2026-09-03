@@ -5,6 +5,7 @@ import {
   litellmTeamManagePermission,
   litellmTeamMembersManagePermission,
   litellmTeamKnowledgebaseManagePermission,
+  litellmTeamMcpManagePermission,
 } from './permissions';
 
 describe('litellm permissions', () => {
@@ -36,6 +37,17 @@ describe('litellm permissions', () => {
     );
     assert.strictEqual(
       litellmTeamKnowledgebaseManagePermission.attributes.action,
+      'update',
+    );
+  });
+
+  test('litellmTeamMcpManagePermission has correct name and action', () => {
+    assert.strictEqual(
+      litellmTeamMcpManagePermission.name,
+      'litellm.team.mcp.manage',
+    );
+    assert.strictEqual(
+      litellmTeamMcpManagePermission.attributes.action,
       'update',
     );
   });
