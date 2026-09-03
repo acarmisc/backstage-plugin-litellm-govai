@@ -329,3 +329,27 @@ describe('team members', () => {
     );
   });
 });
+
+describe('team knowledge bases', () => {
+  test('getVectorStores → GET /vector-stores', async () => {
+    const stores = [{ id: 'vs_1', name: 'HR' }];
+    const { api, calls } = makeApi(200, stores);
+    const result = await api.getVectorStores();
+    assert.ok(calls[0].url.endsWith('/vector-stores'), calls[0].url);
+    assert.strictEqual(calls[0].init, undefined);
+    assert.deepStrictEqual(result, stores);
+  });
+
+  test('setTeamKnowledgeBases → PUT /teams/:id/knowledge-bases with body', async () => {
+    const { api, calls } = makeApi(200, { team_id: 't1' });
+    await api.setTeamKnowledgeBases('t1', ['vs_1', 'vs_2']);
+    assert.ok(
+      calls[0].url.endsWith('/teams/t1/knowledge-bases'),
+      calls[0].url,
+    );
+    assert.strictEqual(calls[0].init?.method, 'PUT');
+    assert.deepStrictEqual(JSON.parse(calls[0].init?.body as string), {
+      vector_stores: ['vs_1', 'vs_2'],
+    });
+  });
+});

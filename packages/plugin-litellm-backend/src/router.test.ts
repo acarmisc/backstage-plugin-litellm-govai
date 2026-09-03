@@ -392,6 +392,23 @@ describe('router /config', () => {
     assert.strictEqual(body.teamManagement.enabled, false);
     assert.strictEqual(body.teamManagement.allowUnlimitedBudget, false);
     assert.strictEqual(body.teamManagement.maxBudgetCeiling, null);
+    assert.strictEqual(body.teamManagement.objectPermissionsEnabled, false);
+  });
+
+  test('objectPermissionsEnabled reflects the opt-in flag', async () => {
+    const h2 = await startHarness({
+      config: {
+        'permission.enabled': true,
+        'litellm.teamAdmin.group': 'group:default/admins',
+        'litellm.teamAdmin.objectPermissions.enabled': true,
+      },
+    });
+    try {
+      const { body } = await req(h2.baseUrl, 'GET', '/config');
+      assert.strictEqual(body.teamManagement.objectPermissionsEnabled, true);
+    } finally {
+      await new Promise<void>(r => h2.server.close(() => r()));
+    }
   });
 
   test('team-management settings can be enabled via config', async () => {

@@ -17,7 +17,7 @@ import List from '@mui/material/List';
 import ListItem from '@mui/material/ListItem';
 import ListItemText from '@mui/material/ListItemText';
 import { Delete as DeleteIcon } from '@mui/icons-material';
-import { TeamInfo, ModelInfo, LiteLlmConfig, CreateTeamRequest, UpdateTeamRequest } from '../types';
+import { TeamInfo, ModelInfo, LiteLlmConfig, CreateTeamRequest, UpdateTeamRequest, VectorStoreInfo } from '../types';
 
 interface ManageTeamDialogProps {
   open: boolean;
@@ -33,6 +33,12 @@ interface ManageTeamDialogProps {
   onAddMember?: (userEntityRef: string, maxBudgetInTeam?: number) => Promise<void>;
   /** Called to remove a member; the parent is expected to refresh `team` on success. */
   onRemoveMember?: (userEntityRef: string) => Promise<void>;
+  /** When true, the Knowledge Bases section (edit mode only) is shown. */
+  canManageKnowledgeBases?: boolean;
+  /** Vector stores the caller may attach (already allowlist-filtered server-side). */
+  vectorStores?: VectorStoreInfo[];
+  /** Called to replace the team's attached knowledge bases; parent refreshes `team`. */
+  onSaveKnowledgeBases?: (vectorStoreIds: string[]) => Promise<void>;
 }
 
 export const ManageTeamDialog: FC<ManageTeamDialogProps> = ({
@@ -46,6 +52,9 @@ export const ManageTeamDialog: FC<ManageTeamDialogProps> = ({
   canManageMembers,
   onAddMember,
   onRemoveMember,
+  canManageKnowledgeBases,
+  vectorStores,
+  onSaveKnowledgeBases,
 }) => {
   const [alias, setAlias] = useState('');
   const [models, setModels] = useState<string[]>([]);
@@ -59,6 +68,10 @@ export const ManageTeamDialog: FC<ManageTeamDialogProps> = ({
   const [memberBudget, setMemberBudget] = useState('');
   const [memberBusy, setMemberBusy] = useState(false);
   const [memberError, setMemberError] = useState<string | null>(null);
+
+  const [kbIds, setKbIds] = useState<string[]>([]);
+  const [kbBusy, setKbBusy] = useState(false);
+  const [kbError, setKbError] = useState<string | null>(null);
 
   const allowUnlimitedBudget = config?.teamManagement?.allowUnlimitedBudget ?? false;
   const maxBudgetCeiling = config?.teamManagement?.maxBudgetCeiling;
@@ -82,6 +95,8 @@ export const ManageTeamDialog: FC<ManageTeamDialogProps> = ({
       setMemberRef('');
       setMemberBudget('');
       setMemberError(null);
+      setKbIds(team?.object_permission?.vector_stores ?? []);
+      setKbError(null);
     }
   }, [open, mode, team, allowUnlimitedBudget]);
 
@@ -176,9 +191,26 @@ export const ManageTeamDialog: FC<ManageTeamDialogProps> = ({
     }
   };
 
+  const handleSaveKnowledgeBases = async () => {
+    if (!onSaveKnowledgeBases) return;
+    setKbError(null);
+    try {
+      setKbBusy(true);
+      await onSaveKnowledgeBases(kbIds);
+    } catch (err) {
+      setKbError(err instanceof Error ? err.message : 'Failed to save knowledge bases');
+    } finally {
+      setKbBusy(false);
+    }
+  };
+
   const modelNames = allModels.map(m => m.model_name);
   const members = team?.members_with_roles ?? [];
   const showMembers = mode === 'edit' && !!canManageMembers;
+  const showKnowledgeBases = mode === 'edit' && !!canManageKnowledgeBases;
+  const kbOptions = (vectorStores ?? []).map(v => v.id);
+  const kbLabel = (id: string) =>
+    (vectorStores ?? []).find(v => v.id === id)?.name ?? id;
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
@@ -297,6 +329,44 @@ export const ManageTeamDialog: FC<ManageTeamDialogProps> = ({
                 sx={{ mt: 0.5 }}
               >
                 Add
+              </Button>
+            </Box>
+          </Box>
+        )}
+
+        {showKnowledgeBases && (
+          <Box>
+            <Divider sx={{ my: 1 }} />
+            <Typography variant="subtitle2" sx={{ mb: 1 }}>
+              Knowledge Bases
+            </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+              Attaching a knowledge base exposes its documents to every key in
+              this team.
+            </Typography>
+            {kbError && (
+              <Alert severity="error" sx={{ mb: 1 }} onClose={() => setKbError(null)}>
+                {kbError}
+              </Alert>
+            )}
+            <Autocomplete
+              multiple
+              options={kbOptions}
+              value={kbIds}
+              getOptionLabel={kbLabel}
+              onChange={(_, v) => setKbIds(v)}
+              disabled={kbBusy}
+              renderInput={params => (
+                <TextField {...params} label="Attached knowledge bases" />
+              )}
+            />
+            <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1 }}>
+              <Button
+                onClick={handleSaveKnowledgeBases}
+                disabled={kbBusy}
+                variant="outlined"
+              >
+                {kbBusy ? 'Saving…' : 'Save knowledge bases'}
               </Button>
             </Box>
           </Box>

@@ -19,6 +19,12 @@ export interface TeamMember {
   role: 'admin' | 'user';
 }
 
+export interface TeamObjectPermission {
+  vector_stores?: string[];
+  mcp_servers?: string[];
+  mcp_access_groups?: string[];
+}
+
 export interface TeamInfo {
   team_id: string;
   team_alias?: string;
@@ -28,6 +34,13 @@ export interface TeamInfo {
   models?: string[];
   tpm_limit?: number;
   rpm_limit?: number;
+  metadata?: Record<string, unknown>;
+  object_permission?: TeamObjectPermission;
+}
+
+export interface VectorStoreInfo {
+  id: string;
+  name?: string;
 }
 
 export interface VirtualKey {
@@ -165,6 +178,8 @@ export interface LiteLlmConfig {
     maxBudgetCeiling: number | null;
     /** Whether an admin may create a team with no budget cap. */
     allowUnlimitedBudget: boolean;
+    /** Whether knowledge-base / MCP management routes are enabled (opt-in). */
+    objectPermissionsEnabled?: boolean;
   };
 }
 
