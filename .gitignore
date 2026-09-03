@@ -53,3 +53,6 @@ fix_*.md
 
 # Stray scratch
 null
+
+# Stray screenshot staging dir — keep out of feature branches
+"new images/"
