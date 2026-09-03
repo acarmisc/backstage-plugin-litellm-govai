@@ -1,4 +1,4 @@
-import React, { FC, useState, useEffect } from 'react';
+import React, { FC, useState, useEffect, useMemo } from 'react';
 import Dialog from '@mui/material/Dialog';
 import DialogTitle from '@mui/material/DialogTitle';
 import DialogContent from '@mui/material/DialogContent';
@@ -9,16 +9,33 @@ import Alert from '@mui/material/Alert';
 import Checkbox from '@mui/material/Checkbox';
 import FormControlLabel from '@mui/material/FormControlLabel';
 import Autocomplete from '@mui/material/Autocomplete';
+import CircularProgress from '@mui/material/CircularProgress';
 import MenuItem from '@mui/material/MenuItem';
 import Box from '@mui/material/Box';
 import Divider from '@mui/material/Divider';
 import Typography from '@mui/material/Typography';
 import IconButton from '@mui/material/IconButton';
-import List from '@mui/material/List';
-import ListItem from '@mui/material/ListItem';
-import ListItemText from '@mui/material/ListItemText';
+import Paper from '@mui/material/Paper';
+import Table from '@mui/material/Table';
+import TableBody from '@mui/material/TableBody';
+import TableCell from '@mui/material/TableCell';
+import TableContainer from '@mui/material/TableContainer';
+import TableHead from '@mui/material/TableHead';
+import TableRow from '@mui/material/TableRow';
 import { Delete as DeleteIcon } from '@mui/icons-material';
+import { useApi } from '@backstage/core-plugin-api';
+import { catalogApiRef } from '@backstage/plugin-catalog-react';
+import { stringifyEntityRef, UserEntity } from '@backstage/catalog-model';
+import { useAsync } from 'react-use';
 import { TeamInfo, ModelInfo, LiteLlmConfig, CreateTeamRequest, UpdateTeamRequest, VectorStoreInfo, McpServerInfo } from '../types';
+import { StatusPill, dataTableSx } from './ui';
+
+/** A catalog User entity flattened into what the member picker needs. */
+interface UserOption {
+  ref: string;
+  label: string;
+  email?: string;
+}
 
 /** Spend-reset periods offered for a team budget (LiteLLM `budget_duration`). */
 const BUDGET_DURATION_OPTIONS: Array<{ value: string; label: string }> = [
@@ -85,6 +102,10 @@ export const ManageTeamDialog: FC<ManageTeamDialogProps> = ({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // memberQuery is the text shown in the picker; memberRef is the entity ref
+  // that will actually be submitted (either a picked catalog user's ref, or
+  // whatever was typed, as a fallback for catalog lookup failures).
+  const [memberQuery, setMemberQuery] = useState('');
   const [memberRef, setMemberRef] = useState('');
   const [memberBudget, setMemberBudget] = useState('');
   const [memberBusy, setMemberBusy] = useState(false);
@@ -101,6 +122,48 @@ export const ManageTeamDialog: FC<ManageTeamDialogProps> = ({
   const allowUnlimitedBudget = config?.teamManagement?.allowUnlimitedBudget ?? false;
   const maxBudgetCeiling =
     config?.teamManagement?.maxBudgetCeiling ?? FALLBACK_BUDGET_CEILING;
+
+  const members = useMemo(() => team?.members_with_roles ?? [], [team]);
+  const showMembers = mode === 'edit' && !!canManageMembers;
+
+  // Catalog users for the member picker, fetched only while the Members
+  // section is actually visible. Failures degrade to an empty option list —
+  // the field stays usable as a plain entity-ref input either way.
+  const catalogApi = useApi(catalogApiRef);
+  const { value: catalogUsers, loading: usersLoading } = useAsync(async () => {
+    if (!open || !showMembers) return [] as UserEntity[];
+    try {
+      const { items } = await catalogApi.getEntities({
+        filter: { kind: 'User' },
+        fields: ['kind', 'metadata.namespace', 'metadata.name', 'metadata.title', 'spec.profile'],
+      });
+      return items as UserEntity[];
+    } catch {
+      return [] as UserEntity[];
+    }
+  }, [open, showMembers, catalogApi]);
+
+  const userOptions = useMemo<UserOption[]>(() => {
+    const existingEmails = new Set(
+      members
+        .map(m => m.user_email?.toLowerCase())
+        .filter((e): e is string => !!e),
+    );
+    return (catalogUsers ?? [])
+      .map(e => {
+        const ref = stringifyEntityRef(e);
+        const displayName =
+          e.spec?.profile?.displayName || e.metadata.title || e.metadata.name;
+        const email = e.spec?.profile?.email;
+        return {
+          ref,
+          email,
+          label: email ? `${displayName} (${email})` : displayName,
+        };
+      })
+      .filter(o => !(o.email && existingEmails.has(o.email.toLowerCase())))
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }, [catalogUsers, members]);
 
   useEffect(() => {
     if (open) {
@@ -121,6 +184,7 @@ export const ManageTeamDialog: FC<ManageTeamDialogProps> = ({
         setBudgetDuration(DEFAULT_BUDGET_DURATION);
       }
       setError(null);
+      setMemberQuery('');
       setMemberRef('');
       setMemberBudget('');
       setMemberError(null);
@@ -200,6 +264,7 @@ export const ManageTeamDialog: FC<ManageTeamDialogProps> = ({
     try {
       setMemberBusy(true);
       await onAddMember(memberRef.trim(), budget);
+      setMemberQuery('');
       setMemberRef('');
       setMemberBudget('');
     } catch (err) {
@@ -254,8 +319,6 @@ export const ManageTeamDialog: FC<ManageTeamDialogProps> = ({
   const durationOptions = BUDGET_DURATION_OPTIONS.some(o => o.value === budgetDuration)
     ? BUDGET_DURATION_OPTIONS
     : [...BUDGET_DURATION_OPTIONS, { value: budgetDuration, label: budgetDuration }];
-  const members = team?.members_with_roles ?? [];
-  const showMembers = mode === 'edit' && !!canManageMembers;
   const showKnowledgeBases = mode === 'edit' && !!canManageKnowledgeBases;
   const kbOptions = (vectorStores ?? []).map(v => v.id);
   const kbLabel = (id: string) =>
@@ -285,7 +348,14 @@ export const ManageTeamDialog: FC<ManageTeamDialogProps> = ({
           value={models}
           onChange={(_, newValue) => setModels(newValue)}
           disabled={submitting}
-          renderInput={params => <TextField {...params} label="Models" />}
+          renderInput={params => (
+            <TextField
+              {...params}
+              label="Models"
+              required
+              helperText="At least one model is required here — this delegated flow only grants access to models your admin has allow-listed for team creation, not every proxy model. (Teams with no model restriction shown elsewhere were configured directly in LiteLLM.)"
+            />
+          )}
         />
 
         <TextField
@@ -334,41 +404,107 @@ export const ManageTeamDialog: FC<ManageTeamDialogProps> = ({
               </Alert>
             )}
             {members.length === 0 ? (
-              <Typography variant="body2" color="text.secondary">
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
                 No members yet.
               </Typography>
             ) : (
-              <List dense disablePadding>
-                {members.map(m => (
-                  <ListItem
-                    key={m.user_id}
-                    disableGutters
-                    secondaryAction={
-                      <IconButton
-                        edge="end"
-                        size="small"
-                        aria-label={`remove ${m.user_id}`}
-                        disabled={memberBusy}
-                        onClick={() => handleRemoveMember(m.user_id)}
-                      >
-                        <DeleteIcon fontSize="small" />
-                      </IconButton>
-                    }
-                  >
-                    <ListItemText primary={m.user_id} secondary={m.role} />
-                  </ListItem>
-                ))}
-              </List>
+              <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 1.5, mb: 1.5 }}>
+                <Table size="small" sx={dataTableSx}>
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>User</TableCell>
+                      <TableCell align="right">Role</TableCell>
+                      <TableCell align="right" sx={{ width: 40 }} />
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {members.map(m => (
+                      <TableRow key={m.user_id}>
+                        <TableCell>
+                          {m.user_email ? (
+                            <>
+                              <Typography variant="body2">{m.user_email}</Typography>
+                              <Typography
+                                variant="caption"
+                                color="text.secondary"
+                                sx={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 11 }}
+                              >
+                                {m.user_id}
+                              </Typography>
+                            </>
+                          ) : (
+                            <Typography
+                              variant="body2"
+                              sx={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' }}
+                            >
+                              {m.user_id}
+                            </Typography>
+                          )}
+                        </TableCell>
+                        <TableCell align="right">
+                          <StatusPill label={m.role} tone={m.role === 'admin' ? 'accent' : 'neutral'} dot={false} />
+                        </TableCell>
+                        <TableCell align="right">
+                          <IconButton
+                            edge="end"
+                            size="small"
+                            aria-label={`remove ${m.user_id}`}
+                            disabled={memberBusy}
+                            onClick={() => handleRemoveMember(m.user_id)}
+                          >
+                            <DeleteIcon fontSize="small" />
+                          </IconButton>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
             )}
-            <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start', mt: 1 }}>
-              <TextField
-                label="Backstage user ref"
-                placeholder="user:default/alice"
-                value={memberRef}
-                onChange={e => setMemberRef(e.target.value)}
+            <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+              <Autocomplete
+                freeSolo
+                autoHighlight
+                options={userOptions}
+                loading={usersLoading}
+                inputValue={memberQuery}
+                onInputChange={(_, newInputValue, reason) => {
+                  setMemberQuery(newInputValue);
+                  // 'reset' fires when a selection sets the input programmatically —
+                  // memberRef is already set by onChange in that case, so only sync
+                  // free typing (and clearing) back into the submitted ref here.
+                  if (reason === 'input' || reason === 'clear') {
+                    setMemberRef(newInputValue);
+                  }
+                }}
+                onChange={(_, newValue) => {
+                  if (newValue && typeof newValue !== 'string') {
+                    setMemberQuery(newValue.label);
+                    setMemberRef(newValue.ref);
+                  }
+                }}
+                getOptionLabel={o => (typeof o === 'string' ? o : o.label)}
+                isOptionEqualToValue={(o, v) => o.ref === (typeof v === 'string' ? v : v.ref)}
                 disabled={memberBusy}
-                size="small"
-                sx={{ flex: 1 }}
+                sx={{ flex: 1, minWidth: 260 }}
+                renderInput={params => (
+                  <TextField
+                    {...params}
+                    label="Add member"
+                    placeholder="Search by name or email…"
+                    size="small"
+                    helperText="Pick a catalog user, or paste a user entity ref"
+                    InputProps={{
+                      ...params.InputProps,
+                      endAdornment: (
+                        <>
+                          {usersLoading ? <CircularProgress color="inherit" size={14} /> : null}
+                          {params.InputProps.endAdornment}
+                        </>
+                      ),
+                    }}
+                  />
+                )}
               />
               <TextField
                 label="Max budget in team ($)"

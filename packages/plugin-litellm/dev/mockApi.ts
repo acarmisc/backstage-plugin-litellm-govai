@@ -12,6 +12,8 @@ import {
   LiteLlmConfig,
 } from '../src/types';
 import { LiteLlmApiInterface } from '../src/api';
+import type { CatalogApi } from '@backstage/catalog-client';
+import type { Entity, UserEntity } from '@backstage/catalog-model';
 
 const now = Date.now();
 const day = 24 * 60 * 60 * 1000;
@@ -50,6 +52,41 @@ const teams: TeamInfo[] = [
     ],
   },
 ];
+
+/** Catalog User entities backing the dev harness's member-picker Autocomplete. */
+export const mockCatalogUsers: UserEntity[] = [
+  {
+    apiVersion: 'backstage.io/v1alpha1',
+    kind: 'User',
+    metadata: { name: 'jane.doe', namespace: 'default', title: 'Jane Doe' },
+    spec: { profile: { displayName: 'Jane Doe', email: 'jane.doe@example.com' } },
+  },
+  {
+    apiVersion: 'backstage.io/v1alpha1',
+    kind: 'User',
+    metadata: { name: 'john.smith', namespace: 'default', title: 'John Smith' },
+    spec: { profile: { displayName: 'John Smith', email: 'john.smith@example.com' } },
+  },
+  {
+    apiVersion: 'backstage.io/v1alpha1',
+    kind: 'User',
+    metadata: { name: 'alice.nguyen', namespace: 'default', title: 'Alice Nguyen' },
+    spec: { profile: { displayName: 'Alice Nguyen', email: 'alice.nguyen@example.com' } },
+  },
+  {
+    apiVersion: 'backstage.io/v1alpha1',
+    kind: 'User',
+    metadata: { name: 'raj.patel', namespace: 'default', title: 'Raj Patel' },
+    spec: { profile: { displayName: 'Raj Patel', email: 'raj.patel@example.com' } },
+  },
+];
+
+/** Minimal CatalogApi stand-in: only `getEntities` is exercised by the plugin. */
+export class MockCatalogApi implements Partial<CatalogApi> {
+  async getEntities(): Promise<{ items: Entity[] }> {
+    return { items: mockCatalogUsers };
+  }
+}
 
 function dailyUsage(daysBack: number) {
   return Array.from({ length: daysBack }).map((_, i) => {

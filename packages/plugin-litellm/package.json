@@ -40,9 +40,11 @@
     "postpack": ""
   },
   "dependencies": {
+    "@backstage/catalog-model": "^1.9.0",
     "@backstage/core-components": "^0.18.10",
     "@backstage/core-plugin-api": "^1.12.6",
     "@backstage/frontend-plugin-api": "^0.17.0",
+    "@backstage/plugin-catalog-react": "^3.1.0",
     "@backstage/plugin-permission-common": "^0.9.9",
     "@backstage/plugin-permission-react": "^0.5.3",
     "@backstage/theme": "^0.6.0",
@@ -57,6 +59,7 @@
     "zod": "^3.22.4"
   },
   "devDependencies": {
+    "@backstage/catalog-client": "^1.16.1",
     "@backstage/cli": "^0.36.2",
     "@backstage/frontend-defaults": "^0.5.3",
     "@backstage/frontend-test-utils": "^0.6.0",

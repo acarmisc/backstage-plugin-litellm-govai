@@ -15,7 +15,7 @@ import IconButton from '@mui/material/IconButton';
 import Button from '@mui/material/Button';
 import CircularProgress from '@mui/material/CircularProgress';
 import { alpha } from '@mui/material/styles';
-import { ExpandMore, Group } from '@mui/icons-material';
+import { ExpandMore, Group, Add } from '@mui/icons-material';
 import {
   AreaChart,
   Area,
@@ -299,6 +299,9 @@ interface TeamUsageProps {
   getTeamUsageLoading: (teamId: string) => boolean;
   canManage?: boolean;
   onEditTeam?: (team: TeamInfo) => void;
+  /** When true (with `onCreateTeam`), a "Create Team" action renders in the section header. */
+  canCreate?: boolean;
+  onCreateTeam?: () => void;
 }
 
 export const TeamUsage: React.FC<TeamUsageProps> = ({
@@ -308,10 +311,25 @@ export const TeamUsage: React.FC<TeamUsageProps> = ({
   getTeamUsageLoading,
   canManage,
   onEditTeam,
+  canCreate,
+  onCreateTeam,
 }) => {
+  const createAction =
+    canCreate && onCreateTeam ? (
+      <Button
+        variant="contained"
+        color="primary"
+        disableElevation
+        startIcon={<Add />}
+        onClick={onCreateTeam}
+      >
+        Create Team
+      </Button>
+    ) : undefined;
+
   if (loading) {
     return (
-      <SectionCard title="Teams">
+      <SectionCard title="Teams" actions={createAction}>
         <Skeleton variant="rounded" height={120} sx={{ mb: 2 }} />
         <Skeleton variant="rounded" height={120} />
       </SectionCard>
@@ -320,7 +338,7 @@ export const TeamUsage: React.FC<TeamUsageProps> = ({
 
   if (!teams.length) {
     return (
-      <SectionCard title="Teams">
+      <SectionCard title="Teams" actions={createAction}>
         <EmptyState
           message="You're not a member of any LiteLLM team yet."
           hint="Your account is provisioned, so you can still generate personal keys and use models. Ask an admin to add you to a team if you need a shared budget."
@@ -330,7 +348,11 @@ export const TeamUsage: React.FC<TeamUsageProps> = ({
   }
 
   return (
-    <SectionCard title="Teams" subtitle={`${teams.length} team${teams.length === 1 ? '' : 's'}`}>
+    <SectionCard
+      title="Teams"
+      subtitle={`${teams.length} team${teams.length === 1 ? '' : 's'}`}
+      actions={createAction}
+    >
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
         {teams.map(team => (
           <TeamCard

@@ -7,7 +7,6 @@ import Typography from '@mui/material/Typography';
 import Paper from '@mui/material/Paper';
 import Tabs from '@mui/material/Tabs';
 import Tab from '@mui/material/Tab';
-import Button from '@mui/material/Button';
 import { useAsync, useAsyncRetry } from 'react-use';
 import { useApi } from '@backstage/core-plugin-api';
 import { usePermission } from '@backstage/plugin-permission-react';
@@ -384,29 +383,19 @@ export const LiteLLMPage: React.FC = () => {
         for (const t of teams ?? []) teamsById.set(t.team_id, t);
         const visibleTeams = Array.from(teamsById.values());
         return (
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            {teamMgmtEnabled && canCreateTeam && (
-              <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
-                <Button
-                  variant="contained"
-                  onClick={() => setManageTeam({ mode: 'create' })}
-                >
-                  Create Team
-                </Button>
-              </Box>
-            )}
-            <TeamUsage
-              teams={visibleTeams}
-              loading={teamsLoading}
-              getTeamUsage={teamId => {
-                if (teamUsageCache[teamId] === undefined) loadTeamUsage(teamId);
-                return teamUsageCache[teamId] ?? null;
-              }}
-              getTeamUsageLoading={teamId => teamUsageLoading[teamId] ?? false}
-              canManage={teamMgmtEnabled && canManageTeam}
-              onEditTeam={t => setManageTeam({ mode: 'edit', team: t })}
-            />
-          </Box>
+          <TeamUsage
+            teams={visibleTeams}
+            loading={teamsLoading}
+            getTeamUsage={teamId => {
+              if (teamUsageCache[teamId] === undefined) loadTeamUsage(teamId);
+              return teamUsageCache[teamId] ?? null;
+            }}
+            getTeamUsageLoading={teamId => teamUsageLoading[teamId] ?? false}
+            canManage={teamMgmtEnabled && canManageTeam}
+            onEditTeam={t => setManageTeam({ mode: 'edit', team: t })}
+            canCreate={teamMgmtEnabled && canCreateTeam}
+            onCreateTeam={() => setManageTeam({ mode: 'create' })}
+          />
         );
       })()}
 
