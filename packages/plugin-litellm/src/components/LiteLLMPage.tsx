@@ -19,7 +19,7 @@ import { TeamUsage } from './TeamUsage';
 import { ModelsTable } from './ModelsTable';
 import { AuditLog } from './AuditLog';
 import { liteLlmApiRef } from '../api';
-import { DateRange, GenerateKeyRequest, GenerateKeyResponse, UpdateKeyRequest, UsageMetrics, CreateTeamRequest, UpdateTeamRequest } from '../types';
+import { DateRange, GenerateKeyRequest, GenerateKeyResponse, UpdateKeyRequest, UsageMetrics, CreateTeamRequest, UpdateTeamRequest, TeamInfo } from '../types';
 
 const PERIOD_LS_KEY = 'litellm_usage_period';
 type DatePreset = 'today' | '24h' | '7d' | '30d';
@@ -47,7 +47,7 @@ export const LiteLLMPage: React.FC = () => {
 
   const [snackbar, setSnackbar] = useState<{ message: string; severity: 'success' | 'warning' | 'error' } | null>(null);
   const [generateDialogOpen, setGenerateDialogOpen] = useState(false);
-  const [manageTeam, setManageTeam] = useState<{ mode: 'create' | 'edit'; team?: any } | null>(null);
+  const [manageTeam, setManageTeam] = useState<{ mode: 'create' | 'edit'; team?: TeamInfo } | null>(null);
 
   // Team usage cache: teamId -> UsageMetrics
   const [teamUsageCache, setTeamUsageCache] = useState<Record<string, UsageMetrics | null>>({});

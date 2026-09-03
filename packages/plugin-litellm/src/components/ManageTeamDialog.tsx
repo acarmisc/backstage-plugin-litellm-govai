@@ -47,7 +47,7 @@ export const ManageTeamDialog: FC<ManageTeamDialogProps> = ({
         setAlias(team.team_alias ?? '');
         setModels(team.models ?? []);
         setMaxBudget(team.max_budget ? String(team.max_budget) : '');
-        setUnlimited(!team.max_budget);
+        setUnlimited(allowUnlimitedBudget && !team.max_budget);
         setBudgetDuration('');
       } else {
         setAlias('');
