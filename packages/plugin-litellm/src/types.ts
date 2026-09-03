@@ -202,3 +202,27 @@ export interface AuditLogsParams {
   table_name?: string;
   changed_by?: string;
 }
+
+export interface CreateTeamRequest {
+  team_alias: string;
+  models: string[];
+  max_budget?: number | null;
+  budget_duration?: string;
+  tpm_limit?: number;
+  rpm_limit?: number;
+}
+
+export interface UpdateTeamRequest {
+  team_alias?: string;
+  models?: string[];
+  max_budget?: number | null;
+  blocked?: boolean;
+  budget_duration?: string;
+  tpm_limit?: number;
+  rpm_limit?: number;
+}
+
+export interface CreateTeamResponse {
+  team_id: string;
+  team_alias?: string;
+}

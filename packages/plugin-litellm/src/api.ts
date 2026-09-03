@@ -11,6 +11,9 @@ import {
   AuditLogsParams,
   PaginatedAuditLogs,
   LiteLlmConfig,
+  CreateTeamRequest,
+  CreateTeamResponse,
+  UpdateTeamRequest,
 } from './types';
 
 class ApiError extends Error {
@@ -39,6 +42,8 @@ export interface LiteLlmApiInterface {
   getTeamUsage(teamId: string, startDate: string, endDate: string): Promise<UsageMetrics>;
   getAuditLogs(params: AuditLogsParams): Promise<PaginatedAuditLogs>;
   getConfig(): Promise<LiteLlmConfig>;
+  createTeam(request: CreateTeamRequest): Promise<CreateTeamResponse>;
+  updateTeam(teamId: string, request: UpdateTeamRequest): Promise<TeamInfo>;
 }
 
 export const liteLlmApiRef = createApiRef<LiteLlmApiInterface>({
@@ -101,6 +106,16 @@ export class LiteLlmApi implements LiteLlmApiInterface {
     const response = await this.fetchApi.fetch(`${this.basePath}${path}`, {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
+    });
+    await this.throwIfNotOk(response);
+    return response.json();
+  }
+
+  private async patch<T>(path: string, body: unknown): Promise<T> {
+    const response = await this.fetchApi.fetch(`${this.basePath}${path}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
     });
     await this.throwIfNotOk(response);
     return response.json();
@@ -188,5 +203,13 @@ export class LiteLlmApi implements LiteLlmApiInterface {
 
   async getConfig(): Promise<LiteLlmConfig> {
     return this.get<LiteLlmConfig>('/config');
+  }
+
+  async createTeam(request: CreateTeamRequest): Promise<CreateTeamResponse> {
+    return this.post<CreateTeamResponse>('/teams', request);
+  }
+
+  async updateTeam(teamId: string, request: UpdateTeamRequest): Promise<TeamInfo> {
+    return this.patch<TeamInfo>(`/teams/${encodeURIComponent(teamId)}`, request);
   }
 }

@@ -7,17 +7,19 @@ import Typography from '@mui/material/Typography';
 import Paper from '@mui/material/Paper';
 import Tabs from '@mui/material/Tabs';
 import Tab from '@mui/material/Tab';
+import Button from '@mui/material/Button';
 import { useAsync, useAsyncRetry } from 'react-use';
 import { useApi } from '@backstage/core-plugin-api';
 import { DashboardHeader } from './DashboardHeader';
 import { KeysTable } from './KeysTable';
 import { GenerateKeyDialog } from './GenerateKeyDialog';
+import { ManageTeamDialog } from './ManageTeamDialog';
 import { UsageStats } from './UsageStats';
 import { TeamUsage } from './TeamUsage';
 import { ModelsTable } from './ModelsTable';
 import { AuditLog } from './AuditLog';
 import { liteLlmApiRef } from '../api';
-import { DateRange, GenerateKeyRequest, GenerateKeyResponse, UpdateKeyRequest, UsageMetrics } from '../types';
+import { DateRange, GenerateKeyRequest, GenerateKeyResponse, UpdateKeyRequest, UsageMetrics, CreateTeamRequest, UpdateTeamRequest, TeamInfo } from '../types';
 
 const PERIOD_LS_KEY = 'litellm_usage_period';
 type DatePreset = 'today' | '24h' | '7d' | '30d';
@@ -45,6 +47,7 @@ export const LiteLLMPage: React.FC = () => {
 
   const [snackbar, setSnackbar] = useState<{ message: string; severity: 'success' | 'warning' | 'error' } | null>(null);
   const [generateDialogOpen, setGenerateDialogOpen] = useState(false);
+  const [manageTeam, setManageTeam] = useState<{ mode: 'create' | 'edit'; team?: TeamInfo } | null>(null);
 
   // Team usage cache: teamId -> UsageMetrics
   const [teamUsageCache, setTeamUsageCache] = useState<Record<string, UsageMetrics | null>>({});
@@ -72,7 +75,7 @@ export const LiteLLMPage: React.FC = () => {
     [api],
   );
 
-  const { value: allTeams, loading: teamsLoading } = useAsync(
+  const { value: allTeams, loading: teamsLoading, retry: refreshTeams } = useAsyncRetry(
     () => api.getTeams().catch(() => []),
     [api],
   );
@@ -336,17 +339,34 @@ export const LiteLLMPage: React.FC = () => {
         />
       )}
 
-      {activeTab === 'teams' && (
-        <TeamUsage
-          teams={teams ?? []}
-          loading={teamsLoading}
-          getTeamUsage={teamId => {
-            if (teamUsageCache[teamId] === undefined) loadTeamUsage(teamId);
-            return teamUsageCache[teamId] ?? null;
-          }}
-          getTeamUsageLoading={teamId => teamUsageLoading[teamId] ?? false}
-        />
-      )}
+      {activeTab === 'teams' && (() => {
+        const teamMgmtEnabled = liteLlmConfig?.teamManagement?.enabled ?? false;
+        return (
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            {teamMgmtEnabled && (
+              <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
+                <Button
+                  variant="contained"
+                  onClick={() => setManageTeam({ mode: 'create' })}
+                >
+                  Create Team
+                </Button>
+              </Box>
+            )}
+            <TeamUsage
+              teams={teams ?? []}
+              loading={teamsLoading}
+              getTeamUsage={teamId => {
+                if (teamUsageCache[teamId] === undefined) loadTeamUsage(teamId);
+                return teamUsageCache[teamId] ?? null;
+              }}
+              getTeamUsageLoading={teamId => teamUsageLoading[teamId] ?? false}
+              canManage={teamMgmtEnabled}
+              onEditTeam={t => setManageTeam({ mode: 'edit', team: t })}
+            />
+          </Box>
+        );
+      })()}
 
       {activeTab === 'models' && (
         <ModelsTable
@@ -368,6 +388,24 @@ export const LiteLLMPage: React.FC = () => {
         keyGenerationSettings={liteLlmConfig?.keyGeneration}
         onGenerateKey={handleGenerateKey}
         onGetConfig={() => api.getConfig()}
+      />
+
+      <ManageTeamDialog
+        open={!!manageTeam}
+        onClose={() => setManageTeam(null)}
+        mode={manageTeam?.mode ?? 'create'}
+        team={manageTeam?.team}
+        allModels={allModels ?? []}
+        config={liteLlmConfig}
+        onSubmit={async payload => {
+          if (manageTeam?.mode === 'edit' && manageTeam.team) {
+            await api.updateTeam(manageTeam.team.team_id, payload as UpdateTeamRequest);
+          } else {
+            await api.createTeam(payload as CreateTeamRequest);
+          }
+          setSnackbar({ message: 'Team saved', severity: 'success' });
+          refreshTeams();
+        }}
       />
 
       <Snackbar

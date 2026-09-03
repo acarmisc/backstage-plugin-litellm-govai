@@ -252,3 +252,45 @@ describe('pruneExpiredKeys', () => {
     assert.ok(calls[1].url.includes('sk-...c'), calls[1].url);
   });
 });
+
+describe('createTeam', () => {
+  test('POST /teams with payload round-trip', async () => {
+    const { api, calls } = makeApi(200, { team_id: 't123', team_alias: 'squad-a' });
+    const req = { team_alias: 'squad-a', models: ['gpt-4o'], max_budget: 500 };
+    const result = await api.createTeam(req);
+    assert.strictEqual(calls.length, 1);
+    assert.ok(calls[0].url.endsWith('/teams'), calls[0].url);
+    assert.strictEqual(calls[0].init?.method, 'POST');
+    const body = JSON.parse(calls[0].init?.body as string);
+    assert.deepStrictEqual(body, req);
+    assert.strictEqual(result.team_id, 't123');
+  });
+
+  test('throws on non-2xx', async () => {
+    const { api } = makeApi(400, { error: 'Invalid model' });
+    await assert.rejects(
+      () => api.createTeam({ team_alias: 'bad', models: [] }),
+      /Invalid model/,
+    );
+  });
+});
+
+describe('updateTeam', () => {
+  test('PATCH /teams/:id with payload round-trip', async () => {
+    const { api, calls } = makeApi(200, { team_id: 't123', max_budget: 250 });
+    const req = { max_budget: 250 };
+    const result = await api.updateTeam('t123', req);
+    assert.strictEqual(calls.length, 1);
+    assert.ok(calls[0].url.includes('/teams/t123'), calls[0].url);
+    assert.strictEqual(calls[0].init?.method, 'PATCH');
+    const body = JSON.parse(calls[0].init?.body as string);
+    assert.deepStrictEqual(body, req);
+    assert.strictEqual(result.team_id, 't123');
+  });
+
+  test('encodes teamId in URL', async () => {
+    const { api, calls } = makeApi(200, { team_id: 'team/id' });
+    await api.updateTeam('team/id', {});
+    assert.ok(calls[0].url.includes('team%2Fid'), calls[0].url);
+  });
+});
