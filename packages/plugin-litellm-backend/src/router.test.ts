@@ -327,6 +327,32 @@ describe('router /config', () => {
       await new Promise<void>(r => h2.server.close(() => r()));
     }
   });
+
+  test('team-management is disabled by default', async () => {
+    const { body } = await req(h.baseUrl, 'GET', '/config');
+    assert.strictEqual(body.teamManagement.enabled, false);
+    assert.strictEqual(body.teamManagement.allowUnlimitedBudget, false);
+    assert.strictEqual(body.teamManagement.maxBudgetCeiling, null);
+  });
+
+  test('team-management settings can be enabled via config', async () => {
+    const h2 = await startHarness({
+      config: {
+        'permission.enabled': true,
+        'litellm.teamAdmin.group': 'group:default/admins',
+        'litellm.teamAdmin.maxBudgetCeiling': 5000,
+        'litellm.teamAdmin.allowUnlimitedBudget': true,
+      },
+    });
+    try {
+      const { body } = await req(h2.baseUrl, 'GET', '/config');
+      assert.strictEqual(body.teamManagement.enabled, true);
+      assert.strictEqual(body.teamManagement.maxBudgetCeiling, 5000);
+      assert.strictEqual(body.teamManagement.allowUnlimitedBudget, true);
+    } finally {
+      await new Promise<void>(r => h2.server.close(() => r()));
+    }
+  });
 });
 
 describe('router /keys/generate', () => {
