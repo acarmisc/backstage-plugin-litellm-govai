@@ -459,6 +459,26 @@ export class LiteLLMClient {
     });
   }
 
+  /**
+   * Lists the vector stores (knowledge bases) registered on the LiteLLM proxy.
+   * Tolerates a bare array, `{ data: [...] }`, or `{ vector_stores: [...] }`.
+   * Each entry is normalised to `{ id, name? }` — `id` prefers
+   * `vector_store_id` then `id` then `name`.
+   */
+  async listVectorStores(): Promise<Array<{ id: string; name?: string }>> {
+    const raw = await this.request<any>('/vector_store/list');
+    let rows: any[] = [];
+    if (Array.isArray(raw)) rows = raw;
+    else if (Array.isArray(raw?.data)) rows = raw.data;
+    else if (Array.isArray(raw?.vector_stores)) rows = raw.vector_stores;
+    return rows
+      .map(r => ({
+        id: r?.vector_store_id ?? r?.id ?? r?.name ?? '',
+        name: r?.vector_store_name ?? r?.name ?? undefined,
+      }))
+      .filter(r => r.id);
+  }
+
   private emptyUsage(): UsageMetrics {
     return {
       total_spend: 0,

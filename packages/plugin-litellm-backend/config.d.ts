@@ -228,6 +228,25 @@ export interface Config {
        * @visibility backend
        */
       allowTeamDelete?: boolean;
+
+      /**
+       * Object-permission management (attaching knowledge bases / MCP servers
+       * to a team). This is the highest-risk surface — attaching a vector store
+       * exposes its documents to every team key, and attaching an MCP server
+       * grants tool execution. Keep disabled unless a real permission policy
+       * (@backstage-community/plugin-rbac or a custom PermissionPolicy) is
+       * installed and the allowedVectorStores / allowedMcpServers allowlists
+       * are set.
+       */
+      objectPermissions?: {
+        /**
+         * When true, mount the knowledge-base and MCP management routes.
+         * Still gated by the permission framework and the allowlists.
+         * @default false
+         * @visibility backend
+         */
+        enabled?: boolean;
+      };
     };
 
     bridge?: {

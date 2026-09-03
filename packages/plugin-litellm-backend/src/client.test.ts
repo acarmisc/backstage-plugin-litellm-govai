@@ -272,4 +272,38 @@ describe('LiteLLMClient team CRUD methods', () => {
       (err: any) => err instanceof LiteLLMUpstreamError && err.status === 404,
     );
   });
+
+  test('listVectorStores GETs /vector_store/list and normalises id/name', async () => {
+    stubFetch({
+      data: [
+        { vector_store_id: 'vs_1', vector_store_name: 'HR docs' },
+        { id: 'vs_2' },
+        { name: 'vs_3' },
+        { note: 'no id' },
+      ],
+    });
+    const client = new LiteLLMClient(mockConfig);
+    const result = await client.listVectorStores();
+    assert.ok(fetchCalls[0].url.endsWith('/vector_store/list'), fetchCalls[0].url);
+    assert.deepStrictEqual(result, [
+      { id: 'vs_1', name: 'HR docs' },
+      { id: 'vs_2', name: undefined },
+      { id: 'vs_3', name: 'vs_3' },
+    ]);
+  });
+
+  test('listVectorStores tolerates a bare array and { vector_stores: [...] }', async () => {
+    stubFetch([{ id: 'a' }]);
+    let client = new LiteLLMClient(mockConfig);
+    assert.deepStrictEqual(
+      (await client.listVectorStores()).map(s => s.id),
+      ['a'],
+    );
+    stubFetch({ vector_stores: [{ id: 'b' }, { id: 'c' }] });
+    client = new LiteLLMClient(mockConfig);
+    assert.deepStrictEqual(
+      (await client.listVectorStores()).map(s => s.id),
+      ['b', 'c'],
+    );
+  });
 });

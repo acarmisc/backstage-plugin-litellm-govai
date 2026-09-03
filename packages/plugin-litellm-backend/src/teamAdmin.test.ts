@@ -1,6 +1,6 @@
 import { describe, test, afterEach } from 'node:test';
 import assert from 'node:assert';
-import { readTeamAdminConfig, isTeamManagementEnabled, assertTeamAdmin, validateTeamWriteInput, validateTeamPatchInput } from './teamAdmin';
+import { readTeamAdminConfig, isTeamManagementEnabled, isObjectPermissionsEnabled, assertTeamAdmin, validateTeamWriteInput, validateTeamPatchInput } from './teamAdmin';
 import * as provisioning from './provisioning';
 import { AuthorizeResult } from '@backstage/plugin-permission-common';
 
@@ -123,6 +123,32 @@ describe('isTeamManagementEnabled', () => {
       'litellm.teamAdmin.group': 'group:default/admins',
     });
     assert.strictEqual(isTeamManagementEnabled(config), false);
+  });
+});
+
+describe('isObjectPermissionsEnabled', () => {
+  test('false when team management is off', () => {
+    const config = mockConfig({
+      'litellm.teamAdmin.objectPermissions.enabled': true,
+    });
+    assert.strictEqual(isObjectPermissionsEnabled(config), false);
+  });
+
+  test('false when team management is on but the opt-in is unset', () => {
+    const config = mockConfig({
+      'permission.enabled': true,
+      'litellm.teamAdmin.group': 'group:default/admins',
+    });
+    assert.strictEqual(isObjectPermissionsEnabled(config), false);
+  });
+
+  test('true only when team management is on AND the opt-in is true', () => {
+    const config = mockConfig({
+      'permission.enabled': true,
+      'litellm.teamAdmin.group': 'group:default/admins',
+      'litellm.teamAdmin.objectPermissions.enabled': true,
+    });
+    assert.strictEqual(isObjectPermissionsEnabled(config), true);
   });
 });
 
