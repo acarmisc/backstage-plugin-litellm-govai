@@ -86,6 +86,8 @@ function mockClient(overrides: {
   getAuditLogs?: (p: any) => Promise<any>;
   createTeam?: (r: any) => Promise<any>;
   updateTeam?: (r: any) => Promise<any>;
+  teamMemberAdd?: (r: any) => Promise<any>;
+  teamMemberDelete?: (r: any) => Promise<any>;
 }): any {
   const calls: Record<string, any[]> = {
     getUserInfo: [],
@@ -103,6 +105,8 @@ function mockClient(overrides: {
     getAuditLogs: [],
     createTeam: [],
     updateTeam: [],
+    teamMemberAdd: [],
+    teamMemberDelete: [],
   };
   return {
     calls,
@@ -209,6 +213,18 @@ function mockClient(overrides: {
         ? overrides.updateTeam(r)
         : Promise.resolve({ team_id: r.team_id });
     },
+    teamMemberAdd: (r: any) => {
+      calls.teamMemberAdd.push(r);
+      return overrides.teamMemberAdd
+        ? overrides.teamMemberAdd(r)
+        : Promise.resolve({});
+    },
+    teamMemberDelete: (r: any) => {
+      calls.teamMemberDelete.push(r);
+      return overrides.teamMemberDelete
+        ? overrides.teamMemberDelete(r)
+        : Promise.resolve({});
+    },
   };
 }
 
@@ -290,9 +306,10 @@ function req(
   });
 }
 
-function mockCatalog(memberOf: string[] = []): any {
+function mockCatalog(memberOf: string[] = [], kind: string = 'User'): any {
   return {
     getEntityByRef: async () => ({
+      kind,
       relations: memberOf.map(t => ({ type: 'memberOf', targetRef: t })),
     }),
   };
@@ -1333,6 +1350,344 @@ describe('router GET /teams/managed', () => {
         { team_id: 't1', spend: 0, metadata: { owning_group: 'group:default/admins' } },
       ]);
       assert.strictEqual(h.client.calls.listTeams.length, 1);
+    } finally {
+      await new Promise<void>(r => h.server.close(() => r()));
+    }
+  });
+});
+
+describe('router POST /teams/:id/members', () => {
+  const enabledConfig = {
+    'permission.enabled': true,
+    'litellm.teamAdmin.group': 'group:default/admins',
+  };
+  const ownedTeam = {
+    getTeamInfo: async () => ({
+      team_id: 't1',
+      spend: 0,
+      metadata: { owning_group: 'group:default/admins' },
+    }),
+  };
+
+  test('team management disabled => 403', async () => {
+    const h = await startHarness({});
+    try {
+      const { status } = await req(h.baseUrl, 'POST', '/teams/t1/members', {
+        authRef: 'user:default/alice',
+        body: { userEntityRef: 'user:default/bob' },
+      });
+      assert.strictEqual(status, 403);
+    } finally {
+      await new Promise<void>(r => h.server.close(() => r()));
+    }
+  });
+
+  test('caller not in admin group => 403', async () => {
+    const h = await startHarness({
+      config: enabledConfig,
+      catalogClient: mockCatalog([]),
+      client: mockClient(ownedTeam),
+    });
+    try {
+      const { status, body } = await req(h.baseUrl, 'POST', '/teams/t1/members', {
+        authRef: 'user:default/alice',
+        body: { userEntityRef: 'user:default/bob' },
+      });
+      assert.strictEqual(status, 403);
+      assert.match(body.error, /not a member/i);
+    } finally {
+      await new Promise<void>(r => h.server.close(() => r()));
+    }
+  });
+
+  test('permission DENY => 403', async () => {
+    const h = await startHarness({
+      config: enabledConfig,
+      catalogClient: mockCatalog(['group:default/admins']),
+      client: mockClient(ownedTeam),
+      permissions: mockPermissions({
+        authorize: async () => [{ result: AuthorizeResult.DENY }],
+      }),
+    });
+    try {
+      const { status, body } = await req(h.baseUrl, 'POST', '/teams/t1/members', {
+        authRef: 'user:default/alice',
+        body: { userEntityRef: 'user:default/bob' },
+      });
+      assert.strictEqual(status, 403);
+      assert.match(body.error, /missing permission/i);
+    } finally {
+      await new Promise<void>(r => h.server.close(() => r()));
+    }
+  });
+
+  test('team not found => 404', async () => {
+    const h = await startHarness({
+      config: enabledConfig,
+      catalogClient: mockCatalog(['group:default/admins']),
+      client: mockClient({
+        getTeamInfo: async () => {
+          throw new LiteLLMUpstreamError(404, 'Not Found', '{}');
+        },
+      }),
+    });
+    try {
+      const { status } = await req(h.baseUrl, 'POST', '/teams/t1/members', {
+        authRef: 'user:default/alice',
+        body: { userEntityRef: 'user:default/bob' },
+      });
+      assert.strictEqual(status, 404);
+    } finally {
+      await new Promise<void>(r => h.server.close(() => r()));
+    }
+  });
+
+  test('team has no owning_group => 403', async () => {
+    const h = await startHarness({
+      config: enabledConfig,
+      catalogClient: mockCatalog(['group:default/admins']),
+      client: mockClient({
+        getTeamInfo: async () => ({ team_id: 't1', spend: 0, metadata: {} }),
+      }),
+    });
+    try {
+      const { status, body } = await req(h.baseUrl, 'POST', '/teams/t1/members', {
+        authRef: 'user:default/alice',
+        body: { userEntityRef: 'user:default/bob' },
+      });
+      assert.strictEqual(status, 403);
+      assert.match(body.error, /not managed/i);
+    } finally {
+      await new Promise<void>(r => h.server.close(() => r()));
+    }
+  });
+
+  test('team owned by a different group => 403', async () => {
+    const h = await startHarness({
+      config: enabledConfig,
+      catalogClient: mockCatalog(['group:default/admins']),
+      client: mockClient({
+        getTeamInfo: async () => ({
+          team_id: 't1',
+          spend: 0,
+          metadata: { owning_group: 'group:default/other' },
+        }),
+      }),
+    });
+    try {
+      const { status, body } = await req(h.baseUrl, 'POST', '/teams/t1/members', {
+        authRef: 'user:default/alice',
+        body: { userEntityRef: 'user:default/bob' },
+      });
+      assert.strictEqual(status, 403);
+      assert.match(body.error, /owned by/i);
+    } finally {
+      await new Promise<void>(r => h.server.close(() => r()));
+    }
+  });
+
+  test('missing userEntityRef => 400', async () => {
+    const h = await startHarness({
+      config: enabledConfig,
+      catalogClient: mockCatalog(['group:default/admins']),
+      client: mockClient(ownedTeam),
+    });
+    try {
+      const { status, body } = await req(h.baseUrl, 'POST', '/teams/t1/members', {
+        authRef: 'user:default/alice',
+        body: {},
+      });
+      assert.strictEqual(status, 400);
+      assert.match(body.error, /userEntityRef is required/i);
+    } finally {
+      await new Promise<void>(r => h.server.close(() => r()));
+    }
+  });
+
+  test("role other than 'user' => 400", async () => {
+    const h = await startHarness({
+      config: enabledConfig,
+      catalogClient: mockCatalog(['group:default/admins']),
+      client: mockClient(ownedTeam),
+    });
+    try {
+      const { status, body } = await req(h.baseUrl, 'POST', '/teams/t1/members', {
+        authRef: 'user:default/alice',
+        body: { userEntityRef: 'user:default/bob', role: 'admin' },
+      });
+      assert.strictEqual(status, 400);
+      assert.match(body.error, /'user' team role/i);
+    } finally {
+      await new Promise<void>(r => h.server.close(() => r()));
+    }
+  });
+
+  test('member ref is not a catalog User => 400', async () => {
+    const h = await startHarness({
+      config: enabledConfig,
+      // kind 'Group' for every getEntityByRef — the admin membership check
+      // only reads relations so it still passes; the member kind check fails.
+      catalogClient: mockCatalog(['group:default/admins'], 'Group'),
+      client: mockClient(ownedTeam),
+    });
+    try {
+      const { status, body } = await req(h.baseUrl, 'POST', '/teams/t1/members', {
+        authRef: 'user:default/alice',
+        body: { userEntityRef: 'group:default/bob' },
+      });
+      assert.strictEqual(status, 400);
+      assert.match(body.error, /is not a User in the Backstage catalog/i);
+    } finally {
+      await new Promise<void>(r => h.server.close(() => r()));
+    }
+  });
+
+  test('authorized happy path: adds the member as role user and returns the team', async () => {
+    const h = await startHarness({
+      config: { ...enabledConfig, 'litellm.userIdDomain': 'example.com' },
+      catalogClient: mockCatalog(['group:default/admins']),
+      client: mockClient({
+        getTeamInfo: async () => ({
+          team_id: 't1',
+          spend: 0,
+          metadata: { owning_group: 'group:default/admins' },
+        }),
+        userInfo: { user_id: 'bob@example.com', teams: [] },
+      }),
+    });
+    try {
+      const { status, body } = await req(h.baseUrl, 'POST', '/teams/t1/members', {
+        authRef: 'user:default/alice',
+        body: { userEntityRef: 'user:default/bob' },
+      });
+      assert.strictEqual(status, 200);
+      assert.strictEqual(body.team_id, 't1');
+      assert.strictEqual(h.client.calls.teamMemberAdd.length, 1);
+      assert.deepStrictEqual(h.client.calls.teamMemberAdd[0], {
+        team_id: 't1',
+        user_id: 'bob@example.com',
+        role: 'user',
+      });
+    } finally {
+      await new Promise<void>(r => h.server.close(() => r()));
+    }
+  });
+});
+
+describe('router DELETE /teams/:id/members', () => {
+  const enabledConfig = {
+    'permission.enabled': true,
+    'litellm.teamAdmin.group': 'group:default/admins',
+    'litellm.userIdDomain': 'example.com',
+  };
+  const ownedTeam = {
+    getTeamInfo: async () => ({
+      team_id: 't1',
+      spend: 0,
+      metadata: { owning_group: 'group:default/admins' },
+    }),
+  };
+
+  test('team management disabled => 403', async () => {
+    const h = await startHarness({});
+    try {
+      const { status } = await req(
+        h.baseUrl,
+        'DELETE',
+        '/teams/t1/members?userEntityRef=user:default/bob',
+        { authRef: 'user:default/alice' },
+      );
+      assert.strictEqual(status, 403);
+    } finally {
+      await new Promise<void>(r => h.server.close(() => r()));
+    }
+  });
+
+  test('caller not in admin group => 403', async () => {
+    const h = await startHarness({
+      config: enabledConfig,
+      catalogClient: mockCatalog([]),
+      client: mockClient(ownedTeam),
+    });
+    try {
+      const { status } = await req(
+        h.baseUrl,
+        'DELETE',
+        '/teams/t1/members?userEntityRef=user:default/bob',
+        { authRef: 'user:default/alice' },
+      );
+      assert.strictEqual(status, 403);
+    } finally {
+      await new Promise<void>(r => h.server.close(() => r()));
+    }
+  });
+
+  test('missing userEntityRef query => 400', async () => {
+    const h = await startHarness({
+      config: enabledConfig,
+      catalogClient: mockCatalog(['group:default/admins']),
+      client: mockClient(ownedTeam),
+    });
+    try {
+      const { status, body } = await req(
+        h.baseUrl,
+        'DELETE',
+        '/teams/t1/members',
+        { authRef: 'user:default/alice' },
+      );
+      assert.strictEqual(status, 400);
+      assert.match(body.error, /userEntityRef query parameter is required/i);
+    } finally {
+      await new Promise<void>(r => h.server.close(() => r()));
+    }
+  });
+
+  test('team owned by a different group => 403', async () => {
+    const h = await startHarness({
+      config: enabledConfig,
+      catalogClient: mockCatalog(['group:default/admins']),
+      client: mockClient({
+        getTeamInfo: async () => ({
+          team_id: 't1',
+          spend: 0,
+          metadata: { owning_group: 'group:default/other' },
+        }),
+      }),
+    });
+    try {
+      const { status, body } = await req(
+        h.baseUrl,
+        'DELETE',
+        '/teams/t1/members?userEntityRef=user:default/bob',
+        { authRef: 'user:default/alice' },
+      );
+      assert.strictEqual(status, 403);
+      assert.match(body.error, /owned by/i);
+    } finally {
+      await new Promise<void>(r => h.server.close(() => r()));
+    }
+  });
+
+  test('authorized happy path: removes the member and returns the team', async () => {
+    const h = await startHarness({
+      config: enabledConfig,
+      catalogClient: mockCatalog(['group:default/admins']),
+      client: mockClient(ownedTeam),
+    });
+    try {
+      const { status, body } = await req(
+        h.baseUrl,
+        'DELETE',
+        '/teams/t1/members?userEntityRef=user:default/bob',
+        { authRef: 'user:default/alice' },
+      );
+      assert.strictEqual(status, 200);
+      assert.strictEqual(body.team_id, 't1');
+      assert.strictEqual(h.client.calls.teamMemberDelete.length, 1);
+      assert.deepStrictEqual(h.client.calls.teamMemberDelete[0], {
+        team_id: 't1',
+        user_id: 'bob@example.com',
+      });
     } finally {
       await new Promise<void>(r => h.server.close(() => r()));
     }
