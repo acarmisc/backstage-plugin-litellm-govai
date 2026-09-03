@@ -19,6 +19,15 @@ export interface TeamMember {
   role: 'admin' | 'user';
 }
 
+export interface TeamObjectPermission {
+  /** Vector store ids/names attached to the team. */
+  vector_stores?: string[];
+  /** MCP server ids/names attached to the team. */
+  mcp_servers?: string[];
+  /** MCP access group names attached to the team. */
+  mcp_access_groups?: string[];
+}
+
 export interface TeamInfo {
   team_id: string;
   team_alias?: string;
@@ -28,6 +37,35 @@ export interface TeamInfo {
   models?: string[];
   tpm_limit?: number;
   rpm_limit?: number;
+  /** Arbitrary metadata stored on the team record. */
+  metadata?: Record<string, unknown>;
+  /** Knowledge bases (vector stores) and MCP servers attached to the team. */
+  object_permission?: TeamObjectPermission;
+  /** Whether the team is blocked/deactivated. */
+  blocked?: boolean;
+  /** Max budget available to individual team members (if set per-member). */
+  team_member_budget?: number;
+}
+
+export interface CreateTeamRequest {
+  team_alias: string;
+  models?: string[];
+  max_budget?: number;
+  budget_duration?: string;
+  tpm_limit?: number;
+  rpm_limit?: number;
+  metadata?: Record<string, unknown>;
+  object_permission?: TeamObjectPermission;
+}
+
+export interface UpdateTeamRequest extends Partial<CreateTeamRequest> {
+  team_id: string;
+  blocked?: boolean;
+}
+
+export interface CreateTeamResponse {
+  team_id: string;
+  team_alias?: string;
 }
 
 export interface VirtualKey {
