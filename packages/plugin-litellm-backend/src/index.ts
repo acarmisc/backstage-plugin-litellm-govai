@@ -16,6 +16,8 @@ export {
   ProvisioningError,
 } from './provisioning';
 export type { BackstageUserProfile } from './provisioning';
+export { readTeamAdminConfig } from './teamAdmin';
+export type { TeamAdminConfig } from './teamAdmin';
 export {
   KeycloakJWTVerifier,
   newDefaultVerifier,
