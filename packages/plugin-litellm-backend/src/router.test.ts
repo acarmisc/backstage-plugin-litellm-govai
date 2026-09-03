@@ -86,6 +86,7 @@ function mockClient(overrides: {
   getAuditLogs?: (p: any) => Promise<any>;
   createTeam?: (r: any) => Promise<any>;
   updateTeam?: (r: any) => Promise<any>;
+  deleteTeam?: (id: string) => Promise<any>;
   teamMemberAdd?: (r: any) => Promise<any>;
   teamMemberDelete?: (r: any) => Promise<any>;
   listVectorStores?: () => Promise<any[]>;
@@ -107,6 +108,7 @@ function mockClient(overrides: {
     getAuditLogs: [],
     createTeam: [],
     updateTeam: [],
+    deleteTeam: [],
     teamMemberAdd: [],
     teamMemberDelete: [],
     listVectorStores: [],
@@ -216,6 +218,12 @@ function mockClient(overrides: {
       return overrides.updateTeam
         ? overrides.updateTeam(r)
         : Promise.resolve({ team_id: r.team_id });
+    },
+    deleteTeam: (id: string) => {
+      calls.deleteTeam.push(id);
+      return overrides.deleteTeam
+        ? overrides.deleteTeam(id)
+        : Promise.resolve({ success: true });
     },
     teamMemberAdd: (r: any) => {
       calls.teamMemberAdd.push(r);
@@ -1302,6 +1310,266 @@ describe('router PATCH /teams/:id', () => {
       await new Promise<void>(r => h.server.close(() => r()));
     }
   });
+
+  test('409 when expectedUpdatedAtIso does not match the stored value', async () => {
+    const h = await startHarness({
+      config: {
+        'permission.enabled': true,
+        'litellm.teamAdmin.group': 'group:default/admins',
+        'litellm.teamAdmin.allowedModels': ['gpt-4o'],
+        'litellm.teamAdmin.maxBudgetCeiling': 1000,
+      },
+      catalogClient: mockCatalog(['group:default/admins']),
+      client: mockClient({
+        getTeamInfo: async () => ({
+          team_id: 't1',
+          spend: 0,
+          metadata: {
+            owning_group: 'group:default/admins',
+            updated_at_iso: '2026-01-01T00:00:00.000Z',
+          },
+        }),
+      }),
+    });
+    try {
+      const { status, body } = await req(h.baseUrl, 'PATCH', '/teams/t1', {
+        authRef: 'user:default/alice',
+        body: { max_budget: 250, expectedUpdatedAtIso: '2025-06-01T00:00:00.000Z' },
+      });
+      assert.strictEqual(status, 409);
+      assert.match(body.error, /modified/i);
+      assert.strictEqual(h.client.calls.updateTeam.length, 0);
+    } finally {
+      await new Promise<void>(r => h.server.close(() => r()));
+    }
+  });
+
+  test('proceeds when expectedUpdatedAtIso matches', async () => {
+    const h = await startHarness({
+      config: {
+        'permission.enabled': true,
+        'litellm.teamAdmin.group': 'group:default/admins',
+        'litellm.teamAdmin.allowedModels': ['gpt-4o'],
+        'litellm.teamAdmin.maxBudgetCeiling': 1000,
+      },
+      catalogClient: mockCatalog(['group:default/admins']),
+      client: mockClient({
+        getTeamInfo: async () => ({
+          team_id: 't1',
+          spend: 0,
+          metadata: {
+            owning_group: 'group:default/admins',
+            updated_at_iso: '2026-01-01T00:00:00.000Z',
+          },
+        }),
+      }),
+    });
+    try {
+      const { status } = await req(h.baseUrl, 'PATCH', '/teams/t1', {
+        authRef: 'user:default/alice',
+        body: { max_budget: 250, expectedUpdatedAtIso: '2026-01-01T00:00:00.000Z' },
+      });
+      assert.strictEqual(status, 200);
+      assert.strictEqual(h.client.calls.updateTeam.length, 1);
+    } finally {
+      await new Promise<void>(r => h.server.close(() => r()));
+    }
+  });
+});
+
+describe('router DELETE /teams/:id', () => {
+  const base = {
+    'permission.enabled': true,
+    'litellm.teamAdmin.group': 'group:default/admins',
+  };
+  const ownedTeam = {
+    getTeamInfo: async () => ({
+      team_id: 't1',
+      spend: 0,
+      metadata: { owning_group: 'group:default/admins' },
+    }),
+  };
+
+  test('403 when allowTeamDelete is not set', async () => {
+    const h = await startHarness({
+      config: base,
+      catalogClient: mockCatalog(['group:default/admins']),
+      client: mockClient(ownedTeam),
+    });
+    try {
+      const { status, body } = await req(h.baseUrl, 'DELETE', '/teams/t1', {
+        authRef: 'user:default/alice',
+      });
+      assert.strictEqual(status, 403);
+      assert.match(body.error, /disabled/i);
+    } finally {
+      await new Promise<void>(r => h.server.close(() => r()));
+    }
+  });
+
+  test('403 when the team is owned by another group', async () => {
+    const h = await startHarness({
+      config: { ...base, 'litellm.teamAdmin.allowTeamDelete': true },
+      catalogClient: mockCatalog(['group:default/admins']),
+      client: mockClient({
+        getTeamInfo: async () => ({
+          team_id: 't1',
+          spend: 0,
+          metadata: { owning_group: 'group:default/other' },
+        }),
+      }),
+    });
+    try {
+      const { status } = await req(h.baseUrl, 'DELETE', '/teams/t1', {
+        authRef: 'user:default/alice',
+      });
+      assert.strictEqual(status, 403);
+    } finally {
+      await new Promise<void>(r => h.server.close(() => r()));
+    }
+  });
+
+  test('409 when the team is referenced by provisioning config (no force)', async () => {
+    const h = await startHarness({
+      config: {
+        ...base,
+        'litellm.teamAdmin.allowTeamDelete': true,
+        'litellm.provisioning.defaults.teams': ['t1'],
+      },
+      catalogClient: mockCatalog(['group:default/admins']),
+      client: mockClient(ownedTeam),
+    });
+    try {
+      const { status, body } = await req(h.baseUrl, 'DELETE', '/teams/t1', {
+        authRef: 'user:default/alice',
+      });
+      assert.strictEqual(status, 409);
+      assert.match(body.error, /provisioning/i);
+      assert.strictEqual(h.client.calls.deleteTeam.length, 0);
+    } finally {
+      await new Promise<void>(r => h.server.close(() => r()));
+    }
+  });
+
+  test('deletes with ?force=true even when referenced', async () => {
+    const h = await startHarness({
+      config: {
+        ...base,
+        'litellm.teamAdmin.allowTeamDelete': true,
+        'litellm.provisioning.defaults.teams': ['t1'],
+      },
+      catalogClient: mockCatalog(['group:default/admins']),
+      client: mockClient(ownedTeam),
+    });
+    try {
+      const { status } = await req(
+        h.baseUrl,
+        'DELETE',
+        '/teams/t1?force=true',
+        { authRef: 'user:default/alice' },
+      );
+      assert.strictEqual(status, 200);
+      assert.deepStrictEqual(h.client.calls.deleteTeam, ['t1']);
+    } finally {
+      await new Promise<void>(r => h.server.close(() => r()));
+    }
+  });
+
+  test('happy path: deletes an unreferenced owned team', async () => {
+    const h = await startHarness({
+      config: { ...base, 'litellm.teamAdmin.allowTeamDelete': true },
+      catalogClient: mockCatalog(['group:default/admins']),
+      client: mockClient(ownedTeam),
+    });
+    try {
+      const { status, body } = await req(h.baseUrl, 'DELETE', '/teams/t1', {
+        authRef: 'user:default/alice',
+      });
+      assert.strictEqual(status, 200);
+      assert.strictEqual(body.success, true);
+      assert.deepStrictEqual(h.client.calls.deleteTeam, ['t1']);
+    } finally {
+      await new Promise<void>(r => h.server.close(() => r()));
+    }
+  });
+});
+
+// Consolidated grid: every team-management mutation route must reject an
+// unauthenticated / non-team-admin / permission-denied caller the same way.
+describe('router team-management authorization matrix', () => {
+  const routes: Array<{ method: string; path: string; body?: any }> = [
+    { method: 'POST', path: '/teams', body: { team_alias: 'x', models: ['gpt-4o'], max_budget: 10 } },
+    { method: 'PATCH', path: '/teams/t1', body: { max_budget: 10 } },
+    { method: 'DELETE', path: '/teams/t1' },
+    { method: 'POST', path: '/teams/t1/members', body: { userEntityRef: 'user:default/bob' } },
+    { method: 'DELETE', path: '/teams/t1/members?userEntityRef=user:default/bob' },
+  ];
+  const enabled = {
+    'permission.enabled': true,
+    'litellm.teamAdmin.group': 'group:default/admins',
+    'litellm.teamAdmin.allowedModels': ['gpt-4o'],
+    'litellm.teamAdmin.maxBudgetCeiling': 1000,
+    'litellm.teamAdmin.allowTeamDelete': true,
+  };
+  const ownedTeam = {
+    getTeamInfo: async () => ({
+      team_id: 't1',
+      spend: 0,
+      metadata: { owning_group: 'group:default/admins' },
+    }),
+  };
+
+  for (const r of routes) {
+    test(`${r.method} ${r.path} => 403 when team management is disabled`, async () => {
+      const h = await startHarness({});
+      try {
+        const { status } = await req(h.baseUrl, r.method, r.path, {
+          authRef: 'user:default/alice',
+          body: r.body,
+        });
+        assert.strictEqual(status, 403);
+      } finally {
+        await new Promise<void>(r2 => h.server.close(() => r2()));
+      }
+    });
+
+    test(`${r.method} ${r.path} => 403 when caller is not in the admin group`, async () => {
+      const h = await startHarness({
+        config: enabled,
+        catalogClient: mockCatalog([]),
+        client: mockClient(ownedTeam),
+      });
+      try {
+        const { status } = await req(h.baseUrl, r.method, r.path, {
+          authRef: 'user:default/alice',
+          body: r.body,
+        });
+        assert.strictEqual(status, 403);
+      } finally {
+        await new Promise<void>(r2 => h.server.close(() => r2()));
+      }
+    });
+
+    test(`${r.method} ${r.path} => 403 when the permission is denied`, async () => {
+      const h = await startHarness({
+        config: enabled,
+        catalogClient: mockCatalog(['group:default/admins']),
+        client: mockClient(ownedTeam),
+        permissions: mockPermissions({
+          authorize: async () => [{ result: AuthorizeResult.DENY }],
+        }),
+      });
+      try {
+        const { status } = await req(h.baseUrl, r.method, r.path, {
+          authRef: 'user:default/alice',
+          body: r.body,
+        });
+        assert.strictEqual(status, 403);
+      } finally {
+        await new Promise<void>(r2 => h.server.close(() => r2()));
+      }
+    });
+  }
 });
 
 describe('router GET /teams/managed', () => {

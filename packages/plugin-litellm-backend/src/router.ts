@@ -45,6 +45,7 @@ import {
   litellmTeamMembersManagePermission,
   litellmTeamKnowledgebaseManagePermission,
   litellmTeamMcpManagePermission,
+  litellmTeamDeletePermission,
 } from './permissions';
 import {
   isTeamManagementEnabled,
@@ -773,56 +774,35 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
   });
 
   router.patch('/teams/:teamId', async (req: Request, res: Response) => {
-    if (!requireTeamMgmt(res)) return;
-
-    const check = await assertTeamAdmin({
+    const authz = await authorizeTeamSubresource(
       req,
-      auth,
-      permissions,
-      catalogClient,
-      teamAdminGroup: teamAdminCfg.group!,
-      permission: litellmTeamManagePermission,
-      logger,
-    });
-
-    if (!check.ok) {
-      res.status(check.status).json({ error: check.error });
-      return;
-    }
-
-    const { teamId } = req.params;
-    if (!teamId) {
-      res.status(400).json({ error: 'teamId is required' });
-      return;
-    }
-
-    let existing;
-    try {
-      existing = await client.getTeamInfo(teamId);
-    } catch (err: any) {
-      if (err instanceof LiteLLMUpstreamError && err.status === 404) {
-        res.status(404).json({ error: 'Team not found' });
-        return;
-      }
-      sendTeamError(err, res);
-      return;
-    }
-
-    const owningGroup = typeof existing.metadata?.owning_group === 'string' ? existing.metadata.owning_group : undefined;
-    if (!owningGroup) {
-      res.status(403).json({ error: 'This team is not managed by Backstage team admins and cannot be edited here' });
-      return;
-    }
-
-    const owns = await isUserMemberOfGroup(check.userEntityRef, owningGroup, catalogClient, auth, logger);
-    if (!owns) {
-      res.status(403).json({ error: `Access denied: team is owned by ${owningGroup}` });
-      return;
-    }
+      res,
+      litellmTeamManagePermission,
+    );
+    if (!authz) return;
+    const { teamId, owningGroup, actor, team: existing } = authz;
 
     const v = validateTeamPatchInput(req.body ?? {}, teamAdminCfg);
     if (!v.ok) {
       res.status(400).json({ error: v.error });
+      return;
+    }
+
+    // Optimistic-concurrency guard (opt-in): when the client sends the
+    // `expectedUpdatedAtIso` it based its edit on, reject if the stored value
+    // has moved on — a concurrent edit landed in between. Callers that don't
+    // send it are unaffected (last-writer-wins, as before).
+    const expected = (req.body ?? {}).expectedUpdatedAtIso as
+      | string
+      | undefined;
+    if (
+      expected !== undefined &&
+      expected !== (existing.metadata?.updated_at_iso as string | undefined)
+    ) {
+      res.status(409).json({
+        error:
+          'This team was modified since you loaded it. Reload and re-apply your change.',
+      });
       return;
     }
 
@@ -831,7 +811,7 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
       ...v.value,
       metadata: {
         ...(existing.metadata ?? {}),
-        updated_by_backstage_user: check.userEntityRef,
+        updated_by_backstage_user: actor,
         updated_at_iso: new Date().toISOString(),
       },
     };
@@ -840,11 +820,53 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
       const r = await client.updateTeam(payload);
       logger.info({
         action: 'team.update',
-        actor: check.userEntityRef,
+        actor,
         teamId,
         owningGroup,
       });
       res.json(r);
+    } catch (err: any) {
+      sendTeamError(err, res);
+    }
+  });
+
+  // Delete a team the caller's group owns. Gated by litellm.teamAdmin.allowTeamDelete
+  // (default false — deletion is destructive: it orphans keys and revokes access
+  // for every member). Refuses when the team id is referenced by provisioning
+  // config unless ?force=true. Prefer blocking a team over deleting it.
+  router.delete('/teams/:teamId', async (req: Request, res: Response) => {
+    const authz = await authorizeTeamSubresource(
+      req,
+      res,
+      litellmTeamDeletePermission,
+    );
+    if (!authz) return;
+    const { teamId, owningGroup, actor } = authz;
+
+    if (!teamAdminCfg.allowTeamDelete) {
+      res.status(403).json({
+        error:
+          'Team deletion is disabled (set litellm.teamAdmin.allowTeamDelete: true). Block the team instead.',
+      });
+      return;
+    }
+
+    const provisioningRefs = [
+      ...provisioningDefaults.teams,
+      ...roleConfigs.flatMap(r => r.teams ?? []),
+    ];
+    const force = String(req.query.force ?? '') === 'true';
+    if (provisioningRefs.includes(teamId) && !force) {
+      res.status(409).json({
+        error: `Team ${teamId} is referenced by litellm.provisioning config; deleting it will break user provisioning. Re-send with ?force=true to override.`,
+      });
+      return;
+    }
+
+    try {
+      await client.deleteTeam(teamId);
+      logger.info({ action: 'team.delete', actor, teamId, owningGroup, force });
+      res.json({ success: true });
     } catch (err: any) {
       sendTeamError(err, res);
     }
