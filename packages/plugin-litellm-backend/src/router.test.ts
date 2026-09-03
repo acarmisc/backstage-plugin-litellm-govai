@@ -88,6 +88,7 @@ function mockClient(overrides: {
   updateTeam?: (r: any) => Promise<any>;
   teamMemberAdd?: (r: any) => Promise<any>;
   teamMemberDelete?: (r: any) => Promise<any>;
+  listVectorStores?: () => Promise<any[]>;
 }): any {
   const calls: Record<string, any[]> = {
     getUserInfo: [],
@@ -107,6 +108,7 @@ function mockClient(overrides: {
     updateTeam: [],
     teamMemberAdd: [],
     teamMemberDelete: [],
+    listVectorStores: [],
   };
   return {
     calls,
@@ -224,6 +226,12 @@ function mockClient(overrides: {
       return overrides.teamMemberDelete
         ? overrides.teamMemberDelete(r)
         : Promise.resolve({});
+    },
+    listVectorStores: () => {
+      calls.listVectorStores.push(null);
+      return overrides.listVectorStores
+        ? overrides.listVectorStores()
+        : Promise.resolve([]);
     },
   };
 }
@@ -1687,6 +1695,146 @@ describe('router DELETE /teams/:id/members', () => {
       assert.deepStrictEqual(h.client.calls.teamMemberDelete[0], {
         team_id: 't1',
         user_id: 'bob@example.com',
+      });
+    } finally {
+      await new Promise<void>(r => h.server.close(() => r()));
+    }
+  });
+});
+
+describe('router knowledge-base (vector store) routes', () => {
+  const objectPermsConfig = {
+    'permission.enabled': true,
+    'litellm.teamAdmin.group': 'group:default/admins',
+    'litellm.teamAdmin.objectPermissions.enabled': true,
+    'litellm.teamAdmin.allowedVectorStores': ['vs_hr', 'vs_eng'],
+  };
+  const ownedTeam = {
+    getTeamInfo: async () => ({
+      team_id: 't1',
+      spend: 0,
+      metadata: { owning_group: 'group:default/admins' },
+      object_permission: { mcp_servers: ['keep-me'] },
+    }),
+  };
+
+  test('GET /vector-stores => 403 when object permissions are not enabled', async () => {
+    const h = await startHarness({
+      config: {
+        'permission.enabled': true,
+        'litellm.teamAdmin.group': 'group:default/admins',
+      },
+      catalogClient: mockCatalog(['group:default/admins']),
+    });
+    try {
+      const { status, body } = await req(h.baseUrl, 'GET', '/vector-stores', {
+        authRef: 'user:default/alice',
+      });
+      assert.strictEqual(status, 403);
+      assert.match(body.error, /disabled/i);
+    } finally {
+      await new Promise<void>(r => h.server.close(() => r()));
+    }
+  });
+
+  test('GET /vector-stores returns only allowlisted stores', async () => {
+    const h = await startHarness({
+      config: objectPermsConfig,
+      catalogClient: mockCatalog(['group:default/admins']),
+      client: mockClient({
+        listVectorStores: async () => [
+          { id: 'vs_hr', name: 'HR docs' },
+          { id: 'vs_eng', name: 'Eng docs' },
+          { id: 'vs_secret', name: 'Secrets' },
+        ],
+      }),
+    });
+    try {
+      const { status, body } = await req(h.baseUrl, 'GET', '/vector-stores', {
+        authRef: 'user:default/alice',
+      });
+      assert.strictEqual(status, 200);
+      assert.deepStrictEqual(
+        body.map((s: any) => s.id),
+        ['vs_hr', 'vs_eng'],
+      );
+    } finally {
+      await new Promise<void>(r => h.server.close(() => r()));
+    }
+  });
+
+  test('PUT /teams/:id/knowledge-bases rejects a store outside the allowlist', async () => {
+    const h = await startHarness({
+      config: objectPermsConfig,
+      catalogClient: mockCatalog(['group:default/admins']),
+      client: mockClient(ownedTeam),
+    });
+    try {
+      const { status, body } = await req(
+        h.baseUrl,
+        'PUT',
+        '/teams/t1/knowledge-bases',
+        {
+          authRef: 'user:default/alice',
+          body: { vector_stores: ['vs_hr', 'vs_secret'] },
+        },
+      );
+      assert.strictEqual(status, 400);
+      assert.match(body.error, /not in the allowed set/i);
+    } finally {
+      await new Promise<void>(r => h.server.close(() => r()));
+    }
+  });
+
+  test('PUT /teams/:id/knowledge-bases 403 when the team is owned by another group', async () => {
+    const h = await startHarness({
+      config: objectPermsConfig,
+      catalogClient: mockCatalog(['group:default/admins']),
+      client: mockClient({
+        getTeamInfo: async () => ({
+          team_id: 't1',
+          spend: 0,
+          metadata: { owning_group: 'group:default/other' },
+        }),
+      }),
+    });
+    try {
+      const { status } = await req(
+        h.baseUrl,
+        'PUT',
+        '/teams/t1/knowledge-bases',
+        { authRef: 'user:default/alice', body: { vector_stores: ['vs_hr'] } },
+      );
+      assert.strictEqual(status, 403);
+    } finally {
+      await new Promise<void>(r => h.server.close(() => r()));
+    }
+  });
+
+  test('PUT /teams/:id/knowledge-bases happy path: sets vector_stores, preserves mcp_servers', async () => {
+    const h = await startHarness({
+      config: objectPermsConfig,
+      catalogClient: mockCatalog(['group:default/admins']),
+      client: mockClient(ownedTeam),
+    });
+    try {
+      const { status } = await req(
+        h.baseUrl,
+        'PUT',
+        '/teams/t1/knowledge-bases',
+        {
+          authRef: 'user:default/alice',
+          body: { vector_stores: ['vs_hr', 'vs_eng'] },
+        },
+      );
+      assert.strictEqual(status, 200);
+      assert.strictEqual(h.client.calls.updateTeam.length, 1);
+      assert.deepStrictEqual(h.client.calls.updateTeam[0], {
+        team_id: 't1',
+        object_permission: {
+          mcp_servers: ['keep-me'],
+          vector_stores: ['vs_hr', 'vs_eng'],
+        },
       });
     } finally {
       await new Promise<void>(r => h.server.close(() => r()));

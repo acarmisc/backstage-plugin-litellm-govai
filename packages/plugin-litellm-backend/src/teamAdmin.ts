@@ -78,6 +78,21 @@ export function isTeamManagementEnabled(config: Config): boolean {
 }
 
 /**
+ * Whether the object-permission routes (knowledge bases / MCP servers) should
+ * be mounted. Requires team management to be enabled AND an explicit
+ * `litellm.teamAdmin.objectPermissions.enabled: true` opt-in, because these
+ * routes grant data access (vector stores) and tool execution (MCP) to every
+ * team key. Fail-closed: any missing piece disables the whole surface.
+ */
+export function isObjectPermissionsEnabled(config: Config): boolean {
+  return (
+    isTeamManagementEnabled(config) &&
+    (config.getOptionalBoolean('litellm.teamAdmin.objectPermissions.enabled') ??
+      false)
+  );
+}
+
+/**
  * Discriminated result: either successful auth or a failure with HTTP status + error message.
  */
 export type TeamAdminCheck =

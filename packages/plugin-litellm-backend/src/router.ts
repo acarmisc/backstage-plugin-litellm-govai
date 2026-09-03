@@ -43,8 +43,16 @@ import {
   litellmTeamCreatePermission,
   litellmTeamManagePermission,
   litellmTeamMembersManagePermission,
+  litellmTeamKnowledgebaseManagePermission,
 } from './permissions';
-import { isTeamManagementEnabled, readTeamAdminConfig, assertTeamAdmin, validateTeamWriteInput, validateTeamPatchInput } from './teamAdmin';
+import {
+  isTeamManagementEnabled,
+  isObjectPermissionsEnabled,
+  readTeamAdminConfig,
+  assertTeamAdmin,
+  validateTeamWriteInput,
+  validateTeamPatchInput,
+} from './teamAdmin';
 
 export { ProvisioningError };
 
@@ -82,6 +90,7 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
   const allowUnlimitedBudget = config.getOptionalBoolean('litellm.keyGeneration.allowUnlimitedBudget') ?? false;
   const teamRequired = config.getOptionalBoolean('litellm.keyGeneration.teamRequired') ?? true;
   const teamMgmtEnabled = isTeamManagementEnabled(config);
+  const objectPermsEnabled = isObjectPermissionsEnabled(config);
   const teamAdminCfg = readTeamAdminConfig(config);
   const catalogClient = options.catalogClient ?? new CatalogClient({ discoveryApi: discovery });
 
@@ -663,6 +672,18 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
     return true;
   }
 
+  function requireObjectPerms(res: Response): boolean {
+    if (!requireTeamMgmt(res)) return false;
+    if (!objectPermsEnabled) {
+      res.status(403).json({
+        error:
+          'Knowledge-base / MCP management is disabled (set litellm.teamAdmin.objectPermissions.enabled: true, with a permission policy and the allowlists in place)',
+      });
+      return false;
+    }
+    return true;
+  }
+
   function sendTeamError(err: any, res: Response): void {
     if (err instanceof LiteLLMUpstreamError) {
       res.status(err.status).json({
@@ -871,11 +892,16 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
   // load the team and enforce the owning-group object guard (same as PATCH
   // /teams/:id). Returns the resolved teamId + owningGroup, or null when a
   // response has already been sent.
-  async function authorizeTeamMemberAction(
+  // Shared preamble for a team sub-resource mutation (members, knowledge bases,
+  // MCP servers): team-mgmt enabled → assertTeamAdmin(<the given permission>) →
+  // load the team and enforce the owning-group object guard. Returns the
+  // resolved teamId + owningGroup + actor, or null when a response was sent.
+  async function authorizeTeamSubresource(
     req: Request,
     res: Response,
+    permission: BasicPermission,
   ): Promise<
-    | { teamId: string; owningGroup: string; actor: string }
+    | { teamId: string; owningGroup: string; actor: string; team: TeamInfo }
     | null
   > {
     if (!requireTeamMgmt(res)) return null;
@@ -886,7 +912,7 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
       permissions,
       catalogClient,
       teamAdminGroup: teamAdminCfg.group!,
-      permission: litellmTeamMembersManagePermission,
+      permission,
       logger,
     });
     if (!check.ok) {
@@ -937,7 +963,7 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
       return null;
     }
 
-    return { teamId, owningGroup, actor: check.userEntityRef };
+    return { teamId, owningGroup, actor: check.userEntityRef, team: existing };
   }
 
   // Add a member to a team the caller's group owns. The member must (a) resolve
@@ -947,7 +973,7 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
   router.post(
     '/teams/:teamId/members',
     async (req: Request, res: Response) => {
-      const authz = await authorizeTeamMemberAction(req, res);
+      const authz = await authorizeTeamSubresource(req, res, litellmTeamMembersManagePermission);
       if (!authz) return;
       const { teamId, owningGroup, actor } = authz;
 
@@ -1059,7 +1085,7 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
   router.delete(
     '/teams/:teamId/members',
     async (req: Request, res: Response) => {
-      const authz = await authorizeTeamMemberAction(req, res);
+      const authz = await authorizeTeamSubresource(req, res, litellmTeamMembersManagePermission);
       if (!authz) return;
       const { teamId, owningGroup, actor } = authz;
 
@@ -1084,6 +1110,97 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
           owningGroup,
         });
         const updated = await client.getTeamInfo(teamId);
+        res.json(updated);
+      } catch (err: any) {
+        sendTeamError(err, res);
+      }
+    },
+  );
+
+  // ── Knowledge-base (vector store) management ────────────────────────────
+  //
+  // Attaching a vector store to a team exposes its documents to every team
+  // key. Team admins may only reference stores that the operator has
+  // allowlisted in litellm.teamAdmin.allowedVectorStores — anything outside
+  // the allowlist is rejected, never silently dropped.
+
+  // The vector stores a team admin is allowed to attach (allowlist ∩ proxy).
+  router.get('/vector-stores', async (req: Request, res: Response) => {
+    if (!requireObjectPerms(res)) return;
+    const check = await assertTeamAdmin({
+      req,
+      auth,
+      permissions,
+      catalogClient,
+      teamAdminGroup: teamAdminCfg.group!,
+      permission: litellmTeamKnowledgebaseManagePermission,
+      logger,
+    });
+    if (!check.ok) {
+      res.status(check.status).json({ error: check.error });
+      return;
+    }
+    const allowed = new Set(teamAdminCfg.allowedVectorStores);
+    try {
+      const all = await client.listVectorStores();
+      res.json(all.filter(s => allowed.has(s.id) || (s.name && allowed.has(s.name))));
+    } catch (err: any) {
+      sendTeamError(err, res);
+    }
+  });
+
+  // Replace the set of knowledge bases attached to a team the caller's group
+  // owns. Body: { vector_stores: string[] }. Every id must be in the
+  // allowlist. The other object_permission facets (mcp_servers) are preserved.
+  router.put(
+    '/teams/:teamId/knowledge-bases',
+    async (req: Request, res: Response) => {
+      if (!requireObjectPerms(res)) return;
+      const authz = await authorizeTeamSubresource(
+        req,
+        res,
+        litellmTeamKnowledgebaseManagePermission,
+      );
+      if (!authz) return;
+      const { teamId, owningGroup, actor, team } = authz;
+
+      const requested = (req.body?.vector_stores ?? []) as unknown;
+      if (
+        !Array.isArray(requested) ||
+        !requested.every(v => typeof v === 'string')
+      ) {
+        res
+          .status(400)
+          .json({ error: 'vector_stores must be an array of strings' });
+        return;
+      }
+      const allowed = new Set(teamAdminCfg.allowedVectorStores);
+      const offenders = requested.filter(v => !allowed.has(v));
+      if (offenders.length) {
+        res.status(400).json({
+          error: `vector store(s) not in the allowed set for team admins: ${offenders.join(
+            ', ',
+          )}`,
+        });
+        return;
+      }
+
+      const objectPermission = {
+        ...(team.object_permission ?? {}),
+        vector_stores: requested as string[],
+      };
+      try {
+        const updated = await client.updateTeam({
+          team_id: teamId,
+          object_permission: objectPermission,
+        });
+        logger.info({
+          action: 'team.knowledgebase.set',
+          actor,
+          teamId,
+          owningGroup,
+          vector_stores: requested,
+        });
         res.json(updated);
       } catch (err: any) {
         sendTeamError(err, res);
