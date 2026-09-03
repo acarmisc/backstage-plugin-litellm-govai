@@ -12,6 +12,9 @@ import {
   DeleteKeyRequest,
   CreateUserRequest,
   CreateUserResponse,
+  CreateTeamRequest,
+  CreateTeamResponse,
+  UpdateTeamRequest,
   AuditLogsParams,
   PaginatedAuditLogs,
 } from './types';
@@ -348,7 +351,46 @@ export class LiteLLMClient {
       models: inner.models ?? raw?.models,
       tpm_limit: inner.tpm_limit ?? raw?.tpm_limit,
       rpm_limit: inner.rpm_limit ?? raw?.rpm_limit,
+      metadata: inner.metadata ?? raw?.metadata,
+      object_permission: inner.object_permission ?? raw?.object_permission,
+      blocked: inner.blocked ?? raw?.blocked,
+      team_member_budget: inner.team_member_budget ?? raw?.team_member_budget,
     };
+  }
+
+  async createTeam(payload: CreateTeamRequest): Promise<CreateTeamResponse> {
+    return this.request<CreateTeamResponse>('/team/new', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async updateTeam(payload: UpdateTeamRequest): Promise<unknown> {
+    return this.request<unknown>('/team/update', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  }
+
+  async deleteTeam(teamId: string): Promise<unknown> {
+    return this.request<unknown>('/team/delete', {
+      method: 'POST',
+      body: JSON.stringify({ team_ids: [teamId] }),
+    });
+  }
+
+  async blockTeam(teamId: string): Promise<unknown> {
+    return this.request<unknown>('/team/block', {
+      method: 'POST',
+      body: JSON.stringify({ team_id: teamId }),
+    });
+  }
+
+  async unblockTeam(teamId: string): Promise<unknown> {
+    return this.request<unknown>('/team/unblock', {
+      method: 'POST',
+      body: JSON.stringify({ team_id: teamId }),
+    });
   }
 
   private emptyUsage(): UsageMetrics {

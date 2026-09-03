@@ -108,6 +108,34 @@ export function bridgeListKeys(client: LiteLLMClient, claims: BridgeClaims, prov
 export function createRouter(options: RouterOptions): Promise<Router>;
 
 // @public (undocumented)
+export interface CreateTeamRequest {
+    // (undocumented)
+    budget_duration?: string;
+    // (undocumented)
+    max_budget?: number;
+    // (undocumented)
+    metadata?: Record<string, unknown>;
+    // (undocumented)
+    models?: string[];
+    // (undocumented)
+    object_permission?: TeamObjectPermission;
+    // (undocumented)
+    rpm_limit?: number;
+    // (undocumented)
+    team_alias: string;
+    // (undocumented)
+    tpm_limit?: number;
+}
+
+// @public (undocumented)
+export interface CreateTeamResponse {
+    // (undocumented)
+    team_alias?: string;
+    // (undocumented)
+    team_id: string;
+}
+
+// @public (undocumented)
 export interface CreateUserRequest {
     // (undocumented)
     auto_create_key?: boolean;
@@ -229,11 +257,17 @@ export class LiteLLMClient {
     // (undocumented)
     blockKey(key: string): Promise<unknown>;
     // (undocumented)
+    blockTeam(teamId: string): Promise<unknown>;
+    // (undocumented)
+    createTeam(payload: CreateTeamRequest): Promise<CreateTeamResponse>;
+    // (undocumented)
     createUser(payload: CreateUserRequest): Promise<CreateUserResponse>;
     // (undocumented)
     deleteKeys(request: DeleteKeyRequest): Promise<{
         success: boolean;
     }>;
+    // (undocumented)
+    deleteTeam(teamId: string): Promise<unknown>;
     generateKey(request: GenerateKeyRequest): Promise<GenerateKeyResponse>;
     // (undocumented)
     getAuditLogs(params: AuditLogsParams): Promise<PaginatedAuditLogs>;
@@ -250,7 +284,11 @@ export class LiteLLMClient {
     // (undocumented)
     unblockKey(key: string): Promise<unknown>;
     // (undocumented)
+    unblockTeam(teamId: string): Promise<unknown>;
+    // (undocumented)
     updateKey(request: UpdateKeyRequest): Promise<VirtualKey>;
+    // (undocumented)
+    updateTeam(payload: UpdateTeamRequest): Promise<unknown>;
     updateUser(payload: Partial<CreateUserRequest> & {
         user_id: string;
     }): Promise<unknown>;
@@ -466,12 +504,15 @@ export interface TeamAdminConfig {
 
 // @public (undocumented)
 export interface TeamInfo {
+    blocked?: boolean;
     // (undocumented)
     max_budget?: number;
     // (undocumented)
     members_with_roles?: TeamMember[];
+    metadata?: Record<string, unknown>;
     // (undocumented)
     models?: string[];
+    object_permission?: TeamObjectPermission;
     // (undocumented)
     rpm_limit?: number;
     // (undocumented)
@@ -480,6 +521,7 @@ export interface TeamInfo {
     team_alias?: string;
     // (undocumented)
     team_id: string;
+    team_member_budget?: number;
     // (undocumented)
     tpm_limit?: number;
 }
@@ -492,6 +534,13 @@ export interface TeamMember {
     user_email?: string;
     // (undocumented)
     user_id: string;
+}
+
+// @public (undocumented)
+export interface TeamObjectPermission {
+    mcp_access_groups?: string[];
+    mcp_servers?: string[];
+    vector_stores?: string[];
 }
 
 // @public
@@ -521,6 +570,14 @@ export interface UpdateKeyRequest {
     team_id?: string;
     // (undocumented)
     tpm_limit?: number;
+}
+
+// @public (undocumented)
+export interface UpdateTeamRequest extends Partial<CreateTeamRequest> {
+    // (undocumented)
+    blocked?: boolean;
+    // (undocumented)
+    team_id: string;
 }
 
 // @public (undocumented)
