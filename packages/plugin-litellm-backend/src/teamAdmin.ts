@@ -280,3 +280,88 @@ export function validateTeamWriteInput(input: TeamWriteInput, cfg: TeamAdminConf
     },
   };
 }
+
+export type TeamPatchValidation =
+  | { ok: true; value: Record<string, unknown> }
+  | { ok: false; error: string };
+
+export function validateTeamPatchInput(input: TeamWriteInput & { blocked?: boolean }, cfg: TeamAdminConfig): TeamPatchValidation {
+  const result: Record<string, unknown> = {};
+  let hasRecognizedField = false;
+
+  if (input.team_alias !== undefined) {
+    hasRecognizedField = true;
+    const trimmedAlias = (input.team_alias ?? '').trim();
+    if (!trimmedAlias) {
+      return { ok: false, error: 'team_alias must not be empty' };
+    }
+    result.team_alias = trimmedAlias;
+  }
+
+  if (input.models !== undefined) {
+    hasRecognizedField = true;
+    if (!Array.isArray(input.models) || input.models.length === 0) {
+      return { ok: false, error: 'models must list at least one allowed model (a team with no explicit models grants access to every proxy model)' };
+    }
+
+    const allowedSet = new Set([...cfg.allowedModels, ...cfg.allowedModelAccessGroups]);
+    if (allowedSet.size === 0) {
+      return { ok: false, error: 'models are not allowed (team admin has configured no allowlist)' };
+    }
+
+    for (const model of input.models) {
+      if (!allowedSet.has(model)) {
+        return { ok: false, error: `model "${model}" is not in the allowed set for team admins` };
+      }
+    }
+
+    result.models = input.models;
+  }
+
+  if (input.max_budget !== undefined) {
+    hasRecognizedField = true;
+    if (input.max_budget === null) {
+      if (!cfg.allowUnlimitedBudget) {
+        return { ok: false, error: 'max_budget cannot be cleared (unlimited budgets are disabled)' };
+      }
+      result.max_budget = null;
+    } else {
+      if (!Number.isFinite(input.max_budget) || input.max_budget <= 0) {
+        return { ok: false, error: 'max_budget must be a positive number' };
+      }
+      if (cfg.maxBudgetCeiling !== undefined && input.max_budget > cfg.maxBudgetCeiling) {
+        return { ok: false, error: `max_budget $${input.max_budget} exceeds the ceiling $${cfg.maxBudgetCeiling}` };
+      }
+      result.max_budget = input.max_budget;
+    }
+  }
+
+  if (input.blocked !== undefined) {
+    hasRecognizedField = true;
+    if (typeof input.blocked !== 'boolean') {
+      return { ok: false, error: 'blocked must be a boolean' };
+    }
+    result.blocked = input.blocked;
+  }
+
+  if (input.budget_duration !== undefined && typeof input.budget_duration === 'string' && input.budget_duration.trim() !== '') {
+    hasRecognizedField = true;
+    result.budget_duration = input.budget_duration;
+  }
+
+  if (input.tpm_limit !== undefined && Number.isFinite(input.tpm_limit) && input.tpm_limit >= 0) {
+    hasRecognizedField = true;
+    result.tpm_limit = input.tpm_limit;
+  }
+
+  if (input.rpm_limit !== undefined && Number.isFinite(input.rpm_limit) && input.rpm_limit >= 0) {
+    hasRecognizedField = true;
+    result.rpm_limit = input.rpm_limit;
+  }
+
+  if (!hasRecognizedField) {
+    return { ok: false, error: 'no updatable fields provided' };
+  }
+
+  return { ok: true, value: result };
+}

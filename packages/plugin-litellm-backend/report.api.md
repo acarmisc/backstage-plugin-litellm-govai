@@ -568,6 +568,15 @@ export interface TeamObjectPermission {
 }
 
 // @public (undocumented)
+export type TeamPatchValidation = {
+    ok: true;
+    value: Record<string, unknown>;
+} | {
+    ok: false;
+    error: string;
+};
+
+// @public (undocumented)
 export interface TeamWriteInput {
     // (undocumented)
     budget_duration?: string;
@@ -770,6 +779,11 @@ export interface UserInfo {
     // (undocumented)
     user_id: string;
 }
+
+// @public (undocumented)
+export function validateTeamPatchInput(input: TeamWriteInput & {
+    blocked?: boolean;
+}, cfg: TeamAdminConfig): TeamPatchValidation;
 
 // @public (undocumented)
 export function validateTeamWriteInput(input: TeamWriteInput, cfg: TeamAdminConfig): TeamWriteValidation;

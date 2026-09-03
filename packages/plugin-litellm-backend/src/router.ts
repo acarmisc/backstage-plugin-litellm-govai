@@ -41,8 +41,9 @@ import {
   litellmKeyManagePermission,
   litellmAuditReadPermission,
   litellmTeamCreatePermission,
+  litellmTeamManagePermission,
 } from './permissions';
-import { isTeamManagementEnabled, readTeamAdminConfig, assertTeamAdmin, validateTeamWriteInput } from './teamAdmin';
+import { isTeamManagementEnabled, readTeamAdminConfig, assertTeamAdmin, validateTeamWriteInput, validateTeamPatchInput } from './teamAdmin';
 
 export { ProvisioningError };
 
@@ -668,7 +669,7 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
         ...(err.param ? { param: err.param } : {}),
       });
     } else {
-      logger.error('Failed to create team', err);
+      logger.error('Team operation failed', err);
       res.status(500).json({ error: err.message });
     }
   }
@@ -744,6 +745,84 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
       sendTeamError(err, res);
     } finally {
       teamCreateInFlight.delete(key);
+    }
+  });
+
+  router.patch('/teams/:teamId', async (req: Request, res: Response) => {
+    if (!requireTeamMgmt(res)) return;
+
+    const check = await assertTeamAdmin({
+      req,
+      auth,
+      permissions,
+      catalogClient,
+      teamAdminGroup: teamAdminCfg.group!,
+      permission: litellmTeamManagePermission,
+      logger,
+    });
+
+    if (!check.ok) {
+      res.status(check.status).json({ error: check.error });
+      return;
+    }
+
+    const { teamId } = req.params;
+    if (!teamId) {
+      res.status(400).json({ error: 'teamId is required' });
+      return;
+    }
+
+    let existing;
+    try {
+      existing = await client.getTeamInfo(teamId);
+    } catch (err: any) {
+      if (err instanceof LiteLLMUpstreamError && err.status === 404) {
+        res.status(404).json({ error: 'Team not found' });
+        return;
+      }
+      sendTeamError(err, res);
+      return;
+    }
+
+    const owningGroup = typeof existing.metadata?.owning_group === 'string' ? existing.metadata.owning_group : undefined;
+    if (!owningGroup) {
+      res.status(403).json({ error: 'This team is not managed by Backstage team admins and cannot be edited here' });
+      return;
+    }
+
+    const owns = await isUserMemberOfGroup(check.userEntityRef, owningGroup, catalogClient, auth, logger);
+    if (!owns) {
+      res.status(403).json({ error: `Access denied: team is owned by ${owningGroup}` });
+      return;
+    }
+
+    const v = validateTeamPatchInput(req.body ?? {}, teamAdminCfg);
+    if (!v.ok) {
+      res.status(400).json({ error: v.error });
+      return;
+    }
+
+    const payload = {
+      team_id: teamId,
+      ...v.value,
+      metadata: {
+        ...(existing.metadata ?? {}),
+        updated_by_backstage_user: check.userEntityRef,
+        updated_at_iso: new Date().toISOString(),
+      },
+    };
+
+    try {
+      const r = await client.updateTeam(payload);
+      logger.info({
+        action: 'team.update',
+        actor: check.userEntityRef,
+        teamId,
+        owningGroup,
+      });
+      res.json(r);
+    } catch (err: any) {
+      sendTeamError(err, res);
     }
   });
 

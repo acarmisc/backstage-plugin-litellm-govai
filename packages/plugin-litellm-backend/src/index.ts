@@ -21,8 +21,9 @@ export {
   isTeamManagementEnabled,
   assertTeamAdmin,
   validateTeamWriteInput,
+  validateTeamPatchInput,
 } from './teamAdmin';
-export type { TeamAdminConfig, TeamAdminCheck, TeamWriteInput, TeamWriteValidation } from './teamAdmin';
+export type { TeamAdminConfig, TeamAdminCheck, TeamWriteInput, TeamWriteValidation, TeamPatchValidation } from './teamAdmin';
 export {
   KeycloakJWTVerifier,
   newDefaultVerifier,

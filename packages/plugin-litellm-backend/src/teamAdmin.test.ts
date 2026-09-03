@@ -1,6 +1,6 @@
 import { describe, test, afterEach } from 'node:test';
 import assert from 'node:assert';
-import { readTeamAdminConfig, isTeamManagementEnabled, assertTeamAdmin, validateTeamWriteInput } from './teamAdmin';
+import { readTeamAdminConfig, isTeamManagementEnabled, assertTeamAdmin, validateTeamWriteInput, validateTeamPatchInput } from './teamAdmin';
 import * as provisioning from './provisioning';
 import { AuthorizeResult } from '@backstage/plugin-permission-common';
 
@@ -330,6 +330,66 @@ describe('validateTeamWriteInput', () => {
     assert.strictEqual(result.ok, true);
     assert.strictEqual(result.value.tpm_limit, 1000);
     assert.strictEqual(result.value.rpm_limit, 100);
+  });
+});
+
+describe('validateTeamPatchInput', () => {
+  const cfg: any = {
+    allowedModels: ['gpt-4o', 'gpt-4-turbo'],
+    allowedModelAccessGroups: ['premium'],
+    maxBudgetCeiling: 1000,
+    allowUnlimitedBudget: false,
+  };
+
+  test('empty patch fails', () => {
+    const result = validateTeamPatchInput({}, cfg);
+    assert.strictEqual(result.ok, false);
+    assert.match(result.error, /no updatable fields/i);
+  });
+
+  test('alias-only patch succeeds', () => {
+    const result = validateTeamPatchInput({ team_alias: '  new-alias  ' }, cfg);
+    assert.strictEqual(result.ok, true);
+    assert.strictEqual(result.value.team_alias, 'new-alias');
+    assert.strictEqual(Object.keys(result.value).length, 1);
+  });
+
+  test('models with bad entry fails', () => {
+    const result = validateTeamPatchInput({ models: ['claude-3-opus'] }, cfg);
+    assert.strictEqual(result.ok, false);
+    assert.match(result.error, /not in the allowed set/i);
+  });
+
+  test('max_budget over ceiling fails', () => {
+    const result = validateTeamPatchInput({ max_budget: 1500 }, cfg);
+    assert.strictEqual(result.ok, false);
+    assert.match(result.error, /exceeds the ceiling/i);
+  });
+
+  test('max_budget: null with unlimited-off fails', () => {
+    const result = validateTeamPatchInput({ max_budget: null }, cfg);
+    assert.strictEqual(result.ok, false);
+    assert.match(result.error, /cannot be cleared/i);
+  });
+
+  test('max_budget: null with unlimited-on succeeds', () => {
+    const cfgUnlimited = { ...cfg, allowUnlimitedBudget: true };
+    const result = validateTeamPatchInput({ max_budget: null }, cfgUnlimited);
+    assert.strictEqual(result.ok, true);
+    assert.strictEqual(result.value.max_budget, null);
+  });
+
+  test('blocked: true passes through', () => {
+    const result = validateTeamPatchInput({ blocked: true }, cfg);
+    assert.strictEqual(result.ok, true);
+    assert.strictEqual(result.value.blocked, true);
+  });
+
+  test('multiple fields in patch', () => {
+    const result = validateTeamPatchInput({ max_budget: 500, blocked: false }, cfg);
+    assert.strictEqual(result.ok, true);
+    assert.strictEqual(result.value.max_budget, 500);
+    assert.strictEqual(result.value.blocked, false);
   });
 });
 
