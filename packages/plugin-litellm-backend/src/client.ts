@@ -421,6 +421,44 @@ export class LiteLLMClient {
     });
   }
 
+  /**
+   * Adds a member to a team. LiteLLM's `/team/member_add` nests the member
+   * under a `member` object; `role` is 'user' or 'admin' (we only ever send
+   * 'user' from Backstage). `max_budget_in_team` optionally caps that member's
+   * spend within the team.
+   */
+  async teamMemberAdd(payload: {
+    team_id: string;
+    user_id: string;
+    role?: 'user';
+    max_budget_in_team?: number;
+  }): Promise<unknown> {
+    return this.request<unknown>('/team/member_add', {
+      method: 'POST',
+      body: JSON.stringify({
+        team_id: payload.team_id,
+        member: { user_id: payload.user_id, role: payload.role ?? 'user' },
+        ...(payload.max_budget_in_team !== undefined && {
+          max_budget_in_team: payload.max_budget_in_team,
+        }),
+      }),
+    });
+  }
+
+  /** Removes a member from a team via LiteLLM's `/team/member_delete`. */
+  async teamMemberDelete(payload: {
+    team_id: string;
+    user_id: string;
+  }): Promise<unknown> {
+    return this.request<unknown>('/team/member_delete', {
+      method: 'POST',
+      body: JSON.stringify({
+        team_id: payload.team_id,
+        user_id: payload.user_id,
+      }),
+    });
+  }
+
   private emptyUsage(): UsageMetrics {
     return {
       total_spend: 0,

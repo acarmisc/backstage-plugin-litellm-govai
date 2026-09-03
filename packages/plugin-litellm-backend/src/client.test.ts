@@ -226,4 +226,50 @@ describe('LiteLLMClient team CRUD methods', () => {
     const result = await client.listTeams();
     assert.deepStrictEqual(result, []);
   });
+
+  test('teamMemberAdd POSTs /team/member_add with the member nested', async () => {
+    stubFetch({ team_id: 't1' });
+    const client = new LiteLLMClient(mockConfig);
+    await client.teamMemberAdd({ team_id: 't1', user_id: 'alice@example.com' });
+
+    assert.ok(fetchCalls[0].url.endsWith('/team/member_add'), fetchCalls[0].url);
+    assert.strictEqual(fetchCalls[0].init.method, 'POST');
+    const body = JSON.parse(fetchCalls[0].init.body as string);
+    assert.deepStrictEqual(body, {
+      team_id: 't1',
+      member: { user_id: 'alice@example.com', role: 'user' },
+    });
+  });
+
+  test('teamMemberAdd includes max_budget_in_team when given', async () => {
+    stubFetch({});
+    const client = new LiteLLMClient(mockConfig);
+    await client.teamMemberAdd({
+      team_id: 't1',
+      user_id: 'bob',
+      max_budget_in_team: 25,
+    });
+    const body = JSON.parse(fetchCalls[0].init.body as string);
+    assert.strictEqual(body.max_budget_in_team, 25);
+    assert.strictEqual(body.member.role, 'user');
+  });
+
+  test('teamMemberDelete POSTs /team/member_delete with team_id + user_id', async () => {
+    stubFetch({});
+    const client = new LiteLLMClient(mockConfig);
+    await client.teamMemberDelete({ team_id: 't1', user_id: 'alice@example.com' });
+
+    assert.ok(fetchCalls[0].url.endsWith('/team/member_delete'), fetchCalls[0].url);
+    const body = JSON.parse(fetchCalls[0].init.body as string);
+    assert.deepStrictEqual(body, { team_id: 't1', user_id: 'alice@example.com' });
+  });
+
+  test('teamMemberAdd surfaces a non-2xx as LiteLLMUpstreamError', async () => {
+    stubFetch({ error: { message: 'team not found' } }, { status: 404, ok: false });
+    const client = new LiteLLMClient(mockConfig);
+    await assert.rejects(
+      client.teamMemberAdd({ team_id: 'nope', user_id: 'x' }),
+      (err: any) => err instanceof LiteLLMUpstreamError && err.status === 404,
+    );
+  });
 });

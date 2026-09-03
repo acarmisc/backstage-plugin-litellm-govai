@@ -296,6 +296,16 @@ export class LiteLLMClient {
     listTeams(): Promise<TeamInfo[]>;
     // (undocumented)
     resetKeySpend(key: string): Promise<unknown>;
+    teamMemberAdd(payload: {
+        team_id: string;
+        user_id: string;
+        role?: 'user';
+        max_budget_in_team?: number;
+    }): Promise<unknown>;
+    teamMemberDelete(payload: {
+        team_id: string;
+        user_id: string;
+    }): Promise<unknown>;
     // (undocumented)
     unblockKey(key: string): Promise<unknown>;
     // (undocumented)
