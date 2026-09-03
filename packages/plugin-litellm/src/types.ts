@@ -157,6 +157,15 @@ export interface LiteLlmConfig {
     /** When true (default), a team must be selected before a key can be generated. */
     teamRequired: boolean;
   };
+  /** Team-management surface controls, set via litellm.teamAdmin in app-config.yaml. */
+  teamManagement?: {
+    /** True only when the permission framework is enabled AND an admin group is configured. */
+    enabled: boolean;
+    /** USD ceiling an admin may set as a team budget; null when unset. */
+    maxBudgetCeiling: number | null;
+    /** Whether an admin may create a team with no budget cap. */
+    allowUnlimitedBudget: boolean;
+  };
 }
 
 export interface DateRange {

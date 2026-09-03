@@ -41,6 +41,7 @@ import {
   litellmKeyManagePermission,
   litellmAuditReadPermission,
 } from './permissions';
+import { isTeamManagementEnabled, readTeamAdminConfig } from './teamAdmin';
 
 export { ProvisioningError };
 
@@ -73,6 +74,8 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
   const auditGroup = config.getOptionalString('litellm.audit.group');
   const allowUnlimitedBudget = config.getOptionalBoolean('litellm.keyGeneration.allowUnlimitedBudget') ?? false;
   const teamRequired = config.getOptionalBoolean('litellm.keyGeneration.teamRequired') ?? true;
+  const teamMgmtEnabled = isTeamManagementEnabled(config);
+  const teamAdminCfg = readTeamAdminConfig(config);
   const catalogClient = new CatalogClient({ discoveryApi: discovery });
 
   if (provisioningEnabled) {
@@ -84,6 +87,12 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
           ? provisioningDefaults.models.join(',')
           : 'all'
       }, teams=[${provisioningDefaults.teams.join(',')}]`,
+    );
+  }
+
+  if (config.getOptional('litellm.teamAdmin') && !teamMgmtEnabled) {
+    logger.warn(
+      'litellm.teamAdmin is configured but team management is disabled — set permission.enabled: true and litellm.teamAdmin.group to enable it.',
     );
   }
 
@@ -103,6 +112,11 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
     res.json({
       baseUrl: publicBaseUrl,
       keyGeneration: { allowUnlimitedBudget, teamRequired },
+      teamManagement: {
+        enabled: teamMgmtEnabled,
+        maxBudgetCeiling: teamAdminCfg.maxBudgetCeiling ?? null,
+        allowUnlimitedBudget: teamAdminCfg.allowUnlimitedBudget,
+      },
     });
   });
 
