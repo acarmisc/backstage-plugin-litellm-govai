@@ -19,7 +19,7 @@ export function applyRoleOverrides(defaults: ProvisioningDefaults, role: RoleCon
 
 // @public
 export function assertTeamAdmin(opts: {
-    req: any;
+    req: Request_2;
     auth: AuthService;
     permissions: PermissionsService;
     catalogClient: CatalogClient;

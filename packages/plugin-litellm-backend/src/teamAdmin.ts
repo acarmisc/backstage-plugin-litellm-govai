@@ -1,3 +1,4 @@
+import { Request } from 'express';
 import { Config } from '@backstage/config';
 import { AuthService, PermissionsService } from '@backstage/backend-plugin-api';
 import { BasicPermission, AuthorizeResult } from '@backstage/plugin-permission-common';
@@ -98,7 +99,7 @@ export type TeamAdminCheck =
  * Callers: check `result.ok` and respond with `status` + `error` when false.
  */
 export async function assertTeamAdmin(opts: {
-  req: any;
+  req: Request;
   auth: AuthService;
   permissions: PermissionsService;
   catalogClient: CatalogClient;

@@ -1,4 +1,4 @@
-import { describe, test, beforeEach, afterEach } from 'node:test';
+import { describe, test, afterEach } from 'node:test';
 import assert from 'node:assert';
 import { readTeamAdminConfig, isTeamManagementEnabled, assertTeamAdmin } from './teamAdmin';
 import * as provisioning from './provisioning';
@@ -148,7 +148,7 @@ describe('assertTeamAdmin', () => {
     (provisioning.resolveUserId as any) = async () => undefined;
 
     const opts = {
-      req: {},
+      req: {} as any,
       auth: mockAuth(),
       permissions: mockPermissions(),
       catalogClient: mockCatalogClient(),
@@ -169,7 +169,7 @@ describe('assertTeamAdmin', () => {
     (provisioning.isUserMemberOfGroup as any) = async () => false;
 
     const opts = {
-      req: {},
+      req: {} as any,
       auth: mockAuth(),
       permissions: mockPermissions(),
       catalogClient: mockCatalogClient(),
@@ -191,7 +191,7 @@ describe('assertTeamAdmin', () => {
     (provisioning.isUserMemberOfGroup as any) = async () => true;
 
     const opts = {
-      req: {},
+      req: {} as any,
       auth: mockAuth(),
       permissions: mockPermissions({ allow: false }),
       catalogClient: mockCatalogClient(),
@@ -213,7 +213,7 @@ describe('assertTeamAdmin', () => {
     (provisioning.isUserMemberOfGroup as any) = async () => true;
 
     const opts = {
-      req: {},
+      req: {} as any,
       auth: mockAuth(),
       permissions: mockPermissions({ allow: true }),
       catalogClient: mockCatalogClient(),
@@ -232,7 +232,7 @@ describe('assertTeamAdmin', () => {
     (provisioning.resolveCredentials as any) = async () => undefined;
 
     const opts = {
-      req: {},
+      req: {} as any,
       auth: mockAuth(),
       permissions: mockPermissions(),
       catalogClient: mockCatalogClient(),
