@@ -42,6 +42,7 @@ import {
   litellmAuditReadPermission,
   litellmTeamCreatePermission,
   litellmTeamManagePermission,
+  litellmTeamMembersManagePermission,
 } from './permissions';
 import { isTeamManagementEnabled, readTeamAdminConfig, assertTeamAdmin, validateTeamWriteInput, validateTeamPatchInput } from './teamAdmin';
 
@@ -863,6 +864,232 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
       sendTeamError(err, res);
     }
   });
+
+  // ── Team member routes ──────────────────────────────────────────────────
+  //
+  // Shared preamble: team-mgmt enabled → assertTeamAdmin(members permission) →
+  // load the team and enforce the owning-group object guard (same as PATCH
+  // /teams/:id). Returns the resolved teamId + owningGroup, or null when a
+  // response has already been sent.
+  async function authorizeTeamMemberAction(
+    req: Request,
+    res: Response,
+  ): Promise<
+    | { teamId: string; owningGroup: string; actor: string }
+    | null
+  > {
+    if (!requireTeamMgmt(res)) return null;
+
+    const check = await assertTeamAdmin({
+      req,
+      auth,
+      permissions,
+      catalogClient,
+      teamAdminGroup: teamAdminCfg.group!,
+      permission: litellmTeamMembersManagePermission,
+      logger,
+    });
+    if (!check.ok) {
+      res.status(check.status).json({ error: check.error });
+      return null;
+    }
+
+    const { teamId } = req.params;
+    if (!teamId) {
+      res.status(400).json({ error: 'teamId is required' });
+      return null;
+    }
+
+    let existing;
+    try {
+      existing = await client.getTeamInfo(teamId);
+    } catch (err: any) {
+      if (err instanceof LiteLLMUpstreamError && err.status === 404) {
+        res.status(404).json({ error: 'Team not found' });
+        return null;
+      }
+      sendTeamError(err, res);
+      return null;
+    }
+
+    const owningGroup =
+      typeof existing.metadata?.owning_group === 'string'
+        ? existing.metadata.owning_group
+        : undefined;
+    if (!owningGroup) {
+      res.status(403).json({
+        error:
+          'This team is not managed by Backstage team admins and cannot be edited here',
+      });
+      return null;
+    }
+    const owns = await isUserMemberOfGroup(
+      check.userEntityRef,
+      owningGroup,
+      catalogClient,
+      auth,
+      logger,
+    );
+    if (!owns) {
+      res
+        .status(403)
+        .json({ error: `Access denied: team is owned by ${owningGroup}` });
+      return null;
+    }
+
+    return { teamId, owningGroup, actor: check.userEntityRef };
+  }
+
+  // Add a member to a team the caller's group owns. The member must (a) resolve
+  // to a real User in the Backstage catalog and (b) exist in LiteLLM — we
+  // provision them on the spot when auto-provisioning is enabled. Only the
+  // 'user' team role can be assigned from Backstage.
+  router.post(
+    '/teams/:teamId/members',
+    async (req: Request, res: Response) => {
+      const authz = await authorizeTeamMemberAction(req, res);
+      if (!authz) return;
+      const { teamId, owningGroup, actor } = authz;
+
+      const body = (req.body ?? {}) as {
+        userEntityRef?: string;
+        role?: string;
+        maxBudgetInTeam?: number;
+      };
+      const userEntityRef = (body.userEntityRef ?? '').trim();
+      if (!userEntityRef) {
+        res.status(400).json({ error: 'userEntityRef is required' });
+        return;
+      }
+      if (body.role !== undefined && body.role !== 'user') {
+        res.status(400).json({
+          error: "only the 'user' team role can be assigned from Backstage",
+        });
+        return;
+      }
+      let maxBudgetInTeam: number | undefined;
+      if (body.maxBudgetInTeam !== undefined) {
+        if (
+          typeof body.maxBudgetInTeam !== 'number' ||
+          !Number.isFinite(body.maxBudgetInTeam) ||
+          body.maxBudgetInTeam <= 0
+        ) {
+          res
+            .status(400)
+            .json({ error: 'maxBudgetInTeam must be a positive number' });
+          return;
+        }
+        maxBudgetInTeam = body.maxBudgetInTeam;
+      }
+
+      // (a) the member must be a real User in the Backstage catalog
+      try {
+        const { token } = await auth.getPluginRequestToken({
+          onBehalfOf: await auth.getOwnServiceCredentials(),
+          targetPluginId: 'catalog',
+        });
+        const entity = await catalogClient.getEntityByRef(userEntityRef, {
+          token,
+        });
+        if (!entity || entity.kind !== 'User') {
+          res.status(400).json({
+            error: `${userEntityRef} is not a User in the Backstage catalog`,
+          });
+          return;
+        }
+      } catch (err: any) {
+        logger.warn(
+          `Catalog lookup failed for ${userEntityRef}: ${err.message}`,
+        );
+        res.status(400).json({
+          error: `Could not verify ${userEntityRef} in the Backstage catalog`,
+        });
+        return;
+      }
+
+      // (b) the member must exist in LiteLLM — provision on the spot if enabled
+      const litellmUserId = toLiteLLMUserId(userEntityRef, userIdDomain);
+      try {
+        await getOrProvisionUser(
+          client,
+          userEntityRef,
+          litellmUserId,
+          provisioningEnabled,
+          provisioningDefaults,
+          roleConfigs,
+          catalogClient,
+          auth,
+          logger,
+        );
+      } catch (err: any) {
+        if (err instanceof ProvisioningError) {
+          res.status(err.status).json(err.body);
+          return;
+        }
+        throw err;
+      }
+
+      try {
+        await client.teamMemberAdd({
+          team_id: teamId,
+          user_id: litellmUserId,
+          role: 'user',
+          ...(maxBudgetInTeam !== undefined && {
+            max_budget_in_team: maxBudgetInTeam,
+          }),
+        });
+        logger.info({
+          action: 'team.member.add',
+          actor,
+          teamId,
+          member: litellmUserId,
+          owningGroup,
+        });
+        const updated = await client.getTeamInfo(teamId);
+        res.json(updated);
+      } catch (err: any) {
+        sendTeamError(err, res);
+      }
+    },
+  );
+
+  // Remove a member from a team the caller's group owns. The member ref comes
+  // from the `userEntityRef` query param (entity refs contain ':' and '/', so
+  // they can't be a path segment). No catalog re-check on removal.
+  router.delete(
+    '/teams/:teamId/members',
+    async (req: Request, res: Response) => {
+      const authz = await authorizeTeamMemberAction(req, res);
+      if (!authz) return;
+      const { teamId, owningGroup, actor } = authz;
+
+      const userEntityRef = String(req.query.userEntityRef ?? '').trim();
+      if (!userEntityRef) {
+        res
+          .status(400)
+          .json({ error: 'userEntityRef query parameter is required' });
+        return;
+      }
+      const litellmUserId = toLiteLLMUserId(userEntityRef, userIdDomain);
+      try {
+        await client.teamMemberDelete({
+          team_id: teamId,
+          user_id: litellmUserId,
+        });
+        logger.info({
+          action: 'team.member.remove',
+          actor,
+          teamId,
+          member: litellmUserId,
+          owningGroup,
+        });
+        const updated = await client.getTeamInfo(teamId);
+        res.json(updated);
+      } catch (err: any) {
+        sendTeamError(err, res);
+      }
+    },
+  );
 
   router.get('/teams/:teamId/usage', async (req: Request, res: Response) => {
     try {
