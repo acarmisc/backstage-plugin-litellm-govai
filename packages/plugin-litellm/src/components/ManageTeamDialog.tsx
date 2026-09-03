@@ -9,6 +9,14 @@ import Alert from '@mui/material/Alert';
 import Checkbox from '@mui/material/Checkbox';
 import FormControlLabel from '@mui/material/FormControlLabel';
 import Autocomplete from '@mui/material/Autocomplete';
+import Box from '@mui/material/Box';
+import Divider from '@mui/material/Divider';
+import Typography from '@mui/material/Typography';
+import IconButton from '@mui/material/IconButton';
+import List from '@mui/material/List';
+import ListItem from '@mui/material/ListItem';
+import ListItemText from '@mui/material/ListItemText';
+import { Delete as DeleteIcon } from '@mui/icons-material';
 import { TeamInfo, ModelInfo, LiteLlmConfig, CreateTeamRequest, UpdateTeamRequest } from '../types';
 
 interface ManageTeamDialogProps {
@@ -19,6 +27,12 @@ interface ManageTeamDialogProps {
   allModels: ModelInfo[];
   config?: LiteLlmConfig;
   onSubmit: (payload: CreateTeamRequest | UpdateTeamRequest) => Promise<void>;
+  /** When true, the Members section (edit mode only) exposes add/remove controls. */
+  canManageMembers?: boolean;
+  /** Called to add a member; the parent is expected to refresh `team` on success. */
+  onAddMember?: (userEntityRef: string, maxBudgetInTeam?: number) => Promise<void>;
+  /** Called to remove a member; the parent is expected to refresh `team` on success. */
+  onRemoveMember?: (userEntityRef: string) => Promise<void>;
 }
 
 export const ManageTeamDialog: FC<ManageTeamDialogProps> = ({
@@ -29,6 +43,9 @@ export const ManageTeamDialog: FC<ManageTeamDialogProps> = ({
   allModels,
   config,
   onSubmit,
+  canManageMembers,
+  onAddMember,
+  onRemoveMember,
 }) => {
   const [alias, setAlias] = useState('');
   const [models, setModels] = useState<string[]>([]);
@@ -37,6 +54,11 @@ export const ManageTeamDialog: FC<ManageTeamDialogProps> = ({
   const [budgetDuration, setBudgetDuration] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const [memberRef, setMemberRef] = useState('');
+  const [memberBudget, setMemberBudget] = useState('');
+  const [memberBusy, setMemberBusy] = useState(false);
+  const [memberError, setMemberError] = useState<string | null>(null);
 
   const allowUnlimitedBudget = config?.teamManagement?.allowUnlimitedBudget ?? false;
   const maxBudgetCeiling = config?.teamManagement?.maxBudgetCeiling;
@@ -57,6 +79,9 @@ export const ManageTeamDialog: FC<ManageTeamDialogProps> = ({
         setBudgetDuration('');
       }
       setError(null);
+      setMemberRef('');
+      setMemberBudget('');
+      setMemberError(null);
     }
   }, [open, mode, team, allowUnlimitedBudget]);
 
@@ -118,7 +143,42 @@ export const ManageTeamDialog: FC<ManageTeamDialogProps> = ({
     }
   };
 
+  const handleAddMember = async () => {
+    if (!onAddMember || !memberRef.trim()) return;
+    setMemberError(null);
+    const budget = memberBudget ? parseFloat(memberBudget) : undefined;
+    if (budget !== undefined && (isNaN(budget) || budget <= 0)) {
+      setMemberError('Max budget in team must be a positive number');
+      return;
+    }
+    try {
+      setMemberBusy(true);
+      await onAddMember(memberRef.trim(), budget);
+      setMemberRef('');
+      setMemberBudget('');
+    } catch (err) {
+      setMemberError(err instanceof Error ? err.message : 'Failed to add member');
+    } finally {
+      setMemberBusy(false);
+    }
+  };
+
+  const handleRemoveMember = async (userId: string) => {
+    if (!onRemoveMember) return;
+    setMemberError(null);
+    try {
+      setMemberBusy(true);
+      await onRemoveMember(userId);
+    } catch (err) {
+      setMemberError(err instanceof Error ? err.message : 'Failed to remove member');
+    } finally {
+      setMemberBusy(false);
+    }
+  };
+
   const modelNames = allModels.map(m => m.model_name);
+  const members = team?.members_with_roles ?? [];
+  const showMembers = mode === 'edit' && !!canManageMembers;
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
@@ -172,6 +232,75 @@ export const ManageTeamDialog: FC<ManageTeamDialogProps> = ({
           disabled={submitting}
           fullWidth
         />
+
+        {showMembers && (
+          <Box>
+            <Divider sx={{ my: 1 }} />
+            <Typography variant="subtitle2" sx={{ mb: 1 }}>
+              Members
+            </Typography>
+            {memberError && (
+              <Alert severity="error" sx={{ mb: 1 }} onClose={() => setMemberError(null)}>
+                {memberError}
+              </Alert>
+            )}
+            {members.length === 0 ? (
+              <Typography variant="body2" color="text.secondary">
+                No members yet.
+              </Typography>
+            ) : (
+              <List dense disablePadding>
+                {members.map(m => (
+                  <ListItem
+                    key={m.user_id}
+                    disableGutters
+                    secondaryAction={
+                      <IconButton
+                        edge="end"
+                        size="small"
+                        aria-label={`remove ${m.user_id}`}
+                        disabled={memberBusy}
+                        onClick={() => handleRemoveMember(m.user_id)}
+                      >
+                        <DeleteIcon fontSize="small" />
+                      </IconButton>
+                    }
+                  >
+                    <ListItemText primary={m.user_id} secondary={m.role} />
+                  </ListItem>
+                ))}
+              </List>
+            )}
+            <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start', mt: 1 }}>
+              <TextField
+                label="Backstage user ref"
+                placeholder="user:default/alice"
+                value={memberRef}
+                onChange={e => setMemberRef(e.target.value)}
+                disabled={memberBusy}
+                size="small"
+                sx={{ flex: 1 }}
+              />
+              <TextField
+                label="Max budget in team ($)"
+                type="number"
+                value={memberBudget}
+                onChange={e => setMemberBudget(e.target.value)}
+                disabled={memberBusy}
+                size="small"
+                sx={{ width: 160 }}
+              />
+              <Button
+                onClick={handleAddMember}
+                disabled={memberBusy || !memberRef.trim()}
+                variant="outlined"
+                sx={{ mt: 0.5 }}
+              >
+                Add
+              </Button>
+            </Box>
+          </Box>
+        )}
       </DialogContent>
       <DialogActions>
         <Button onClick={onClose} disabled={submitting}>

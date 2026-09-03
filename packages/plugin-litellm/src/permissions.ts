@@ -11,3 +11,8 @@ export const litellmTeamManagePermission = createPermission({
   name: 'litellm.team.manage',
   attributes: { action: 'update' },
 });
+
+export const litellmTeamMembersManagePermission = createPermission({
+  name: 'litellm.team.members.manage',
+  attributes: { action: 'update' },
+});

@@ -20,7 +20,11 @@ import { TeamUsage } from './TeamUsage';
 import { ModelsTable } from './ModelsTable';
 import { AuditLog } from './AuditLog';
 import { liteLlmApiRef } from '../api';
-import { litellmTeamCreatePermission, litellmTeamManagePermission } from '../permissions';
+import {
+  litellmTeamCreatePermission,
+  litellmTeamManagePermission,
+  litellmTeamMembersManagePermission,
+} from '../permissions';
 import { DateRange, GenerateKeyRequest, GenerateKeyResponse, UpdateKeyRequest, UsageMetrics, CreateTeamRequest, UpdateTeamRequest, TeamInfo } from '../types';
 
 const PERIOD_LS_KEY = 'litellm_usage_period';
@@ -96,6 +100,8 @@ export const LiteLLMPage: React.FC = () => {
 
   const { allowed: canCreateTeam } = usePermission({ permission: litellmTeamCreatePermission });
   const { allowed: canManageTeam } = usePermission({ permission: litellmTeamManagePermission });
+  const { allowed: canManageMembers } = usePermission({ permission: litellmTeamMembersManagePermission });
+  const teamMgmtEnabled = liteLlmConfig?.teamManagement?.enabled ?? false;
 
   // Filter to teams the current user belongs to
   const teams = useMemo(() => {
@@ -355,7 +361,6 @@ export const LiteLLMPage: React.FC = () => {
       )}
 
       {activeTab === 'teams' && (() => {
-        const teamMgmtEnabled = liteLlmConfig?.teamManagement?.enabled ?? false;
         // Union of teams the user is a member of and teams their group owns,
         // de-duplicated by team_id (membership entries win on conflict).
         const teamsById = new Map<string, TeamInfo>();
@@ -425,6 +430,25 @@ export const LiteLLMPage: React.FC = () => {
             await api.createTeam(payload as CreateTeamRequest);
           }
           setSnackbar({ message: 'Team saved', severity: 'success' });
+          refreshTeams();
+        }}
+        canManageMembers={teamMgmtEnabled && canManageMembers}
+        onAddMember={async (userEntityRef, maxBudgetInTeam) => {
+          if (!manageTeam?.team) return;
+          const updated = await api.addTeamMember(manageTeam.team.team_id, {
+            userEntityRef,
+            ...(maxBudgetInTeam ? { maxBudgetInTeam } : {}),
+          });
+          setManageTeam(s => (s && s.team ? { ...s, team: updated } : s));
+          refreshTeams();
+        }}
+        onRemoveMember={async userEntityRef => {
+          if (!manageTeam?.team) return;
+          const updated = await api.removeTeamMember(
+            manageTeam.team.team_id,
+            userEntityRef,
+          );
+          setManageTeam(s => (s && s.team ? { ...s, team: updated } : s));
           refreshTeams();
         }}
       />
