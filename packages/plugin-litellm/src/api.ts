@@ -12,6 +12,7 @@ import {
   PaginatedAuditLogs,
   LiteLlmConfig,
   VectorStoreInfo,
+  McpServerInfo,
   CreateTeamRequest,
   CreateTeamResponse,
   UpdateTeamRequest,
@@ -47,6 +48,8 @@ export interface LiteLlmApiInterface {
   removeTeamMember(teamId: string, userEntityRef: string): Promise<TeamInfo>;
   getVectorStores(): Promise<VectorStoreInfo[]>;
   setTeamKnowledgeBases(teamId: string, vectorStores: string[]): Promise<TeamInfo>;
+  getMcpServers(): Promise<McpServerInfo[]>;
+  setTeamMcpServers(teamId: string, mcpServers: string[]): Promise<TeamInfo>;
   getUsage(startDate: string, endDate: string): Promise<UsageMetrics>;
   getTeamUsage(teamId: string, startDate: string, endDate: string): Promise<UsageMetrics>;
   getAuditLogs(params: AuditLogsParams): Promise<PaginatedAuditLogs>;
@@ -249,6 +252,20 @@ export class LiteLlmApi implements LiteLlmApiInterface {
     return this.put<TeamInfo>(
       `/teams/${encodeURIComponent(teamId)}/knowledge-bases`,
       { vector_stores: vectorStores },
+    );
+  }
+
+  async getMcpServers(): Promise<McpServerInfo[]> {
+    return this.get<McpServerInfo[]>('/mcp-servers');
+  }
+
+  async setTeamMcpServers(
+    teamId: string,
+    mcpServers: string[],
+  ): Promise<TeamInfo> {
+    return this.put<TeamInfo>(
+      `/teams/${encodeURIComponent(teamId)}/mcp-servers`,
+      { mcp_servers: mcpServers },
     );
   }
 

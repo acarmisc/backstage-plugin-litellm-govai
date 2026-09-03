@@ -17,7 +17,7 @@ import List from '@mui/material/List';
 import ListItem from '@mui/material/ListItem';
 import ListItemText from '@mui/material/ListItemText';
 import { Delete as DeleteIcon } from '@mui/icons-material';
-import { TeamInfo, ModelInfo, LiteLlmConfig, CreateTeamRequest, UpdateTeamRequest, VectorStoreInfo } from '../types';
+import { TeamInfo, ModelInfo, LiteLlmConfig, CreateTeamRequest, UpdateTeamRequest, VectorStoreInfo, McpServerInfo } from '../types';
 
 interface ManageTeamDialogProps {
   open: boolean;
@@ -39,6 +39,12 @@ interface ManageTeamDialogProps {
   vectorStores?: VectorStoreInfo[];
   /** Called to replace the team's attached knowledge bases; parent refreshes `team`. */
   onSaveKnowledgeBases?: (vectorStoreIds: string[]) => Promise<void>;
+  /** When true, the MCP Servers section (edit mode only) is shown. */
+  canManageMcpServers?: boolean;
+  /** MCP servers the caller may attach (already allowlist-filtered server-side). */
+  mcpServers?: McpServerInfo[];
+  /** Called to replace the team's attached MCP servers; parent refreshes `team`. */
+  onSaveMcpServers?: (mcpServerIds: string[]) => Promise<void>;
 }
 
 export const ManageTeamDialog: FC<ManageTeamDialogProps> = ({
@@ -55,6 +61,9 @@ export const ManageTeamDialog: FC<ManageTeamDialogProps> = ({
   canManageKnowledgeBases,
   vectorStores,
   onSaveKnowledgeBases,
+  canManageMcpServers,
+  mcpServers,
+  onSaveMcpServers,
 }) => {
   const [alias, setAlias] = useState('');
   const [models, setModels] = useState<string[]>([]);
@@ -72,6 +81,10 @@ export const ManageTeamDialog: FC<ManageTeamDialogProps> = ({
   const [kbIds, setKbIds] = useState<string[]>([]);
   const [kbBusy, setKbBusy] = useState(false);
   const [kbError, setKbError] = useState<string | null>(null);
+
+  const [mcpIds, setMcpIds] = useState<string[]>([]);
+  const [mcpBusy, setMcpBusy] = useState(false);
+  const [mcpError, setMcpError] = useState<string | null>(null);
 
   const allowUnlimitedBudget = config?.teamManagement?.allowUnlimitedBudget ?? false;
   const maxBudgetCeiling = config?.teamManagement?.maxBudgetCeiling;
@@ -97,6 +110,8 @@ export const ManageTeamDialog: FC<ManageTeamDialogProps> = ({
       setMemberError(null);
       setKbIds(team?.object_permission?.vector_stores ?? []);
       setKbError(null);
+      setMcpIds(team?.object_permission?.mcp_servers ?? []);
+      setMcpError(null);
     }
   }, [open, mode, team, allowUnlimitedBudget]);
 
@@ -204,6 +219,19 @@ export const ManageTeamDialog: FC<ManageTeamDialogProps> = ({
     }
   };
 
+  const handleSaveMcpServers = async () => {
+    if (!onSaveMcpServers) return;
+    setMcpError(null);
+    try {
+      setMcpBusy(true);
+      await onSaveMcpServers(mcpIds);
+    } catch (err) {
+      setMcpError(err instanceof Error ? err.message : 'Failed to save MCP servers');
+    } finally {
+      setMcpBusy(false);
+    }
+  };
+
   const modelNames = allModels.map(m => m.model_name);
   const members = team?.members_with_roles ?? [];
   const showMembers = mode === 'edit' && !!canManageMembers;
@@ -211,6 +239,10 @@ export const ManageTeamDialog: FC<ManageTeamDialogProps> = ({
   const kbOptions = (vectorStores ?? []).map(v => v.id);
   const kbLabel = (id: string) =>
     (vectorStores ?? []).find(v => v.id === id)?.name ?? id;
+  const showMcpServers = mode === 'edit' && !!canManageMcpServers;
+  const mcpOptions = (mcpServers ?? []).map(s => s.id);
+  const mcpLabel = (id: string) =>
+    (mcpServers ?? []).find(s => s.id === id)?.name ?? id;
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
@@ -367,6 +399,45 @@ export const ManageTeamDialog: FC<ManageTeamDialogProps> = ({
                 variant="outlined"
               >
                 {kbBusy ? 'Saving…' : 'Save knowledge bases'}
+              </Button>
+            </Box>
+          </Box>
+        )}
+
+        {showMcpServers && (
+          <Box>
+            <Divider sx={{ my: 1 }} />
+            <Typography variant="subtitle2" sx={{ mb: 1 }}>
+              MCP Servers
+            </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+              Attaching an MCP server lets every key in this team invoke that
+              server's tools through the model — including any side effects
+              those tools have.
+            </Typography>
+            {mcpError && (
+              <Alert severity="error" sx={{ mb: 1 }} onClose={() => setMcpError(null)}>
+                {mcpError}
+              </Alert>
+            )}
+            <Autocomplete
+              multiple
+              options={mcpOptions}
+              value={mcpIds}
+              getOptionLabel={mcpLabel}
+              onChange={(_, v) => setMcpIds(v)}
+              disabled={mcpBusy}
+              renderInput={params => (
+                <TextField {...params} label="Attached MCP servers" />
+              )}
+            />
+            <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1 }}>
+              <Button
+                onClick={handleSaveMcpServers}
+                disabled={mcpBusy}
+                variant="outlined"
+              >
+                {mcpBusy ? 'Saving…' : 'Save MCP servers'}
               </Button>
             </Box>
           </Box>

@@ -44,6 +44,7 @@ import {
   litellmTeamManagePermission,
   litellmTeamMembersManagePermission,
   litellmTeamKnowledgebaseManagePermission,
+  litellmTeamMcpManagePermission,
 } from './permissions';
 import {
   isTeamManagementEnabled,
@@ -1201,6 +1202,98 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
           teamId,
           owningGroup,
           vector_stores: requested,
+        });
+        res.json(updated);
+      } catch (err: any) {
+        sendTeamError(err, res);
+      }
+    },
+  );
+
+  // ── MCP server management ──────────────────────────────────────────────
+  //
+  // Attaching an MCP server to a team grants every team key the ability to
+  // invoke that server's tools through the model. Same allowlist + hard-reject
+  // discipline as knowledge bases, plus a structured audit event on every
+  // change so attaches are always attributable.
+
+  router.get('/mcp-servers', async (req: Request, res: Response) => {
+    if (!requireObjectPerms(res)) return;
+    const check = await assertTeamAdmin({
+      req,
+      auth,
+      permissions,
+      catalogClient,
+      teamAdminGroup: teamAdminCfg.group!,
+      permission: litellmTeamMcpManagePermission,
+      logger,
+    });
+    if (!check.ok) {
+      res.status(check.status).json({ error: check.error });
+      return;
+    }
+    const allowed = new Set(teamAdminCfg.allowedMcpServers);
+    try {
+      const all = await client.listMcpServers();
+      res.json(all.filter(s => allowed.has(s.id) || (s.name && allowed.has(s.name))));
+    } catch (err: any) {
+      sendTeamError(err, res);
+    }
+  });
+
+  // Replace the set of MCP servers attached to a team the caller's group owns.
+  // Body: { mcp_servers: string[] }. Every id must be allowlisted. The
+  // vector_stores facet of object_permission is preserved.
+  router.put(
+    '/teams/:teamId/mcp-servers',
+    async (req: Request, res: Response) => {
+      if (!requireObjectPerms(res)) return;
+      const authz = await authorizeTeamSubresource(
+        req,
+        res,
+        litellmTeamMcpManagePermission,
+      );
+      if (!authz) return;
+      const { teamId, owningGroup, actor, team } = authz;
+
+      const requested = (req.body?.mcp_servers ?? []) as unknown;
+      if (
+        !Array.isArray(requested) ||
+        !requested.every(v => typeof v === 'string')
+      ) {
+        res
+          .status(400)
+          .json({ error: 'mcp_servers must be an array of strings' });
+        return;
+      }
+      const allowed = new Set(teamAdminCfg.allowedMcpServers);
+      const offenders = requested.filter(v => !allowed.has(v));
+      if (offenders.length) {
+        res.status(400).json({
+          error: `MCP server(s) not in the allowed set for team admins: ${offenders.join(
+            ', ',
+          )}`,
+        });
+        return;
+      }
+
+      const before = team.object_permission?.mcp_servers ?? [];
+      const objectPermission = {
+        ...(team.object_permission ?? {}),
+        mcp_servers: requested as string[],
+      };
+      try {
+        const updated = await client.updateTeam({
+          team_id: teamId,
+          object_permission: objectPermission,
+        });
+        logger.info({
+          action: 'team.mcp.set',
+          actor,
+          teamId,
+          owningGroup,
+          before,
+          after: requested,
         });
         res.json(updated);
       } catch (err: any) {

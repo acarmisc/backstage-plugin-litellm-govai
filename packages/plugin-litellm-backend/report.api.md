@@ -292,6 +292,11 @@ export class LiteLLMClient {
     getUsage(startDate: string, endDate: string, userId?: string): Promise<UsageMetrics>;
     getUserInfo(userId?: string): Promise<UserInfo | null>;
     listKeys(userId?: string): Promise<VirtualKey[]>;
+    listMcpServers(): Promise<Array<{
+        id: string;
+        name?: string;
+        url?: string;
+    }>>;
     listModels(): Promise<ModelInfo[]>;
     listTeams(): Promise<TeamInfo[]>;
     listVectorStores(): Promise<Array<{

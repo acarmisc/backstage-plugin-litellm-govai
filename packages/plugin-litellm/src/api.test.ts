@@ -352,4 +352,22 @@ describe('team knowledge bases', () => {
       vector_stores: ['vs_1', 'vs_2'],
     });
   });
+
+  test('getMcpServers → GET /mcp-servers', async () => {
+    const servers = [{ id: 'mcp_1', name: 'GitHub' }];
+    const { api, calls } = makeApi(200, servers);
+    const result = await api.getMcpServers();
+    assert.ok(calls[0].url.endsWith('/mcp-servers'), calls[0].url);
+    assert.deepStrictEqual(result, servers);
+  });
+
+  test('setTeamMcpServers → PUT /teams/:id/mcp-servers with body', async () => {
+    const { api, calls } = makeApi(200, { team_id: 't1' });
+    await api.setTeamMcpServers('t1', ['mcp_1']);
+    assert.ok(calls[0].url.endsWith('/teams/t1/mcp-servers'), calls[0].url);
+    assert.strictEqual(calls[0].init?.method, 'PUT');
+    assert.deepStrictEqual(JSON.parse(calls[0].init?.body as string), {
+      mcp_servers: ['mcp_1'],
+    });
+  });
 });

@@ -25,6 +25,7 @@ import {
   litellmTeamManagePermission,
   litellmTeamMembersManagePermission,
   litellmTeamKnowledgebaseManagePermission,
+  litellmTeamMcpManagePermission,
 } from '../permissions';
 import { DateRange, GenerateKeyRequest, GenerateKeyResponse, UpdateKeyRequest, UsageMetrics, CreateTeamRequest, UpdateTeamRequest, TeamInfo } from '../types';
 
@@ -103,12 +104,18 @@ export const LiteLLMPage: React.FC = () => {
   const { allowed: canManageTeam } = usePermission({ permission: litellmTeamManagePermission });
   const { allowed: canManageMembers } = usePermission({ permission: litellmTeamMembersManagePermission });
   const { allowed: canManageKnowledgeBases } = usePermission({ permission: litellmTeamKnowledgebaseManagePermission });
+  const { allowed: canManageMcpServers } = usePermission({ permission: litellmTeamMcpManagePermission });
   const teamMgmtEnabled = liteLlmConfig?.teamManagement?.enabled ?? false;
   const objectPermsEnabled = liteLlmConfig?.teamManagement?.objectPermissionsEnabled ?? false;
 
   const { value: vectorStores } = useAsync(
     async () =>
       objectPermsEnabled ? api.getVectorStores().catch(() => []) : [],
+    [api, objectPermsEnabled],
+  );
+  const { value: mcpServers } = useAsync(
+    async () =>
+      objectPermsEnabled ? api.getMcpServers().catch(() => []) : [],
     [api, objectPermsEnabled],
   );
 
@@ -472,6 +479,20 @@ export const LiteLLMPage: React.FC = () => {
           );
           setManageTeam(s => (s && s.team ? { ...s, team: updated } : s));
           setSnackbar({ message: 'Knowledge bases updated', severity: 'success' });
+          refreshTeams();
+        }}
+        canManageMcpServers={
+          teamMgmtEnabled && objectPermsEnabled && canManageMcpServers
+        }
+        mcpServers={mcpServers ?? []}
+        onSaveMcpServers={async mcpServerIds => {
+          if (!manageTeam?.team) return;
+          const updated = await api.setTeamMcpServers(
+            manageTeam.team.team_id,
+            mcpServerIds,
+          );
+          setManageTeam(s => (s && s.team ? { ...s, team: updated } : s));
+          setSnackbar({ message: 'MCP servers updated', severity: 'success' });
           refreshTeams();
         }}
       />

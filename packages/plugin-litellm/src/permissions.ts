@@ -21,3 +21,8 @@ export const litellmTeamKnowledgebaseManagePermission = createPermission({
   name: 'litellm.team.knowledgebase.manage',
   attributes: { action: 'update' },
 });
+
+export const litellmTeamMcpManagePermission = createPermission({
+  name: 'litellm.team.mcp.manage',
+  attributes: { action: 'update' },
+});

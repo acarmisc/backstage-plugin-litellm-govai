@@ -43,6 +43,12 @@ export interface VectorStoreInfo {
   name?: string;
 }
 
+export interface McpServerInfo {
+  id: string;
+  name?: string;
+  url?: string;
+}
+
 export interface VirtualKey {
   key: string;
   token?: string;
