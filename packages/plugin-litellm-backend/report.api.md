@@ -17,6 +17,17 @@ import { Router } from 'express';
 // @public
 export function applyRoleOverrides(defaults: ProvisioningDefaults, role: RoleConfig): ProvisioningDefaults;
 
+// @public
+export function assertTeamAdmin(opts: {
+    req: any;
+    auth: AuthService;
+    permissions: PermissionsService;
+    catalogClient: CatalogClient;
+    teamAdminGroup: string;
+    permission: BasicPermission;
+    logger: any;
+}): Promise<TeamAdminCheck>;
+
 // @public (undocumented)
 export interface AuditLogEntry {
     // (undocumented)
@@ -232,6 +243,9 @@ export function getOrProvisionUser(client: LiteLLMClient, tokenEntityRef: string
 export function getOrProvisionUserFromClaims(client: LiteLLMClient, claims: BridgeClaims, provisioningEnabled: boolean, provisioningDefaults: ProvisioningDefaults, logger: {
     info: (...args: unknown[]) => void;
 }, userIdDomain?: string): Promise<UserInfo>;
+
+// @public
+export function isTeamManagementEnabled(config: Config): boolean;
 
 // @public
 export class KeycloakJWTVerifier implements TokenVerifier {
@@ -488,6 +502,16 @@ export interface RoleConfig {
     // (undocumented)
     userRole?: string;
 }
+
+// @public
+export type TeamAdminCheck = {
+    ok: true;
+    userEntityRef: string;
+} | {
+    ok: false;
+    status: 401 | 403;
+    error: string;
+};
 
 // @public
 export interface TeamAdminConfig {
