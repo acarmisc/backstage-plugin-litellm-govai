@@ -45,6 +45,8 @@ function actionTone(action?: string): Tone {
 const TABLE_LABELS: Record<string, string> = {
   LiteLLM_VerificationToken: 'Key',
   LiteLLM_TeamTable: 'Team',
+  LiteLLM_TeamMembership: 'Team member',
+  LiteLLM_ObjectPermissionTable: 'Team access (KB / MCP)',
   LiteLLM_UserTable: 'User',
 };
 
@@ -242,6 +244,8 @@ export const AuditLog: React.FC<AuditLogProps> = ({ api }) => {
             <MenuItem value="">All tables</MenuItem>
             <MenuItem value="LiteLLM_VerificationToken">Key</MenuItem>
             <MenuItem value="LiteLLM_TeamTable">Team</MenuItem>
+            <MenuItem value="LiteLLM_TeamMembership">Team member</MenuItem>
+            <MenuItem value="LiteLLM_ObjectPermissionTable">Team access (KB / MCP)</MenuItem>
             <MenuItem value="LiteLLM_UserTable">User</MenuItem>
           </TextField>
           <TextField

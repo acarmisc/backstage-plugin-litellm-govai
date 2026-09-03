@@ -2122,13 +2122,17 @@ describe('router knowledge-base (vector store) routes', () => {
       );
       assert.strictEqual(status, 200);
       assert.strictEqual(h.client.calls.updateTeam.length, 1);
-      assert.deepStrictEqual(h.client.calls.updateTeam[0], {
-        team_id: 't1',
-        object_permission: {
-          mcp_servers: ['keep-me'],
-          vector_stores: ['vs_hr', 'vs_eng'],
-        },
+      const payload = h.client.calls.updateTeam[0];
+      assert.strictEqual(payload.team_id, 't1');
+      assert.deepStrictEqual(payload.object_permission, {
+        mcp_servers: ['keep-me'],
+        vector_stores: ['vs_hr', 'vs_eng'],
       });
+      assert.strictEqual(payload.metadata.owning_group, 'group:default/admins');
+      assert.strictEqual(
+        payload.metadata.updated_by_backstage_user,
+        'user:default/alice',
+      );
     } finally {
       await new Promise<void>(r => h.server.close(() => r()));
     }
@@ -2236,13 +2240,16 @@ describe('router MCP server routes', () => {
       );
       assert.strictEqual(status, 200);
       assert.strictEqual(h.client.calls.updateTeam.length, 1);
-      assert.deepStrictEqual(h.client.calls.updateTeam[0], {
-        team_id: 't1',
-        object_permission: {
-          vector_stores: ['vs_keep'],
-          mcp_servers: ['mcp_gh', 'mcp_jira'],
-        },
+      const payload = h.client.calls.updateTeam[0];
+      assert.strictEqual(payload.team_id, 't1');
+      assert.deepStrictEqual(payload.object_permission, {
+        vector_stores: ['vs_keep'],
+        mcp_servers: ['mcp_gh', 'mcp_jira'],
       });
+      assert.strictEqual(
+        payload.metadata.updated_by_backstage_user,
+        'user:default/alice',
+      );
     } finally {
       await new Promise<void>(r => h.server.close(() => r()));
     }
