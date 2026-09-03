@@ -5,9 +5,10 @@ metadata:
   description: >
     Root catalog location for the backstage-plugin-litellm-govai plugin.
     Register this URL in your Backstage catalog to import the plugin components
-    and the bundled litellm-admins group.
+    and the bundled litellm-admins / litellm-team-admins groups.
 spec:
   targets:
     - ./packages/plugin-litellm/catalog-info.yaml
     - ./packages/plugin-litellm-backend/catalog-info.yaml
     - ./catalog/litellm-admins.yaml
+    - ./catalog/litellm-team-admins.yaml

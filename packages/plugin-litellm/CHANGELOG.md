@@ -10,6 +10,30 @@ commit/PR that bumps the version in `package.json`. Format follows the
 Earlier history: `git log -- packages/plugin-litellm` or the
 [GitHub tags](https://github.com/acarmisc/backstage-plugin-litellm-govai/tags).
 
+## Unreleased
+
+### Minor Changes
+
+- feat: **delegated team management** UI for a `litellm-team-admins` group.
+  - The **Teams** tab gains a "Create Team" button and per-team "Edit", each
+    gated by `config.teamManagement.enabled` **and** the corresponding
+    `usePermission` decision (`litellm.team.create` / `.manage`).
+  - New `ManageTeamDialog` — alias, model multi-select, budget (with the
+    server ceiling shown), plus edit-mode sections for **Members**
+    (`litellm.team.members.manage`), **Knowledge Bases**
+    (`litellm.team.knowledgebase.manage`), and **MCP Servers**
+    (`litellm.team.mcp.manage`), the latter two shown only when
+    `objectPermissionsEnabled`.
+  - `LiteLlmApi` gains `createTeam`, `updateTeam`, `getManagedTeams`,
+    `addTeamMember`, `removeTeamMember`, `getVectorStores`,
+    `setTeamKnowledgeBases`, `getMcpServers`, `setTeamMcpServers`.
+  - New exported permission refs (`litellmTeam*Permission`) mirroring the
+    backend by name; `ManageTeamDialog` is exported.
+  - Audit Log tab: added `Team member` and `Team access (KB / MCP)` table
+    filters.
+  - New peer/dep on `@backstage/plugin-permission-react` +
+    `@backstage/plugin-permission-common`.
+
 ## 0.15.5
 
 ### Patch Changes
