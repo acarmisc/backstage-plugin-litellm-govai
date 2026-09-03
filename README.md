@@ -167,6 +167,34 @@ litellm:
     # Require a team to be selected before a key can be generated.
     # Set to false to allow personal, team-less keys.
     teamRequired: true   # default
+
+  # Optional — delegated team management (see "Team Management" below).
+  # The whole feature is fail-closed: it stays dark unless `permission.enabled`
+  # is true AND `group` is set. Every list below is an allowlist that starts
+  # empty (nothing assignable) — you must populate it explicitly.
+  teamAdmin:
+    # REQUIRED to enable the feature. Backstage group whose members may manage
+    # teams. The plugin ships an empty group at catalog/litellm-team-admins.yaml.
+    group: group:default/litellm-team-admins
+
+    # Models / access-groups a team admin may put on a team.
+    allowedModels: [gpt-4o, claude-3-5-sonnet]   # default: []
+    allowedModelAccessGroups: []                 # default: []
+
+    # Hard USD ceiling a team admin may set as a team budget.
+    maxBudgetCeiling: 500                         # default: unset (no budget settable)
+    allowUnlimitedBudget: false                   # default: false
+
+    # Allow DELETE /teams/:id (otherwise the route 403s — block a team instead).
+    allowTeamDelete: false                        # default: false
+
+    # Knowledge-base (vector store) and MCP-server management. Highest-risk
+    # surface — only enable with a real permission policy installed.
+    objectPermissions:
+      enabled: false                             # default: false
+    allowedVectorStores: []                      # default: []  (vector store ids/names)
+    allowedMcpServers: []                        # default: []  (MCP server ids/names)
+    allowedMcpAccessGroups: []                   # default: []
 ```
 
 **Config key reference:**
@@ -197,8 +225,19 @@ litellm:
 | `litellm.provisioning.roles[].metadata` | object | no | — | Merged over default metadata |
 | `litellm.keyGeneration.allowUnlimitedBudget` | boolean | no | `false` | Show the "Unlimited budget" checkbox in the Generate New Key form |
 | `litellm.keyGeneration.teamRequired` | boolean | no | `true` | Require a team to be selected before a key can be generated |
+| `litellm.teamAdmin.group` | string | no† | — | Backstage group whose members may manage teams. Setting this + `permission.enabled` enables the feature |
+| `litellm.teamAdmin.allowedModels` | string[] | no | `[]` | Models a team admin may assign to a team |
+| `litellm.teamAdmin.allowedModelAccessGroups` | string[] | no | `[]` | Model access-group names a team admin may assign |
+| `litellm.teamAdmin.maxBudgetCeiling` | number | no | — | Hard USD ceiling for an admin-set team budget |
+| `litellm.teamAdmin.allowUnlimitedBudget` | boolean | no | `false` | Let an admin create a team with no budget cap |
+| `litellm.teamAdmin.allowTeamDelete` | boolean | no | `false` | Enable `DELETE /teams/:id` |
+| `litellm.teamAdmin.objectPermissions.enabled` | boolean | no | `false` | Enable knowledge-base / MCP management routes |
+| `litellm.teamAdmin.allowedVectorStores` | string[] | no | `[]` | Vector stores a team admin may attach as knowledge bases |
+| `litellm.teamAdmin.allowedMcpServers` | string[] | no | `[]` | MCP servers a team admin may attach |
+| `litellm.teamAdmin.allowedMcpAccessGroups` | string[] | no | `[]` | MCP access-group names a team admin may attach |
 
 *required when the `roles` array is present
+†required to enable team management
 
 ### Backend Registration
 
@@ -288,9 +327,115 @@ wiring these up only restricts behavior once you opt in.
 | `litellm.key.revoke` | `DELETE /keys/:keyId` | |
 | `litellm.key.manage` | `POST /keys/:keyId/update`, `/block`, `/unblock`, `/reset_spend` | |
 | `litellm.audit.read` | `GET /audit` | Additive to the existing `litellm.audit.group` check — both must pass |
+| `litellm.team.create` | `POST /teams` | Team management — see [Team Management](#team-management-litellm-team-admins) |
+| `litellm.team.manage` | `PATCH /teams/:id`, `GET /teams/managed` | |
+| `litellm.team.members.manage` | `POST` / `DELETE /teams/:id/members` | |
+| `litellm.team.knowledgebase.manage` | `GET /vector-stores`, `PUT /teams/:id/knowledge-bases` | Needs `litellm.teamAdmin.objectPermissions.enabled` |
+| `litellm.team.mcp.manage` | `GET /mcp-servers`, `PUT /teams/:id/mcp-servers` | Needs `litellm.teamAdmin.objectPermissions.enabled` |
+| `litellm.team.delete` | `DELETE /teams/:id` | Needs `litellm.teamAdmin.allowTeamDelete` |
 
 All key-mutation routes still enforce the existing ownership guard (a caller
-can only ever act on keys they own) regardless of permission policy.
+can only ever act on keys they own) regardless of permission policy. The
+`litellm.team.*` routes are **fail-closed**: they return `403` unless the
+permission framework is on (`permission.enabled: true`) *and*
+`litellm.teamAdmin.group` is set *and* the caller is both a member of that
+group and granted the permission — see [Team Management](#team-management-litellm-team-admins).
+
+## Team Management (`litellm-team-admins`)
+
+Lets a designated Backstage group create and run LiteLLM teams from the
+**Teams** tab — set the team's models, budget, members, and (optionally)
+knowledge bases and MCP servers — without holding the LiteLLM master key.
+
+### How authorization works
+
+Every `litellm.team.*` route runs **three** checks and all must pass:
+
+1. **Feature gate** — `permission.enabled: true` *and* `litellm.teamAdmin.group`
+   set. Missing either → the routes 403 and the UI controls are hidden.
+2. **Group membership** — the caller is a member of `litellm.teamAdmin.group`
+   (resolved from the catalog `memberOf` relations).
+3. **Permission decision** — the permission policy `ALLOW`s the specific
+   `litellm.team.*` permission. With no policy installed this defaults to
+   `ALLOW`, which is why check 2 exists as a hard backstop.
+
+On top of that, `PATCH` / `DELETE` / member / KB / MCP routes enforce an
+**object guard**: the team's `metadata.owning_group` (stamped at creation)
+must be a group the caller belongs to. Teams created outside this plugin have
+no `owning_group` and are read-only here.
+
+Server-side, an admin can only ever assign models in `allowedModels` /
+`allowedModelAccessGroups`, a budget `≤ maxBudgetCeiling`, and knowledge
+bases / MCP servers in the corresponding allowlists — anything else is a
+`400`, never silently dropped.
+
+### Granting the capability with `@backstage-community/plugin-rbac`
+
+1. Register the shipped group and point config at it:
+
+   ```yaml
+   permission:
+     enabled: true
+   litellm:
+     teamAdmin:
+       group: group:default/litellm-team-admins
+       allowedModels: [gpt-4o]
+       maxBudgetCeiling: 500
+   ```
+
+2. Grant the permissions to a role and bind the group to it. As a
+   `permission.rbac.policies-csv-file`:
+
+   ```csv
+   p, role:default/litellm-team-admin, litellm.team.create, create, allow
+   p, role:default/litellm-team-admin, litellm.team.manage, update, allow
+   p, role:default/litellm-team-admin, litellm.team.members.manage, update, allow
+   p, role:default/litellm-team-admin, litellm.team.knowledgebase.manage, update, allow
+   p, role:default/litellm-team-admin, litellm.team.mcp.manage, update, allow
+   p, role:default/litellm-team-admin, litellm.team.delete, delete, allow
+   g, group:default/litellm-team-admins, role:default/litellm-team-admin
+   ```
+
+   Drop the `knowledgebase` / `mcp` / `delete` lines you don't want to delegate.
+
+Without the RBAC plugin, the feature still works as a pure group gate (checks
+1 + 2) — the same model the audit tab uses — but you cannot then scope
+individual `litellm.team.*` permissions per role.
+
+### Mapping a Keycloak group to the admin group
+
+Team-admin membership is read from the **catalog**, so ingest the Keycloak
+group with
+[`@backstage/plugin-catalog-backend-module-keycloak`](https://backstage.io/docs/integrations/keycloak/) and
+normalize its name with a `groupTransformer`:
+
+```ts
+keycloakBackendModule.setGroupTransformer(async (entity, group) => {
+  if (group.name === 'litellm-team-admins') {
+    entity.metadata.name = 'litellm-team-admins';
+    entity.metadata.namespace = 'default';
+  }
+  return entity;
+});
+```
+
+Then `litellm.teamAdmin.group: group:default/litellm-team-admins`. Membership
+is managed entirely in Keycloak; the catalog sync propagates it. (An OIDC
+`groups` token claim alone is **not** enough — the checks read catalog
+relations, not token claims.)
+
+### Security notes
+
+- **Knowledge bases** expose their documents to every key in the team;
+  **MCP servers** grant those keys tool execution through the model. Both are
+  behind `litellm.teamAdmin.objectPermissions.enabled` (default off) and their
+  own allowlists, and every attach/detach emits a
+  `team.knowledgebase.set` / `team.mcp.set` audit event.
+- `DELETE /teams/:id` is off by default (`allowTeamDelete`), refuses to remove
+  a team referenced by `litellm.provisioning` config without `?force=true`,
+  and is best avoided — block a team instead.
+- Team / member / access changes appear in the **Audit Log** tab under the
+  `Team`, `Team member`, and `Team access (KB / MCP)` table filters.
 
 ## Development
 
@@ -354,6 +499,15 @@ instead of maintaining this table by hand.
 | `/keys/:keyId/reset_spend` | POST | Zero out a key's spend counter (caller must own it) |
 | `/models` | GET | List available LLM models |
 | `/teams` | GET | List teams the current user belongs to |
+| `/teams/managed` | GET | List teams whose `owning_group` the caller administers (team-admin only) |
+| `/teams` | POST | Create a team (`litellm.team.create`) |
+| `/teams/:teamId` | PATCH | Update a team's alias / models / budget (`litellm.team.manage`) |
+| `/teams/:teamId` | DELETE | Delete a team (`litellm.team.delete`, needs `allowTeamDelete`) |
+| `/teams/:teamId/members` | POST / DELETE | Add / remove a team member (`litellm.team.members.manage`) |
+| `/vector-stores` | GET | Allowlisted knowledge bases (`litellm.team.knowledgebase.manage`) |
+| `/teams/:teamId/knowledge-bases` | PUT | Set a team's knowledge bases (`litellm.team.knowledgebase.manage`) |
+| `/mcp-servers` | GET | Allowlisted MCP servers (`litellm.team.mcp.manage`) |
+| `/teams/:teamId/mcp-servers` | PUT | Set a team's MCP servers (`litellm.team.mcp.manage`) |
 | `/teams/:teamId/usage` | GET | Usage metrics for a team (`start_date`, `end_date` required) |
 | `/usage` | GET | Get usage metrics and analytics for the current user |
 | `/audit` | GET | Audit logs (gated by `litellm.audit.group` membership) |
@@ -432,6 +586,7 @@ startup; the bridge routes are not mounted otherwise.
 - **Key Management**: Generate, view, and revoke virtual API keys
 - **Usage Analytics**: Track API usage with configurable date ranges (today, 7 days, 30 days)
 - **Team Context**: Optional team-based key generation and usage tracking
+- **Delegated Team Management**: A designated Backstage group can create teams and set their models, budget, members, knowledge bases, and MCP servers from the UI — fail-closed, allowlist-bounded, permission-gated. See [Team Management](#team-management-litellm-team-admins)
 - **User Info**: Display user quotas and current usage limits
 - **Model Selection**: Browse available LLM models configured in LiteLLM
 - **At-a-glance Dashboard**: The profile header shows the current user, team membership, a live counter of total / expired / expiring-soon keys, and a one-click "Generate New Key" shortcut

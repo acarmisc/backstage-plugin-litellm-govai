@@ -10,6 +10,32 @@ commit/PR that bumps the version in `package.json`. Format follows the
 Earlier history: `git log -- packages/plugin-litellm-backend` or the
 [GitHub tags](https://github.com/acarmisc/backstage-plugin-litellm-govai/tags).
 
+## Unreleased
+
+### Minor Changes
+
+- feat: **delegated team management** for a `litellm-team-admins` group.
+  - New permissions: `litellm.team.create`, `litellm.team.manage`,
+    `litellm.team.members.manage`, `litellm.team.knowledgebase.manage`,
+    `litellm.team.mcp.manage`, `litellm.team.delete`.
+  - New config block `litellm.teamAdmin.*` (group, model/budget/vector-store/
+    MCP allowlists, `objectPermissions.enabled`, `allowTeamDelete`) — all
+    fail-closed; the feature stays disabled unless `permission.enabled` and
+    `litellm.teamAdmin.group` are both set.
+  - New routes: `POST /teams`, `PATCH /teams/:id`, `DELETE /teams/:id`,
+    `GET /teams/managed`, `POST` / `DELETE /teams/:id/members`,
+    `GET /vector-stores`, `PUT /teams/:id/knowledge-bases`,
+    `GET /mcp-servers`, `PUT /teams/:id/mcp-servers`. Each enforces group
+    membership + the permission decision + an owning-group object guard, and
+    validates models / budgets / stores / servers against the allowlists.
+  - `GET /config` now returns a `teamManagement` block.
+  - `LiteLLMClient` gains `createTeam` / `updateTeam` / `deleteTeam` /
+    `blockTeam` / `unblockTeam` / `listTeams` / `teamMemberAdd` /
+    `teamMemberDelete` / `listVectorStores` / `listMcpServers`.
+  - Structured audit events: `team.create`, `team.update`, `team.delete`,
+    `team.member.add/remove`, `team.knowledgebase.set`, `team.mcp.set`.
+  - `RouterOptions` gains a `catalogClient` test override.
+
 ## 0.9.0
 
 ### Minor Changes

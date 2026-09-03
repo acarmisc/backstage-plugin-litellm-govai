@@ -1,0 +1,20 @@
+apiVersion: backstage.io/v1alpha1
+kind: Group
+metadata:
+  name: litellm-team-admins
+  namespace: default
+  description: >
+    LiteLLM team administrators. Members of this group can create and manage
+    LiteLLM teams (models, budget, members, and — when enabled — knowledge
+    bases and MCP servers) from the Backstage LiteLLM plugin, without holding
+    the LiteLLM master key. Point litellm.teamAdmin.group at this group and set
+    permission.enabled: true to activate the feature. Starts empty on purpose —
+    add your team admins here (or map a Keycloak group onto this entity ref).
+  annotations:
+    backstage.io/managed-by-location: "url:https://github.com/your-org/backstage-plugin-litellm-govai/blob/main/catalog/litellm-team-admins.yaml"
+spec:
+  type: team
+  profile:
+    displayName: LiteLLM Team Admins
+  children: []
+  members: []
