@@ -4,6 +4,7 @@ import {
   litellmTeamCreatePermission,
   litellmTeamManagePermission,
   litellmTeamMembersManagePermission,
+  litellmTeamKnowledgebaseManagePermission,
 } from './permissions';
 
 describe('litellm permissions', () => {
@@ -24,6 +25,17 @@ describe('litellm permissions', () => {
     );
     assert.strictEqual(
       litellmTeamMembersManagePermission.attributes.action,
+      'update',
+    );
+  });
+
+  test('litellmTeamKnowledgebaseManagePermission has correct name and action', () => {
+    assert.strictEqual(
+      litellmTeamKnowledgebaseManagePermission.name,
+      'litellm.team.knowledgebase.manage',
+    );
+    assert.strictEqual(
+      litellmTeamKnowledgebaseManagePermission.attributes.action,
       'update',
     );
   });

@@ -132,6 +132,7 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
         enabled: teamMgmtEnabled,
         maxBudgetCeiling: teamAdminCfg.maxBudgetCeiling ?? null,
         allowUnlimitedBudget: teamAdminCfg.allowUnlimitedBudget,
+        objectPermissionsEnabled: objectPermsEnabled,
       },
     });
   });

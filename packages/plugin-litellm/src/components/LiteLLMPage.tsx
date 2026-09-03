@@ -24,6 +24,7 @@ import {
   litellmTeamCreatePermission,
   litellmTeamManagePermission,
   litellmTeamMembersManagePermission,
+  litellmTeamKnowledgebaseManagePermission,
 } from '../permissions';
 import { DateRange, GenerateKeyRequest, GenerateKeyResponse, UpdateKeyRequest, UsageMetrics, CreateTeamRequest, UpdateTeamRequest, TeamInfo } from '../types';
 
@@ -101,7 +102,15 @@ export const LiteLLMPage: React.FC = () => {
   const { allowed: canCreateTeam } = usePermission({ permission: litellmTeamCreatePermission });
   const { allowed: canManageTeam } = usePermission({ permission: litellmTeamManagePermission });
   const { allowed: canManageMembers } = usePermission({ permission: litellmTeamMembersManagePermission });
+  const { allowed: canManageKnowledgeBases } = usePermission({ permission: litellmTeamKnowledgebaseManagePermission });
   const teamMgmtEnabled = liteLlmConfig?.teamManagement?.enabled ?? false;
+  const objectPermsEnabled = liteLlmConfig?.teamManagement?.objectPermissionsEnabled ?? false;
+
+  const { value: vectorStores } = useAsync(
+    async () =>
+      objectPermsEnabled ? api.getVectorStores().catch(() => []) : [],
+    [api, objectPermsEnabled],
+  );
 
   // Filter to teams the current user belongs to
   const teams = useMemo(() => {
@@ -449,6 +458,20 @@ export const LiteLLMPage: React.FC = () => {
             userEntityRef,
           );
           setManageTeam(s => (s && s.team ? { ...s, team: updated } : s));
+          refreshTeams();
+        }}
+        canManageKnowledgeBases={
+          teamMgmtEnabled && objectPermsEnabled && canManageKnowledgeBases
+        }
+        vectorStores={vectorStores ?? []}
+        onSaveKnowledgeBases={async vectorStoreIds => {
+          if (!manageTeam?.team) return;
+          const updated = await api.setTeamKnowledgeBases(
+            manageTeam.team.team_id,
+            vectorStoreIds,
+          );
+          setManageTeam(s => (s && s.team ? { ...s, team: updated } : s));
+          setSnackbar({ message: 'Knowledge bases updated', severity: 'success' });
           refreshTeams();
         }}
       />

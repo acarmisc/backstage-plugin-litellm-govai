@@ -11,6 +11,7 @@ import {
   AuditLogsParams,
   PaginatedAuditLogs,
   LiteLlmConfig,
+  VectorStoreInfo,
   CreateTeamRequest,
   CreateTeamResponse,
   UpdateTeamRequest,
@@ -44,6 +45,8 @@ export interface LiteLlmApiInterface {
     body: { userEntityRef: string; maxBudgetInTeam?: number },
   ): Promise<TeamInfo>;
   removeTeamMember(teamId: string, userEntityRef: string): Promise<TeamInfo>;
+  getVectorStores(): Promise<VectorStoreInfo[]>;
+  setTeamKnowledgeBases(teamId: string, vectorStores: string[]): Promise<TeamInfo>;
   getUsage(startDate: string, endDate: string): Promise<UsageMetrics>;
   getTeamUsage(teamId: string, startDate: string, endDate: string): Promise<UsageMetrics>;
   getAuditLogs(params: AuditLogsParams): Promise<PaginatedAuditLogs>;
@@ -120,6 +123,16 @@ export class LiteLlmApi implements LiteLlmApiInterface {
   private async patch<T>(path: string, body: unknown): Promise<T> {
     const response = await this.fetchApi.fetch(`${this.basePath}${path}`, {
       method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    await this.throwIfNotOk(response);
+    return response.json();
+  }
+
+  private async put<T>(path: string, body: unknown): Promise<T> {
+    const response = await this.fetchApi.fetch(`${this.basePath}${path}`, {
+      method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
@@ -220,6 +233,22 @@ export class LiteLlmApi implements LiteLlmApiInterface {
       `/teams/${encodeURIComponent(teamId)}/members?userEntityRef=${encodeURIComponent(
         userEntityRef,
       )}`,
+    );
+  }
+
+  // Vector stores (knowledge bases) the caller may attach — already filtered
+  // server-side to the operator's allowlist.
+  async getVectorStores(): Promise<VectorStoreInfo[]> {
+    return this.get<VectorStoreInfo[]>('/vector-stores');
+  }
+
+  async setTeamKnowledgeBases(
+    teamId: string,
+    vectorStores: string[],
+  ): Promise<TeamInfo> {
+    return this.put<TeamInfo>(
+      `/teams/${encodeURIComponent(teamId)}/knowledge-bases`,
+      { vector_stores: vectorStores },
     );
   }
 
