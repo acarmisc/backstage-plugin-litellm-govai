@@ -12,6 +12,7 @@ import TableRow from '@mui/material/TableRow';
 import TableContainer from '@mui/material/TableContainer';
 import Collapse from '@mui/material/Collapse';
 import IconButton from '@mui/material/IconButton';
+import Button from '@mui/material/Button';
 import CircularProgress from '@mui/material/CircularProgress';
 import { alpha } from '@mui/material/styles';
 import { ExpandMore, Group } from '@mui/icons-material';
@@ -53,9 +54,11 @@ interface TeamCardProps {
   team: TeamInfo;
   usage: UsageMetrics | null;
   usageLoading: boolean;
+  canManage?: boolean;
+  onEditTeam?: (team: TeamInfo) => void;
 }
 
-const TeamCard: React.FC<TeamCardProps> = ({ team, usage, usageLoading }) => {
+const TeamCard: React.FC<TeamCardProps> = ({ team, usage, usageLoading, canManage, onEditTeam }) => {
   const [expanded, setExpanded] = useState(false);
   const chart = useChartTheme();
 
@@ -153,6 +156,16 @@ const TeamCard: React.FC<TeamCardProps> = ({ team, usage, usageLoading }) => {
         </Box>
         {isOver && <StatusPill label="Over budget" tone="danger" />}
         {isNear && <StatusPill label="Near limit" tone="warning" />}
+        {canManage && onEditTeam && (
+          <Button
+            size="small"
+            variant="text"
+            onClick={() => onEditTeam(team)}
+            sx={{ textTransform: 'none' }}
+          >
+            Edit
+          </Button>
+        )}
         <IconButton
           size="small"
           onClick={() => setExpanded(e => !e)}
@@ -284,6 +297,8 @@ interface TeamUsageProps {
   loading: boolean;
   getTeamUsage: (teamId: string) => UsageMetrics | null;
   getTeamUsageLoading: (teamId: string) => boolean;
+  canManage?: boolean;
+  onEditTeam?: (team: TeamInfo) => void;
 }
 
 export const TeamUsage: React.FC<TeamUsageProps> = ({
@@ -291,6 +306,8 @@ export const TeamUsage: React.FC<TeamUsageProps> = ({
   loading,
   getTeamUsage,
   getTeamUsageLoading,
+  canManage,
+  onEditTeam,
 }) => {
   if (loading) {
     return (
@@ -321,6 +338,8 @@ export const TeamUsage: React.FC<TeamUsageProps> = ({
             team={team}
             usage={getTeamUsage(team.team_id)}
             usageLoading={getTeamUsageLoading(team.team_id)}
+            canManage={canManage}
+            onEditTeam={onEditTeam}
           />
         ))}
       </Box>
