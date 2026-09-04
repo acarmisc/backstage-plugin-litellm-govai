@@ -10,6 +10,20 @@ commit/PR that bumps the version in `package.json`. Format follows the
 Earlier history: `git log -- packages/plugin-litellm-backend` or the
 [GitHub tags](https://github.com/acarmisc/backstage-plugin-litellm-govai/tags).
 
+## 0.11.1
+
+### Patch Changes
+
+- fix: retry `client.getTeamInfo()` (100ms / 300ms / 900ms backoff, ~1.3s
+  total) on every route that fetches team info — `GET /teams`, the
+  team-subresource authorization check, and the read-after-write fetch on
+  member add/remove. Only 5xx and network/timeout failures are retried; a
+  deterministic 4xx (e.g. team not found) fails immediately as before. This
+  smooths over a proxy running multiple replicas where a request can land
+  on one that hasn't caught up with a very recent write, which previously
+  surfaced as a team silently missing from `GET /teams` or a spurious
+  404/500 right after a membership change.
+
 ## 0.11.0
 
 ### Minor Changes
