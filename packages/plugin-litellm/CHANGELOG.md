@@ -10,6 +10,23 @@ commit/PR that bumps the version in `package.json`. Format follows the
 Earlier history: `git log -- packages/plugin-litellm` or the
 [GitHub tags](https://github.com/acarmisc/backstage-plugin-litellm-govai/tags).
 
+## 0.19.0
+
+### Minor Changes
+
+- feat(ModelsTable): the model-name chip in the Models tab now shows the
+  full, untruncated model name in a tooltip on hover and copies the model
+  ID to the clipboard on click (with a pointer cursor and keyboard
+  support), matching the adjacent copy-icon behaviour.
+- feat(ModelsTable): the "Filter Models" input is now disabled until a team
+  is selected, and a dedicated "No models match your search" empty state is
+  shown when the filter hides every model of an otherwise non-empty team.
+  The results subtitle switches to an `X of Y models` form while a filter
+  is active.
+- fix(dev): give the two mock API extensions in `dev/index.tsx` explicit
+  names, resolving a `Plugin 'litellm' provided duplicate extensions:
+  api:litellm` crash that blocked `backstage-cli package start` locally.
+
 ## 0.18.1
 
 ### Patch Changes
