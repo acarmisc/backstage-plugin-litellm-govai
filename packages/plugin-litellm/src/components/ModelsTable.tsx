@@ -18,6 +18,9 @@ import Alert from '@mui/material/Alert';
 import { ModelInfo, TeamInfo } from '../types';
 import { SectionCard, EmptyState, TagChip, dataTableSx, quietIconButtonSx } from './ui';
 import { alpha, useTheme } from '@mui/material/styles';
+import TextField from '@mui/material/TextField';
+import InputAdornment from '@mui/material/InputAdornment';
+import { Search } from '@mui/icons-material';
 
 interface ModelsTableProps {
   allModels: ModelInfo[];
@@ -51,6 +54,7 @@ function fmtTokens(n?: number): string {
 export const ModelsTable: React.FC<ModelsTableProps> = ({ allModels, teams, loading }) => {
   const theme = useTheme();
   const [selectedTeamId, setSelectedTeamId] = useState<string>('');
+  const [filterText, setFilterText] = useState<string>('');
   const [copiedSnackbar, setCopiedSnackbar] = useState(false);
 
   const selectedTeam = useMemo(
@@ -60,8 +64,16 @@ export const ModelsTable: React.FC<ModelsTableProps> = ({ allModels, teams, load
 
   const filteredModels = useMemo(() => {
     if (!selectedTeam) return [];
-    return allModels.filter(model => isModelAllowedByTeam(model, selectedTeam.models));
-  }, [allModels, selectedTeam]);
+    let result = allModels.filter(model => isModelAllowedByTeam(model, selectedTeam.models));
+    if (filterText.trim()) {
+      const q = filterText.toLowerCase();
+      result = result.filter(model =>
+        model.model_name.toLowerCase().includes(q) ||
+        (model.access_groups || []).some(group => group.toLowerCase().includes(q)),
+      );
+    }
+    return result;
+  }, [allModels, selectedTeam, filterText]);
 
   const handleCopyModelId = useCallback((modelId: string) => {
     navigator.clipboard.writeText(modelId).then(() => setCopiedSnackbar(true));
@@ -98,6 +110,20 @@ export const ModelsTable: React.FC<ModelsTableProps> = ({ allModels, teams, load
             ))}
           </Select>
         </FormControl>
+        <TextField
+          label="Filter Models"
+          size="small"
+          value={filterText}
+          onChange={e => setFilterText(e.target.value)}
+          sx={{ minWidth: 240, mb: 2 }}
+          InputProps={{
+            startAdornment: (
+              <InputAdornment position="start">
+                <Search fontSize="small" />
+              </InputAdornment>
+            ),
+          }}
+        />
       </Box>
 
       {loading && (
