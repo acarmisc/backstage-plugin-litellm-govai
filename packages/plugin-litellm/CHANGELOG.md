@@ -10,6 +10,12 @@ commit/PR that bumps the version in `package.json`. Format follows the
 Earlier history: `git log -- packages/plugin-litellm` or the
 [GitHub tags](https://github.com/acarmisc/backstage-plugin-litellm-govai/tags).
 
+## 0.18.1
+
+### Patch Changes
+
+- feat(ModelsTable): add text filter input to the Models tab, positioned next to the Team dropdown. Filter matches model names and access groups (case-insensitive). Follows the existing `KeysTable` filter pattern.
+
 ## 0.18.0
 
 ### Minor Changes
