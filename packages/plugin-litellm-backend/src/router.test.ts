@@ -909,6 +909,60 @@ describe('router /teams', () => {
       await new Promise<void>(r => h.server.close(() => r()));
     }
   });
+
+  test('retries a team fetch that fails with a transient 5xx, and includes it once it succeeds', async () => {
+    let attempts = 0;
+    const client = mockClient({
+      userInfo: { user_id: 'alice@example.com', teams: ['t1'] },
+      getTeamInfo: async id => {
+        attempts += 1;
+        if (attempts < 3) {
+          // Simulates hitting a LiteLLM replica that hasn't caught up yet.
+          throw new LiteLLMUpstreamError(503, 'Service Unavailable', '{}');
+        }
+        return { team_id: id, spend: 0 };
+      },
+    });
+    const h = await startHarness({
+      config: { 'litellm.userIdDomain': 'example.com' },
+      client,
+    });
+    try {
+      const { status, body } = await req(h.baseUrl, 'GET', '/teams', {
+        authRef: 'user:default/alice',
+      });
+      assert.strictEqual(status, 200);
+      assert.deepStrictEqual(body, [{ team_id: 't1', spend: 0 }]);
+      assert.strictEqual(attempts, 3);
+    } finally {
+      await new Promise<void>(r => h.server.close(() => r()));
+    }
+  });
+
+  test('does not retry a deterministic 4xx failure, and still drops the team from the response', async () => {
+    let attempts = 0;
+    const client = mockClient({
+      userInfo: { user_id: 'alice@example.com', teams: ['t1'] },
+      getTeamInfo: async () => {
+        attempts += 1;
+        throw new LiteLLMUpstreamError(404, 'Not Found', '{}');
+      },
+    });
+    const h = await startHarness({
+      config: { 'litellm.userIdDomain': 'example.com' },
+      client,
+    });
+    try {
+      const { status, body } = await req(h.baseUrl, 'GET', '/teams', {
+        authRef: 'user:default/alice',
+      });
+      assert.strictEqual(status, 200);
+      assert.deepStrictEqual(body, []);
+      assert.strictEqual(attempts, 1);
+    } finally {
+      await new Promise<void>(r => h.server.close(() => r()));
+    }
+  });
 });
 
 describe('router POST /teams', () => {
