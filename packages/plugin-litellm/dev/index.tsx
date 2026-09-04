@@ -10,6 +10,7 @@ import { MockLiteLlmApi, MockCatalogApi } from './mockApi';
 // to a live backend) for MockLiteLlmApi, so the harness renders with
 // realistic data without a running LiteLLM proxy or Backstage backend.
 const mockLiteLlmApi = ApiBlueprint.make({
+  name: 'litellm',
   params: defineParams =>
     defineParams({
       api: liteLlmApiRef,
@@ -21,6 +22,7 @@ const mockLiteLlmApi = ApiBlueprint.make({
 // The Members section's picker looks up catalog User entities — stand in a
 // small fixed roster so it has something to search without a real catalog.
 const mockCatalogApi = ApiBlueprint.make({
+  name: 'catalog',
   params: defineParams =>
     defineParams({
       api: catalogApiRef,
