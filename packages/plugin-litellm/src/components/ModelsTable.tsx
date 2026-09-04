@@ -11,6 +11,9 @@ import MenuItem from '@mui/material/MenuItem';
 import Select from '@mui/material/Select';
 import FormControl from '@mui/material/FormControl';
 import InputLabel from '@mui/material/InputLabel';
+import TextField from '@mui/material/TextField';
+import InputAdornment from '@mui/material/InputAdornment';
+import { Search } from '@mui/icons-material';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import Tooltip from '@mui/material/Tooltip';
 import Snackbar from '@mui/material/Snackbar';
@@ -18,9 +21,6 @@ import Alert from '@mui/material/Alert';
 import { ModelInfo, TeamInfo } from '../types';
 import { SectionCard, EmptyState, TagChip, dataTableSx, quietIconButtonSx } from './ui';
 import { alpha, useTheme } from '@mui/material/styles';
-import TextField from '@mui/material/TextField';
-import InputAdornment from '@mui/material/InputAdornment';
-import { Search } from '@mui/icons-material';
 
 interface ModelsTableProps {
   allModels: ModelInfo[];
@@ -62,18 +62,19 @@ export const ModelsTable: React.FC<ModelsTableProps> = ({ allModels, teams, load
     [teams, selectedTeamId],
   );
 
-  const filteredModels = useMemo(() => {
+  const teamModels = useMemo(() => {
     if (!selectedTeam) return [];
-    let result = allModels.filter(model => isModelAllowedByTeam(model, selectedTeam.models));
-    if (filterText.trim()) {
-      const q = filterText.toLowerCase();
-      result = result.filter(model =>
-        model.model_name.toLowerCase().includes(q) ||
-        (model.access_groups || []).some(group => group.toLowerCase().includes(q)),
-      );
-    }
-    return result;
-  }, [allModels, selectedTeam, filterText]);
+    return allModels.filter(model => isModelAllowedByTeam(model, selectedTeam.models));
+  }, [allModels, selectedTeam]);
+
+  const filteredModels = useMemo(() => {
+    const q = filterText.trim().toLowerCase();
+    if (!q) return teamModels;
+    return teamModels.filter(model =>
+      model.model_name.toLowerCase().includes(q) ||
+      (model.access_groups || []).some(group => group.toLowerCase().includes(q)),
+    );
+  }, [teamModels, filterText]);
 
   const handleCopyModelId = useCallback((modelId: string) => {
     navigator.clipboard.writeText(modelId).then(() => setCopiedSnackbar(true));
@@ -92,9 +93,13 @@ export const ModelsTable: React.FC<ModelsTableProps> = ({ allModels, teams, load
   return (
     <SectionCard
       title="Available Models"
-      subtitle={selectedTeam ? `${filteredModels.length} model${filteredModels.length !== 1 ? 's' : ''} in ${selectedTeam.team_alias ?? selectedTeam.team_id}` : 'Select a team to view its models'}
+      subtitle={
+        selectedTeam
+          ? `${filteredModels.length}${filterText.trim() ? ` of ${teamModels.length}` : ''} model${filteredModels.length === 1 ? '' : 's'}`
+          : 'Select a team to view its models'
+      }
     >
-      <Box sx={{ px: 2.5, pb: 2.5, pt: 1 }}>
+      <Box sx={{ px: 2.5, pb: 2.5, pt: 1, display: 'flex', gap: 2, flexWrap: 'wrap' }}>
         <FormControl size="small" sx={{ minWidth: 240, mb: 2 }}>
           <InputLabel id="team-select-label">Team</InputLabel>
           <Select
@@ -115,6 +120,7 @@ export const ModelsTable: React.FC<ModelsTableProps> = ({ allModels, teams, load
           size="small"
           value={filterText}
           onChange={e => setFilterText(e.target.value)}
+          disabled={!selectedTeamId}
           sx={{ minWidth: 240, mb: 2 }}
           InputProps={{
             startAdornment: (
@@ -137,10 +143,17 @@ export const ModelsTable: React.FC<ModelsTableProps> = ({ allModels, teams, load
         />
       )}
 
-      {!loading && selectedTeamId && filteredModels.length === 0 && (
+      {!loading && selectedTeamId && teamModels.length === 0 && (
         <EmptyState
           message="No models available for this team"
           hint={allModels.length === 0 ? 'No models are configured in the system' : 'None of the team\'s assigned models were found in the catalog'}
+        />
+      )}
+
+      {!loading && selectedTeamId && teamModels.length > 0 && filteredModels.length === 0 && (
+        <EmptyState
+          message="No models match your search"
+          hint="Try a different search term"
         />
       )}
 
@@ -163,7 +176,18 @@ export const ModelsTable: React.FC<ModelsTableProps> = ({ allModels, teams, load
                 <TableRow key={m.model_name} hover>
                   <TableCell>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                      <TagChip label={m.model_name} title={m.model_name} />
+                      <Tooltip title={m.model_name} placement="top">
+                        <span
+                          role="button"
+                          tabIndex={0}
+                          aria-label="Copy model ID"
+                          onClick={() => handleCopyModelId(m.model_name)}
+                          onKeyDown={e => e.key === 'Enter' && handleCopyModelId(m.model_name)}
+                          style={{ cursor: 'pointer', display: 'inline-flex' }}
+                        >
+                          <TagChip label={m.model_name} title="Copy model ID" />
+                        </span>
+                      </Tooltip>
                       <Tooltip title="Copy model ID">
                         <Box
                           component="span"
