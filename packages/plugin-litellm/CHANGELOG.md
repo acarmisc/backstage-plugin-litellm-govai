@@ -10,6 +10,20 @@ commit/PR that bumps the version in `package.json`. Format follows the
 Earlier history: `git log -- packages/plugin-litellm` or the
 [GitHub tags](https://github.com/acarmisc/backstage-plugin-litellm-govai/tags).
 
+## 0.20.0
+
+### Minor Changes
+
+- feat: new `LiteLLMBudgetWidget`, a homepage-friendly card that explains
+  the LiteLLM budget hierarchy (key → personal → team → global) as a
+  numbered flow and, for every limit the signed-in user actually has, shows
+  a live spend-vs-cap meter with the reset window. Key budgets are ranked
+  by how close they are to the cap and capped at 3 (the rest collapse into
+  a "+N further from the cap" note). Turquoise-blue accent, theme-aware.
+- feat(api): `UserInfo` and `VirtualKey` now carry `budget_duration`, the
+  spend-reset window exposed by the backend, so the widget can tell a
+  "resets every 30 days" budget apart from a "never resets" one.
+
 ## 0.19.0
 
 ### Minor Changes
