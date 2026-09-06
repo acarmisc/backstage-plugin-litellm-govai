@@ -50,9 +50,10 @@ all_fixes.patch
 e2e-test-config.yaml
 e2e-tests.sh
 fix_*.md
+session-*.md
 
-# Stray scratch
-null
+# Editor backups
+*.bak
 
 # Stray screenshot staging dir — keep out of feature branches
-"new images/"
+/new images/
