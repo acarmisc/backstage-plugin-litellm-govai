@@ -10,6 +10,16 @@ commit/PR that bumps the version in `package.json`. Format follows the
 Earlier history: `git log -- packages/plugin-litellm-backend` or the
 [GitHub tags](https://github.com/acarmisc/backstage-plugin-litellm-govai/tags).
 
+## 0.12.0
+
+### Minor Changes
+
+- feat: `GET /user/info` and the per-key list now surface `budget_duration`
+  (the spend-reset window, e.g. `"30d"`) on the user record and on each
+  virtual key, passing through the LiteLLM field. The frontend budget
+  widget uses it to show whether a limit resets (and how often) or never
+  resets.
+
 ## 0.11.1
 
 ### Patch Changes
