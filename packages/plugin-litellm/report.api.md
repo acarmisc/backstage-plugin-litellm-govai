@@ -8,10 +8,12 @@ import { AnyApiFactory } from '@backstage/frontend-plugin-api';
 import { AnyRouteRefParams } from '@backstage/frontend-plugin-api';
 import { ApiFactory } from '@backstage/frontend-plugin-api';
 import { ApiRef } from '@backstage/core-plugin-api';
+import { BasicPermission } from '@backstage/plugin-permission-common';
 import { ConfigurableExtensionDataRef } from '@backstage/frontend-plugin-api';
 import { ExtensionBlueprintParams } from '@backstage/frontend-plugin-api';
 import { ExtensionDataRef } from '@backstage/frontend-plugin-api';
 import { ExtensionInput } from '@backstage/frontend-plugin-api';
+import { FC } from 'react';
 import { FetchApi } from '@backstage/core-plugin-api';
 import { IconElement } from '@backstage/frontend-plugin-api';
 import { OverridableExtensionDefinition } from '@backstage/frontend-plugin-api';
@@ -57,6 +59,30 @@ export interface AuditLogsParams {
     start_date?: string;
     // (undocumented)
     table_name?: string;
+}
+
+// @public (undocumented)
+export interface CreateTeamRequest {
+    // (undocumented)
+    budget_duration?: string;
+    // (undocumented)
+    max_budget?: number | null;
+    // (undocumented)
+    models: string[];
+    // (undocumented)
+    rpm_limit?: number;
+    // (undocumented)
+    team_alias: string;
+    // (undocumented)
+    tpm_limit?: number;
+}
+
+// @public (undocumented)
+export interface CreateTeamResponse {
+    // (undocumented)
+    team_alias?: string;
+    // (undocumented)
+    team_id: string;
 }
 
 // Warning: (ae-forgotten-export) The symbol "DashboardHeaderProps" needs to be exported by the entry point index.d.ts
@@ -117,7 +143,14 @@ export const KeysTable: React_2.FC<KeysTableProps>;
 export class LiteLlmApi implements LiteLlmApiInterface {
     constructor(fetchApi: FetchApi, basePath?: string);
     // (undocumented)
+    addTeamMember(teamId: string, body: {
+        userEntityRef: string;
+        maxBudgetInTeam?: number;
+    }): Promise<TeamInfo>;
+    // (undocumented)
     blockKey(keyId: string): Promise<void>;
+    // (undocumented)
+    createTeam(request: CreateTeamRequest): Promise<CreateTeamResponse>;
     // (undocumented)
     deleteKey(keyId: string): Promise<{
         success: boolean;
@@ -129,6 +162,10 @@ export class LiteLlmApi implements LiteLlmApiInterface {
     // (undocumented)
     getConfig(): Promise<LiteLlmConfig>;
     // (undocumented)
+    getManagedTeams(): Promise<TeamInfo[]>;
+    // (undocumented)
+    getMcpServers(): Promise<McpServerInfo[]>;
+    // (undocumented)
     getTeams(): Promise<TeamInfo[]>;
     // (undocumented)
     getTeamUsage(teamId: string, startDate: string, endDate: string): Promise<UsageMetrics>;
@@ -136,6 +173,8 @@ export class LiteLlmApi implements LiteLlmApiInterface {
     getUsage(startDate: string, endDate: string): Promise<UsageMetrics>;
     // (undocumented)
     getUserInfo(): Promise<UserInfo>;
+    // (undocumented)
+    getVectorStores(): Promise<VectorStoreInfo[]>;
     // (undocumented)
     listKeys(): Promise<VirtualKey[]>;
     // (undocumented)
@@ -145,17 +184,32 @@ export class LiteLlmApi implements LiteLlmApiInterface {
         pruned: number;
     }>;
     // (undocumented)
+    removeTeamMember(teamId: string, userEntityRef: string): Promise<TeamInfo>;
+    // (undocumented)
     resetKeySpend(keyId: string): Promise<void>;
+    // (undocumented)
+    setTeamKnowledgeBases(teamId: string, vectorStores: string[]): Promise<TeamInfo>;
+    // (undocumented)
+    setTeamMcpServers(teamId: string, mcpServers: string[]): Promise<TeamInfo>;
     // (undocumented)
     unblockKey(keyId: string): Promise<void>;
     // (undocumented)
     updateKey(keyId: string, request: UpdateKeyRequest): Promise<VirtualKey>;
+    // (undocumented)
+    updateTeam(teamId: string, request: UpdateTeamRequest): Promise<TeamInfo>;
 }
 
 // @public (undocumented)
 export interface LiteLlmApiInterface {
     // (undocumented)
+    addTeamMember(teamId: string, body: {
+        userEntityRef: string;
+        maxBudgetInTeam?: number;
+    }): Promise<TeamInfo>;
+    // (undocumented)
     blockKey(keyId: string): Promise<void>;
+    // (undocumented)
+    createTeam(request: CreateTeamRequest): Promise<CreateTeamResponse>;
     // (undocumented)
     deleteKey(keyId: string): Promise<{
         success: boolean;
@@ -167,6 +221,10 @@ export interface LiteLlmApiInterface {
     // (undocumented)
     getConfig(): Promise<LiteLlmConfig>;
     // (undocumented)
+    getManagedTeams(): Promise<TeamInfo[]>;
+    // (undocumented)
+    getMcpServers(): Promise<McpServerInfo[]>;
+    // (undocumented)
     getTeams(): Promise<TeamInfo[]>;
     // (undocumented)
     getTeamUsage(teamId: string, startDate: string, endDate: string): Promise<UsageMetrics>;
@@ -174,6 +232,8 @@ export interface LiteLlmApiInterface {
     getUsage(startDate: string, endDate: string): Promise<UsageMetrics>;
     // (undocumented)
     getUserInfo(): Promise<UserInfo>;
+    // (undocumented)
+    getVectorStores(): Promise<VectorStoreInfo[]>;
     // (undocumented)
     listKeys(): Promise<VirtualKey[]>;
     // (undocumented)
@@ -183,15 +243,32 @@ export interface LiteLlmApiInterface {
         pruned: number;
     }>;
     // (undocumented)
+    removeTeamMember(teamId: string, userEntityRef: string): Promise<TeamInfo>;
+    // (undocumented)
     resetKeySpend(keyId: string): Promise<void>;
+    // (undocumented)
+    setTeamKnowledgeBases(teamId: string, vectorStores: string[]): Promise<TeamInfo>;
+    // (undocumented)
+    setTeamMcpServers(teamId: string, mcpServers: string[]): Promise<TeamInfo>;
     // (undocumented)
     unblockKey(keyId: string): Promise<void>;
     // (undocumented)
     updateKey(keyId: string, request: UpdateKeyRequest): Promise<VirtualKey>;
+    // (undocumented)
+    updateTeam(teamId: string, request: UpdateTeamRequest): Promise<TeamInfo>;
 }
 
 // @public (undocumented)
 export const liteLlmApiRef: ApiRef<LiteLlmApiInterface>;
+
+// @public (undocumented)
+export const LiteLLMBudgetWidget: React_2.FC<LiteLLMBudgetWidgetProps>;
+
+// @public (undocumented)
+export interface LiteLLMBudgetWidgetProps {
+    maxKeys?: number;
+    title?: string;
+}
 
 // @public (undocumented)
 export interface LiteLlmConfig {
@@ -199,6 +276,12 @@ export interface LiteLlmConfig {
     keyGeneration?: {
         allowUnlimitedBudget: boolean;
         teamRequired: boolean;
+    };
+    teamManagement?: {
+        enabled: boolean;
+        maxBudgetCeiling: number;
+        allowUnlimitedBudget: boolean;
+        objectPermissionsEnabled?: boolean;
     };
 }
 
@@ -268,6 +351,36 @@ noHeader?: boolean;
 }>;
 
 // @public (undocumented)
+export const litellmTeamCreatePermission: BasicPermission;
+
+// @public (undocumented)
+export const litellmTeamKnowledgebaseManagePermission: BasicPermission;
+
+// @public (undocumented)
+export const litellmTeamManagePermission: BasicPermission;
+
+// @public (undocumented)
+export const litellmTeamMcpManagePermission: BasicPermission;
+
+// @public (undocumented)
+export const litellmTeamMembersManagePermission: BasicPermission;
+
+// Warning: (ae-forgotten-export) The symbol "ManageTeamDialogProps" needs to be exported by the entry point index.d.ts
+//
+// @public (undocumented)
+export const ManageTeamDialog: FC<ManageTeamDialogProps>;
+
+// @public (undocumented)
+export interface McpServerInfo {
+    // (undocumented)
+    id: string;
+    // (undocumented)
+    name?: string;
+    // (undocumented)
+    url?: string;
+}
+
+// @public (undocumented)
 export interface ModelInfo {
     access_groups?: string[];
     // (undocumented)
@@ -305,11 +418,17 @@ export interface PaginatedAuditLogs {
 // @public (undocumented)
 export interface TeamInfo {
     // (undocumented)
+    budget_duration?: string;
+    // (undocumented)
     max_budget?: number;
     // (undocumented)
     members_with_roles?: TeamMember[];
     // (undocumented)
+    metadata?: Record<string, unknown>;
+    // (undocumented)
     models?: string[];
+    // (undocumented)
+    object_permission?: TeamObjectPermission;
     // (undocumented)
     rpm_limit?: number;
     // (undocumented)
@@ -332,6 +451,16 @@ export interface TeamMember {
     user_id: string;
 }
 
+// @public (undocumented)
+export interface TeamObjectPermission {
+    // (undocumented)
+    mcp_access_groups?: string[];
+    // (undocumented)
+    mcp_servers?: string[];
+    // (undocumented)
+    vector_stores?: string[];
+}
+
 // Warning: (ae-forgotten-export) The symbol "TeamUsageProps" needs to be exported by the entry point index.d.ts
 //
 // @public (undocumented)
@@ -351,6 +480,24 @@ export interface UpdateKeyRequest {
     rpm_limit?: number;
     // (undocumented)
     team_id?: string;
+    // (undocumented)
+    tpm_limit?: number;
+}
+
+// @public (undocumented)
+export interface UpdateTeamRequest {
+    // (undocumented)
+    blocked?: boolean;
+    // (undocumented)
+    budget_duration?: string;
+    // (undocumented)
+    max_budget?: number | null;
+    // (undocumented)
+    models?: string[];
+    // (undocumented)
+    rpm_limit?: number;
+    // (undocumented)
+    team_alias?: string;
     // (undocumented)
     tpm_limit?: number;
 }
@@ -472,6 +619,7 @@ export const UsageStats: React_2.FC<UsageStatsProps>;
 
 // @public (undocumented)
 export interface UserInfo {
+    budget_duration?: string;
     can_view_audit?: boolean;
     // (undocumented)
     current_spend?: number;
@@ -496,9 +644,19 @@ export interface UserInfo {
 }
 
 // @public (undocumented)
+export interface VectorStoreInfo {
+    // (undocumented)
+    id: string;
+    // (undocumented)
+    name?: string;
+}
+
+// @public (undocumented)
 export interface VirtualKey {
     // (undocumented)
     blocked?: boolean;
+    // (undocumented)
+    budget_duration?: string;
     // (undocumented)
     created_at: string;
     // (undocumented)

@@ -282,6 +282,33 @@ import { LiteLLMHomeWidget } from '@acarmisc/backstage-plugin-litellm';
 
 The widget requires the same backend setup as the full `LiteLLMPage` (backend plugin configured and the user provisioned in LiteLLM).
 
+### Budget Policy Widget
+
+`LiteLLMBudgetWidget` is a homepage-friendly card that explains **how LiteLLM enforces spend limits** and shows **where you stand** against each one. It renders the budget hierarchy as a numbered flow — Key → Personal → Team → Global — with a live meter on every limit the signed-in user has:
+
+- **Key** — per-key cap, showing up to 3 keys closest to their budget (more budgeted keys are collapsed to a "+N" note).
+- **User** — the personal budget on your account (with a note that team-bound keys skip it).
+- **Team** — shared budgets for any team you belong to.
+- **Global** — the proxy-wide cap, which is admin-configured and not visible from here.
+
+Each meter shows spend vs. cap, the percent consumed, and the **reset window** (e.g. "resets every 30 days" vs. "never resets") when LiteLLM exposes it. The policy footnote summarizes the two rules that matter: the first cap a request hits is the one that stops it, and a reset window clears spend to $0 when it closes.
+
+```tsx
+import { LiteLLMBudgetWidget } from '@acarmisc/backstage-plugin-litellm';
+
+// In your HomePage composition:
+<LiteLLMBudgetWidget />
+```
+
+**Props:**
+
+| Prop | Type | Default | Description |
+|------|------|---------|-------------|
+| `title` | `string` | `'Budget Policy'` | Card title override |
+| `maxKeys` | `number` | `3` | Max key budgets to show (closest to the cap first) |
+
+Like the home widget it needs the backend plugin configured and the user provisioned in LiteLLM.
+
 ### Autoprovisioning
 
 When `litellm.provisioning.enabled` is `true`, the backend automatically creates a LiteLLM user the first time a Backstage user hits any plugin endpoint (user info, keys, teams, or usage). The flow is:

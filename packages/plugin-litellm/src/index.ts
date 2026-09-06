@@ -6,6 +6,8 @@ export { UsageStats } from './components/UsageStats';
 export { TeamUsage } from './components/TeamUsage';
 export { LiteLLMHomeWidget } from './components/LiteLLMHomeWidget';
 export type { LiteLLMHomeWidgetProps } from './components/LiteLLMHomeWidget';
+export { LiteLLMBudgetWidget } from './components/LiteLLMBudgetWidget';
+export type { LiteLLMBudgetWidgetProps } from './components/LiteLLMBudgetWidget';
 export { GenerateKeyDialog } from './components/GenerateKeyDialog';
 export { ManageTeamDialog } from './components/ManageTeamDialog';
 export { LiteLlmApi, liteLlmApiRef } from './api';

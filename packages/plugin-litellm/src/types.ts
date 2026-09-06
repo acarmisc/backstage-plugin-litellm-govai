@@ -9,6 +9,8 @@ export interface UserInfo {
   current_spend?: number;
   soft_limit?: number;
   hard_limit?: number;
+  /** Spend-reset period for max_budget, e.g. "30d". */
+  budget_duration?: string;
   /** Backstage-computed: true when the user belongs to litellm.audit.group */
   can_view_audit?: boolean;
 }
@@ -58,6 +60,7 @@ export interface VirtualKey {
   expires_at?: string;
   spend: number;
   max_budget?: number;
+  budget_duration?: string;
   tpm_limit?: number;
   rpm_limit?: number;
   models?: string[];
