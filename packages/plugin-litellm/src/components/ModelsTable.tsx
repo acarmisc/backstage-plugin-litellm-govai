@@ -107,6 +107,8 @@ export const ModelsTable: React.FC<ModelsTableProps> = ({ allModels, teams, load
           aVal = a.max_output_tokens ?? 0;
           bVal = b.max_output_tokens ?? 0;
           break;
+        default:
+          return 0;
       }
       if (aVal === undefined || aVal === null) aVal = '';
       if (bVal === undefined || bVal === null) bVal = '';
