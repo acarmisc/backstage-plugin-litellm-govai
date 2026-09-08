@@ -10,6 +10,24 @@ commit/PR that bumps the version in `package.json`. Format follows the
 Earlier history: `git log -- packages/plugin-litellm` or the
 [GitHub tags](https://github.com/acarmisc/backstage-plugin-litellm-govai/tags).
 
+## 0.21.0
+
+### Minor Changes
+
+- feat(`LiteLLMBudgetWidget`): new `compact` prop — drops the numbered
+  key → personal → team → global rail and the policy footnote, rendering
+  only the limits the signed-in user actually has as a tight `KEY` /
+  `USER` / `TEAM`-tagged meter list. Sized for a secondary column.
+- feat(`LiteLLMBudgetWidget`): new `collapsible` / `defaultExpanded` props —
+  fold the body under a one-line header showing a tone dot and a summary
+  (`3 limits · closest 95%`), toggled by a chevron. Expanded by default.
+- feat(`LiteLLMBudgetWidget`): new `action` slot — a host-supplied node
+  (e.g. a button) pinned below a divider at the card bottom, kept visible
+  when the widget is collapsed.
+- feat(`LiteLLMPage`): the Overview tab is now a two-column layout at `lg`
+  and up — usage charts beside a `compact` + `collapsible`
+  `LiteLLMBudgetWidget`; it stacks on narrower viewports.
+
 ## 0.20.0
 
 ### Minor Changes
