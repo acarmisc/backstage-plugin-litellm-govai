@@ -10,6 +10,20 @@ commit/PR that bumps the version in `package.json`. Format follows the
 Earlier history: `git log -- packages/plugin-litellm` or the
 [GitHub tags](https://github.com/acarmisc/backstage-plugin-litellm-govai/tags).
 
+## 0.21.2
+
+### Patch Changes
+
+- feat(`LiteLLMBudgetWidget`): every view now carries a one-line cap
+  hierarchy — `Order: key → personal → team → global`, first cap hit wins,
+  team keys skip the personal cap — so the `compact` widget on the LiteLLM
+  page isn't left unexplained.
+- feat(`LiteLLMBudgetWidget`): the `+N more budgeted keys further from the
+  cap` note is now a link to `/litellm?tab=keys`.
+- feat(`LiteLLMPage`): the active tab is read from and written to `?tab=`
+  (`overview` / `keys` / `teams` / `models` / `audit`), so tab-specific
+  links work and the URL is shareable.
+
 ## 0.21.1
 
 ### Patch Changes
