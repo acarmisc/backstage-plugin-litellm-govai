@@ -10,6 +10,14 @@ commit/PR that bumps the version in `package.json`. Format follows the
 Earlier history: `git log -- packages/plugin-litellm` or the
 [GitHub tags](https://github.com/acarmisc/backstage-plugin-litellm-govai/tags).
 
+## 0.21.3
+
+### Patch Changes
+
+- feat(`ModelsTable`): all six columns (Model ID, Mode, Input Cost, Output
+  Cost, Max Input, Max Output) are now sortable via `TableSortLabel`,
+  matching the pattern used in `KeysTable`. (#84, thanks @AlexDevsTheWeb)
+
 ## 0.21.2
 
 ### Patch Changes
