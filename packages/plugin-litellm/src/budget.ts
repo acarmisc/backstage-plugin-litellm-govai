@@ -114,27 +114,28 @@ export function buildBudgetSummary(
 
 /**
  * One-line summary of a `BudgetSummary`, for a collapsed/compact header:
- * how many concrete limits the user is subject to, and how close the
- * closest one is to its cap. `closestPct` is null when there are no limits.
+ * how many concrete limits the user is subject to, and the one closest to
+ * its cap — kept as the whole `BudgetLimit` so the caller can name its
+ * level (key / personal / team). `closest` is null when there are no limits.
  */
 export function budgetHeadline(summary: BudgetSummary): {
   count: number;
-  closestPct: number | null;
+  closest: BudgetLimit | null;
 } {
-  const pcts = [
-    ...summary.keys.map(k => k.pct),
-    ...(summary.user ? [summary.user.pct] : []),
-    ...summary.teams.map(t => t.pct),
+  const all: BudgetLimit[] = [
+    ...summary.keys,
+    ...(summary.user ? [summary.user] : []),
+    ...summary.teams,
   ];
   const count =
     summary.keys.length +
     summary.hiddenBudgetedKeys +
     (summary.user ? 1 : 0) +
     summary.teams.length;
-  return {
-    count,
-    closestPct: pcts.length ? Math.max(...pcts) : null,
-  };
+  const closest = all.length
+    ? all.reduce((a, b) => (b.pct > a.pct ? b : a))
+    : null;
+  return { count, closest };
 }
 
 /** "30d" → "every 30 days"; "1d" → "daily". Returns null when duration is unset. */

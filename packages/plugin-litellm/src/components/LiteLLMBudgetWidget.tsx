@@ -229,6 +229,13 @@ const LimitCard: React.FC<{ limit: BudgetLimit }> = ({ limit }) => {
   );
 };
 
+/** How each enforcement level reads in the collapsed summary line. */
+const CLOSEST_LEVEL_LABEL: Record<BudgetLimit['kind'], string> = {
+  key: 'key',
+  user: 'personal',
+  team: 'team',
+};
+
 /** A LimitCard prefixed with a small KEY / USER / TEAM tag — used in compact mode. */
 const TaggedLimit: React.FC<{ limit: BudgetLimit }> = ({ limit }) => {
   const tone = budgetTone(limit.pct);
@@ -407,9 +414,11 @@ export const LiteLLMBudgetWidget: React.FC<LiteLLMBudgetWidgetProps> = ({
 
   const limitsWord = `${headline.count} limit${headline.count === 1 ? '' : 's'}`;
   const closestWord =
-    headline.closestPct === null
+    headline.closest === null
       ? ''
-      : ` · closest ${Math.round(headline.closestPct)}%`;
+      : ` · closest: ${CLOSEST_LEVEL_LABEL[headline.closest.kind]} ${Math.round(
+          headline.closest.pct,
+        )}%`;
   const summaryText =
     headline.count === 0 ? 'no limits apply' : `${limitsWord}${closestWord}`;
 
@@ -446,10 +455,15 @@ export const LiteLLMBudgetWidget: React.FC<LiteLLMBudgetWidgetProps> = ({
             mb: expanded ? 1.5 : 0,
           }}
         >
-          <Box sx={{ minWidth: 0, flex: 1, display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+          <Box sx={{ minWidth: 0, flex: 1 }}>
             <Typography variant="h6" lineHeight={1.2}>{title}</Typography>
             {!loading && !error && (
-              <StatusPill label={summaryText} tone={budgetTone(headline.closestPct ?? 0)} />
+              <Box sx={{ mt: 0.5 }}>
+                <StatusPill
+                  label={summaryText}
+                  tone={budgetTone(headline.closest?.pct ?? 0)}
+                />
+              </Box>
             )}
           </Box>
           <IconButton

@@ -97,17 +97,27 @@ describe('budgetHeadline', () => {
     assert.strictEqual(h.count, 5);
   });
 
-  test('closestPct is the highest meter, across all levels', () => {
+  test('closest is the highest meter across all levels, with its level', () => {
     const s = buildBudgetSummary(user, [team], keys);
     const h = budgetHeadline(s);
-    assert.ok(Math.abs(h.closestPct! - 95) < 1e-9);
+    // key "near" at 9.5/10 is the closest to its cap
+    assert.strictEqual(h.closest?.kind, 'key');
+    assert.strictEqual(h.closest?.label, 'near');
+    assert.ok(Math.abs(h.closest!.pct - 95) < 1e-9);
   });
 
-  test('no limits -> count 0, closestPct null', () => {
+  test('closest can be the team budget when it is the tightest', () => {
+    const tight: TeamInfo = { team_id: 't3', team_alias: 'Tight', max_budget: 10, spend: 9.9 };
+    const h = budgetHeadline(buildBudgetSummary({ ...user, max_budget: undefined }, [tight], []));
+    assert.strictEqual(h.closest?.kind, 'team');
+    assert.ok(Math.abs(h.closest!.pct - 99) < 1e-9);
+  });
+
+  test('no limits -> count 0, closest null', () => {
     const s = buildBudgetSummary({ ...user, max_budget: undefined }, [], []);
     const h = budgetHeadline(s);
     assert.strictEqual(h.count, 0);
-    assert.strictEqual(h.closestPct, null);
+    assert.strictEqual(h.closest, null);
   });
 });
 
