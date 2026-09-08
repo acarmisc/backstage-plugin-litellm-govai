@@ -43,9 +43,50 @@ const liteLlmPage = PageBlueprint.make({
   },
 });
 
+// A side-by-side of the LiteLLMBudgetWidget variants so every mode — full,
+// compact, collapsible, and the `action` slot — is eyeball-able without
+// digging through the LiteLLM page's Overview tab.
+const budgetWidgetsPage = PageBlueprint.make({
+  name: 'budget-widgets',
+  params: {
+    path: '/budget-widgets',
+    title: 'Budget widgets',
+    icon: <TrendingUpIcon />,
+    loader: async () => {
+      const { default: Box } = await import('@mui/material/Box');
+      const { default: Button } = await import('@mui/material/Button');
+      const { LiteLLMBudgetWidget } = await import(
+        '../src/components/LiteLLMBudgetWidget'
+      );
+      return (
+        <Box
+          sx={{
+            p: 3,
+            display: 'grid',
+            gap: 3,
+            gridTemplateColumns: { xs: '1fr', md: 'repeat(3, minmax(0, 1fr))' },
+            alignItems: 'start',
+          }}
+        >
+          <LiteLLMBudgetWidget />
+          <LiteLLMBudgetWidget compact collapsible />
+          <LiteLLMBudgetWidget
+            compact
+            action={
+              <Button variant="contained" fullWidth>
+                Create LiteLLM key
+              </Button>
+            }
+          />
+        </Box>
+      );
+    },
+  },
+});
+
 const devLitellmPlugin = createFrontendPlugin({
   pluginId: 'litellm',
-  extensions: [mockLiteLlmApi, mockCatalogApi, liteLlmPage],
+  extensions: [mockLiteLlmApi, mockCatalogApi, liteLlmPage, budgetWidgetsPage],
 });
 
 const app = createApp({

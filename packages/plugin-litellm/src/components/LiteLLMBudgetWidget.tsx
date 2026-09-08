@@ -11,6 +11,13 @@
  *     personal budget;
  *   - a limit with a `budget_duration` resets its spend when the window
  *     closes; without one it never resets.
+ *
+ * Two knobs shrink it for use as a secondary column:
+ *   - `compact` drops the numbered rail and the policy footnote, showing
+ *     only the limits the user actually has as a tight tagged meter list;
+ *   - `collapsible` folds the body under a one-line summary header.
+ * `action` renders a host-supplied node (e.g. a button) pinned to the card
+ * bottom, always visible.
  */
 import React, { useEffect, useMemo, useState } from 'react';
 import Paper from '@mui/material/Paper';
@@ -18,19 +25,44 @@ import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import CircularProgress from '@mui/material/CircularProgress';
 import Alert from '@mui/material/Alert';
+import Collapse from '@mui/material/Collapse';
+import IconButton from '@mui/material/IconButton';
+import { ExpandMore } from '@mui/icons-material';
 import { alpha } from '@mui/material/styles';
 import { useApi } from '@backstage/core-plugin-api';
 import { liteLlmApiRef } from '../api';
 import { UserInfo, TeamInfo, VirtualKey } from '../types';
 import { fmtUsd } from '../format';
 import { Meter, StatusPill, Tone } from './ui';
-import { buildBudgetSummary, BudgetLimit, budgetTone, fmtBudgetDuration } from '../budget';
+import {
+  buildBudgetSummary,
+  budgetHeadline,
+  BudgetLimit,
+  BudgetSummary,
+  budgetTone,
+  fmtBudgetDuration,
+} from '../budget';
 
 export interface LiteLLMBudgetWidgetProps {
   /** Optional title override. Defaults to 'Budget Policy'. */
   title?: string;
   /** Max key budgets to show, closest to the cap first. Defaults to 3. */
   maxKeys?: number;
+  /**
+   * Drop the numbered key→personal→team→global rail and the policy
+   * footnote; show only the limits the user actually has. Defaults to false.
+   */
+  compact?: boolean;
+  /** Fold the body under a clickable one-line summary header. Defaults to false. */
+  collapsible?: boolean;
+  /** Initial expanded state when `collapsible`. Defaults to true. */
+  defaultExpanded?: boolean;
+  /**
+   * Node rendered at the card bottom, below a divider and outside the
+   * collapsible region so it stays visible when collapsed — e.g. a
+   * "create key" button.
+   */
+  action?: React.ReactNode;
 }
 
 interface LevelFrameProps {
@@ -197,9 +229,142 @@ const LimitCard: React.FC<{ limit: BudgetLimit }> = ({ limit }) => {
   );
 };
 
+/** A LimitCard prefixed with a small KEY / USER / TEAM tag — used in compact mode. */
+const TaggedLimit: React.FC<{ limit: BudgetLimit }> = ({ limit }) => {
+  const tone = budgetTone(limit.pct);
+  return (
+    <Box>
+      <Typography
+        sx={theme => ({
+          fontSize: 11,
+          fontWeight: 700,
+          letterSpacing: '0.08em',
+          textTransform: 'uppercase',
+          color:
+            tone === 'accent'
+              ? theme.palette.text.secondary
+              : levelToneColor(tone, theme),
+          mb: 0.5,
+        })}
+      >
+        {limit.kind}
+      </Typography>
+      <LimitCard limit={limit} />
+    </Box>
+  );
+};
+
+/** Full body: the numbered key→personal→team→global rail plus the policy footnote. */
+const FullBody: React.FC<{ summary: BudgetSummary }> = ({ summary }) => {
+  const hasBudgetedKeys = summary.keys.length + summary.hiddenBudgetedKeys > 0;
+  return (
+    <>
+      <LevelFrame
+        rank={1}
+        name="Key"
+        tagline="per-key cap · highest priority"
+        note={hasBudgetedKeys ? undefined : 'no key budgets set'}
+      >
+        {!hasBudgetedKeys && (
+          <EmptyLimitCard>No key has a budget, so no key-level cap applies.</EmptyLimitCard>
+        )}
+        {summary.keys.map(k => (
+          <LimitCard key={k.sublabel ?? k.label} limit={k} />
+        ))}
+        {summary.hiddenBudgetedKeys > 0 && (
+          <Typography variant="caption" color="text.secondary">
+            +{summary.hiddenBudgetedKeys} more budgeted
+            key{summary.hiddenBudgetedKeys > 1 ? 's' : ''} further from the cap
+          </Typography>
+        )}
+      </LevelFrame>
+
+      <LevelFrame
+        rank={2}
+        name="User"
+        tagline="cap on everything you spend with your own keys"
+        note="skipped for team-bound keys"
+      >
+        {summary.user ? (
+          <LimitCard limit={summary.user} />
+        ) : (
+          <EmptyLimitCard>No personal budget is set on your account.</EmptyLimitCard>
+        )}
+      </LevelFrame>
+
+      <LevelFrame rank={3} name="Team" tagline="shared cap for all keys in a team (if any)">
+        {summary.teams.length > 0
+          ? summary.teams.map(t => (
+              <LimitCard key={t.sublabel ?? t.label} limit={t} />
+            ))
+          : (
+            <EmptyLimitCard>No team you belong to has a budget.</EmptyLimitCard>
+          )}
+      </LevelFrame>
+
+      <LevelFrame rank={4} name="Global" tagline="proxy-wide cap set by your admin" isLast>
+        <EmptyLimitCard>
+          Configured by your admin in the proxy config — it isn't visible from this page. When
+          set, it limits spend across every request on the proxy.
+        </EmptyLimitCard>
+      </LevelFrame>
+
+      <Box
+        sx={theme => ({
+          mt: 2,
+          px: 1.5,
+          py: 1.25,
+          borderRadius: 1.5,
+          border: '1px dashed',
+          borderColor: alpha(theme.palette.text.primary, 0.18),
+        })}
+      >
+        <Typography variant="caption" color="text.secondary" display="block">
+          The first cap a request runs into is the one that stops it. A limit with a reset
+          window (e.g. daily or every 30 days) clears its spend to $0 when the window closes;
+          without a window it never resets.
+        </Typography>
+      </Box>
+    </>
+  );
+};
+
+/** Compact body: only the limits the user actually has, as a tagged meter list. */
+const CompactBody: React.FC<{ summary: BudgetSummary }> = ({ summary }) => {
+  const { count } = budgetHeadline(summary);
+  if (count === 0) {
+    return (
+      <Typography variant="body2" color="text.secondary" sx={{ fontSize: 13 }}>
+        No budget limits apply to you right now.
+      </Typography>
+    );
+  }
+  return (
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.25 }}>
+      {summary.keys.map(k => (
+        <TaggedLimit key={k.sublabel ?? k.label} limit={k} />
+      ))}
+      {summary.hiddenBudgetedKeys > 0 && (
+        <Typography variant="caption" color="text.secondary">
+          +{summary.hiddenBudgetedKeys} more budgeted
+          key{summary.hiddenBudgetedKeys > 1 ? 's' : ''} further from the cap
+        </Typography>
+      )}
+      {summary.user && <TaggedLimit limit={summary.user} />}
+      {summary.teams.map(t => (
+        <TaggedLimit key={t.sublabel ?? t.label} limit={t} />
+      ))}
+    </Box>
+  );
+};
+
 export const LiteLLMBudgetWidget: React.FC<LiteLLMBudgetWidgetProps> = ({
   title = 'Budget Policy',
   maxKeys = 3,
+  compact = false,
+  collapsible = false,
+  defaultExpanded = true,
+  action,
 }) => {
   const api = useApi(liteLlmApiRef);
   const [loading, setLoading] = useState(true);
@@ -207,6 +372,7 @@ export const LiteLLMBudgetWidget: React.FC<LiteLLMBudgetWidgetProps> = ({
   const [user, setUser] = useState<UserInfo | null>(null);
   const [teams, setTeams] = useState<TeamInfo[]>([]);
   const [keys, setKeys] = useState<VirtualKey[]>([]);
+  const [expanded, setExpanded] = useState(defaultExpanded);
 
   useEffect(() => {
     let cancelled = false;
@@ -233,22 +399,22 @@ export const LiteLLMBudgetWidget: React.FC<LiteLLMBudgetWidgetProps> = ({
     };
   }, [api]);
 
-  const hasAnyLimit =
-    !!user &&
-    (user.max_budget ?? user.hard_limit ?? 0) > 0;
+  const summary = useMemo(
+    () => buildBudgetSummary(user, teams, keys, maxKeys),
+    [user, teams, keys, maxKeys],
+  );
+  const headline = useMemo(() => budgetHeadline(summary), [summary]);
 
-  const summary = useMemo(() => buildBudgetSummary(user, teams, keys, maxKeys), [user, teams, keys, maxKeys]);
-  const hasBudgetedKeys = keys.some(k => (k.max_budget ?? 0) > 0);
+  const limitsWord = `${headline.count} limit${headline.count === 1 ? '' : 's'}`;
+  const closestWord =
+    headline.closestPct === null
+      ? ''
+      : ` · closest ${Math.round(headline.closestPct)}%`;
+  const summaryText =
+    headline.count === 0 ? 'no limits apply' : `${limitsWord}${closestWord}`;
 
-  return (
-    <Paper sx={{ p: 2 }}>
-      <Box sx={{ mb: 1.5 }}>
-        <Typography variant="h6" lineHeight={1.2}>{title}</Typography>
-        <Typography variant="caption" color="text.secondary">
-          How LiteLLM caps spend — and where you stand right now
-        </Typography>
-      </Box>
-
+  const body = (
+    <>
       {loading && (
         <Box display="flex" justifyContent="center" alignItems="center" minHeight={140}>
           <CircularProgress size={32} />
@@ -261,75 +427,75 @@ export const LiteLLMBudgetWidget: React.FC<LiteLLMBudgetWidgetProps> = ({
         </Alert>
       )}
 
-      {!loading && !error && (
-        <>
-          <LevelFrame
-            rank={1}
-            name="Key"
-            tagline="per-key cap · highest priority"
-            note={hasBudgetedKeys ? undefined : 'no key budgets set'}
-          >
-            {!hasBudgetedKeys && (
-              <EmptyLimitCard>No key has a budget, so no key-level cap applies.</EmptyLimitCard>
+      {!loading && !error &&
+        (compact ? <CompactBody summary={summary} /> : <FullBody summary={summary} />)}
+    </>
+  );
+
+  return (
+    <Paper sx={{ p: 2 }}>
+      {collapsible ? (
+        <Box
+          onClick={() => setExpanded(e => !e)}
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 1,
+            cursor: 'pointer',
+            userSelect: 'none',
+            mb: expanded ? 1.5 : 0,
+          }}
+        >
+          <Box sx={{ minWidth: 0, flex: 1, display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+            <Typography variant="h6" lineHeight={1.2}>{title}</Typography>
+            {!loading && !error && (
+              <StatusPill label={summaryText} tone={budgetTone(headline.closestPct ?? 0)} />
             )}
-            {summary.keys.map(k => (
-              <LimitCard key={k.sublabel ?? k.label} limit={k} />
-            ))}
-            {summary.hiddenBudgetedKeys > 0 && (
-              <Typography variant="caption" color="text.secondary">
-                +{summary.hiddenBudgetedKeys} more budgeted
-                key{summary.hiddenBudgetedKeys > 1 ? 's' : ''} further from the cap
-              </Typography>
-            )}
-          </LevelFrame>
-
-          <LevelFrame
-            rank={2}
-            name="User"
-            tagline="cap on everything you spend with your own keys"
-            note="skipped for team-bound keys"
-          >
-            {hasAnyLimit && summary.user ? (
-              <LimitCard limit={summary.user} />
-            ) : (
-              <EmptyLimitCard>No personal budget is set on your account.</EmptyLimitCard>
-            )}
-          </LevelFrame>
-
-          <LevelFrame rank={3} name="Team" tagline="shared cap for all keys in a team (if any)">
-            {summary.teams.length > 0
-              ? summary.teams.map(t => (
-                  <LimitCard key={t.sublabel ?? t.label} limit={t} />
-                ))
-              : (
-                <EmptyLimitCard>No team you belong to has a budget.</EmptyLimitCard>
-              )}
-          </LevelFrame>
-
-          <LevelFrame rank={4} name="Global" tagline="proxy-wide cap set by your admin" isLast>
-            <EmptyLimitCard>
-              Configured by your admin in the proxy config — it isn't visible from this page. When
-              set, it limits spend across every request on the proxy.
-            </EmptyLimitCard>
-          </LevelFrame>
-
-          <Box
+          </Box>
+          <IconButton
+            size="small"
+            aria-label={expanded ? 'Collapse budget policy' : 'Expand budget policy'}
+            aria-expanded={expanded}
+            onClick={e => {
+              e.stopPropagation();
+              setExpanded(x => !x);
+            }}
             sx={theme => ({
-              mt: 2,
-              px: 1.5,
-              py: 1.25,
-              borderRadius: 1.5,
-              border: '1px dashed',
-              borderColor: alpha(theme.palette.text.primary, 0.18),
+              color: theme.palette.text.secondary,
+              transform: expanded ? 'rotate(180deg)' : 'none',
+              transition: theme.transitions.create('transform'),
             })}
           >
-            <Typography variant="caption" color="text.secondary" display="block">
-              The first cap a request runs into is the one that stops it. A limit with a reset
-              window (e.g. daily or every 30 days) clears its spend to $0 when the window closes;
-              without a window it never resets.
-            </Typography>
-          </Box>
-        </>
+            <ExpandMore />
+          </IconButton>
+        </Box>
+      ) : (
+        <Box sx={{ mb: 1.5 }}>
+          <Typography variant="h6" lineHeight={1.2}>{title}</Typography>
+          <Typography variant="caption" color="text.secondary">
+            How LiteLLM caps spend — and where you stand right now
+          </Typography>
+        </Box>
+      )}
+
+      {collapsible ? (
+        <Collapse in={expanded} unmountOnExit>
+          {body}
+        </Collapse>
+      ) : (
+        body
+      )}
+
+      {action && (
+        <Box
+          sx={theme => ({
+            mt: 2,
+            pt: 2,
+            borderTop: `1px solid ${theme.palette.divider}`,
+          })}
+        >
+          {action}
+        </Box>
       )}
     </Paper>
   );

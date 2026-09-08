@@ -1,6 +1,11 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert';
-import { buildBudgetSummary, fmtBudgetDuration, budgetTone } from './budget';
+import {
+  buildBudgetSummary,
+  budgetHeadline,
+  fmtBudgetDuration,
+  budgetTone,
+} from './budget';
 import { UserInfo, TeamInfo, VirtualKey } from './types';
 
 const user: UserInfo = {
@@ -81,6 +86,28 @@ describe('buildBudgetSummary', () => {
     const t2: TeamInfo = { team_id: 't2', team_alias: 'Tight', max_budget: 10, spend: 9 };
     const s = buildBudgetSummary(user, [team, t2], []);
     assert.deepStrictEqual(s.teams.map(t => t.label), ['Tight', 'Platform Engineering']);
+  });
+});
+
+describe('budgetHeadline', () => {
+  test('counts every concrete limit, including keys hidden by the cap', () => {
+    const s = buildBudgetSummary(user, [team], keys, 2);
+    const h = budgetHeadline(s);
+    // 2 shown keys + 1 hidden key + personal budget + 1 team
+    assert.strictEqual(h.count, 5);
+  });
+
+  test('closestPct is the highest meter, across all levels', () => {
+    const s = buildBudgetSummary(user, [team], keys);
+    const h = budgetHeadline(s);
+    assert.ok(Math.abs(h.closestPct! - 95) < 1e-9);
+  });
+
+  test('no limits -> count 0, closestPct null', () => {
+    const s = buildBudgetSummary({ ...user, max_budget: undefined }, [], []);
+    const h = budgetHeadline(s);
+    assert.strictEqual(h.count, 0);
+    assert.strictEqual(h.closestPct, null);
   });
 });
 

@@ -7,6 +7,7 @@ import Typography from '@mui/material/Typography';
 import Paper from '@mui/material/Paper';
 import Tabs from '@mui/material/Tabs';
 import Tab from '@mui/material/Tab';
+import Grid from '@mui/material/Grid';
 import { useAsync, useAsyncRetry } from 'react-use';
 import { useApi } from '@backstage/core-plugin-api';
 import { usePermission } from '@backstage/plugin-permission-react';
@@ -15,6 +16,7 @@ import { KeysTable } from './KeysTable';
 import { GenerateKeyDialog } from './GenerateKeyDialog';
 import { ManageTeamDialog } from './ManageTeamDialog';
 import { UsageStats } from './UsageStats';
+import { LiteLLMBudgetWidget } from './LiteLLMBudgetWidget';
 import { TeamUsage } from './TeamUsage';
 import { ModelsTable } from './ModelsTable';
 import { AuditLog } from './AuditLog';
@@ -349,15 +351,22 @@ export const LiteLLMPage: React.FC = () => {
       />
 
       {activeTab === 'overview' && (
-        <UsageStats
-          usage={usage ?? null}
-          models={allModels ?? []}
-          dateRange={dateRange}
-          currentPreset={currentPreset}
-          onDateRangeChange={handleDateRangeChange}
-          loading={usageLoading}
-          userInfo={userInfo}
-        />
+        <Grid container spacing={2} alignItems="flex-start">
+          <Grid item xs={12} lg={8}>
+            <UsageStats
+              usage={usage ?? null}
+              models={allModels ?? []}
+              dateRange={dateRange}
+              currentPreset={currentPreset}
+              onDateRangeChange={handleDateRangeChange}
+              loading={usageLoading}
+              userInfo={userInfo}
+            />
+          </Grid>
+          <Grid item xs={12} lg={4}>
+            <LiteLLMBudgetWidget compact collapsible />
+          </Grid>
+        </Grid>
       )}
 
       {activeTab === 'keys' && (

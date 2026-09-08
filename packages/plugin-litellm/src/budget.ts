@@ -112,6 +112,31 @@ export function buildBudgetSummary(
   };
 }
 
+/**
+ * One-line summary of a `BudgetSummary`, for a collapsed/compact header:
+ * how many concrete limits the user is subject to, and how close the
+ * closest one is to its cap. `closestPct` is null when there are no limits.
+ */
+export function budgetHeadline(summary: BudgetSummary): {
+  count: number;
+  closestPct: number | null;
+} {
+  const pcts = [
+    ...summary.keys.map(k => k.pct),
+    ...(summary.user ? [summary.user.pct] : []),
+    ...summary.teams.map(t => t.pct),
+  ];
+  const count =
+    summary.keys.length +
+    summary.hiddenBudgetedKeys +
+    (summary.user ? 1 : 0) +
+    summary.teams.length;
+  return {
+    count,
+    closestPct: pcts.length ? Math.max(...pcts) : null,
+  };
+}
+
 /** "30d" → "every 30 days"; "1d" → "daily". Returns null when duration is unset. */
 export function fmtBudgetDuration(duration?: string): string | null {
   if (!duration) return null;

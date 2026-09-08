@@ -298,7 +298,14 @@ import { LiteLLMBudgetWidget } from '@acarmisc/backstage-plugin-litellm';
 
 // In your HomePage composition:
 <LiteLLMBudgetWidget />
+
+// Compressed, for a secondary column — folds under a one-line summary and
+// shows only the limits you actually have, with a "create key" button
+// pinned to the card:
+<LiteLLMBudgetWidget compact collapsible action={<CreateKeyButton />} />
 ```
+
+`compact` drops the numbered rail and footnote, leaving a `KEY` / `USER` / `TEAM`-tagged meter list. `collapsible` folds it under a header showing a tone dot and a summary (`3 limits · closest 95%`). `action` renders any node below a divider at the card bottom, kept visible when collapsed. The same widget (`compact collapsible`) also appears beside the usage charts on the `/litellm` Overview tab.
 
 **Props:**
 
@@ -306,6 +313,10 @@ import { LiteLLMBudgetWidget } from '@acarmisc/backstage-plugin-litellm';
 |------|------|---------|-------------|
 | `title` | `string` | `'Budget Policy'` | Card title override |
 | `maxKeys` | `number` | `3` | Max key budgets to show (closest to the cap first) |
+| `compact` | `boolean` | `false` | Drop the numbered rail + footnote; show only the limits you have |
+| `collapsible` | `boolean` | `false` | Fold the body under a clickable one-line summary header |
+| `defaultExpanded` | `boolean` | `true` | Initial expanded state when `collapsible` |
+| `action` | `ReactNode` | — | Node pinned below a divider at the card bottom (stays visible when collapsed) |
 
 Like the home widget it needs the backend plugin configured and the user provisioned in LiteLLM.
 

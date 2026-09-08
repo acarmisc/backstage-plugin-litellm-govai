@@ -266,6 +266,10 @@ export const LiteLLMBudgetWidget: React_2.FC<LiteLLMBudgetWidgetProps>;
 
 // @public (undocumented)
 export interface LiteLLMBudgetWidgetProps {
+    action?: React_2.ReactNode;
+    collapsible?: boolean;
+    compact?: boolean;
+    defaultExpanded?: boolean;
     maxKeys?: number;
     title?: string;
 }
