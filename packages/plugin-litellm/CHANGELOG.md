@@ -10,6 +10,16 @@ commit/PR that bumps the version in `package.json`. Format follows the
 Earlier history: `git log -- packages/plugin-litellm` or the
 [GitHub tags](https://github.com/acarmisc/backstage-plugin-litellm-govai/tags).
 
+## 0.21.1
+
+### Patch Changes
+
+- feat(`LiteLLMBudgetWidget`): the collapsed summary now names the level of
+  the limit closest to its cap — `4 limits · closest: team 95%` instead of
+  a bare `closest 95%` — so you can tell at a glance whether the binding
+  budget is a key, your personal budget, or a team's. The header also
+  breaks onto two lines (title, then summary) so the longer text fits.
+
 ## 0.21.0
 
 ### Minor Changes
