@@ -305,7 +305,7 @@ import { LiteLLMBudgetWidget } from '@acarmisc/backstage-plugin-litellm';
 <LiteLLMBudgetWidget compact collapsible action={<CreateKeyButton />} />
 ```
 
-`compact` drops the numbered rail and footnote, leaving a `KEY` / `USER` / `TEAM`-tagged meter list. `collapsible` folds it under a two-line header — the title, then a tone dot and a summary naming the closest limit's level (`3 limits · closest: team 95%`). `action` renders any node below a divider at the card bottom, kept visible when collapsed. The same widget (`compact collapsible`) also appears beside the usage charts on the `/litellm` Overview tab.
+`compact` drops the numbered rail (but keeps the one-line `Order: key → personal → team → global` note), leaving a `KEY` / `USER` / `TEAM`-tagged meter list. `collapsible` folds it under a two-line header — the title, then a tone dot and a summary naming the closest limit's level (`3 limits · closest: team 95%`). `action` renders any node below a divider at the card bottom, kept visible when collapsed. The same widget (`compact collapsible`) also appears beside the usage charts on the `/litellm` Overview tab. The "+N more budgeted keys" note links to `/litellm?tab=keys` — `LiteLLMPage` reads `?tab=` to open a specific tab.
 
 **Props:**
 

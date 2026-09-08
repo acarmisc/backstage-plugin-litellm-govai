@@ -8,6 +8,7 @@ import Paper from '@mui/material/Paper';
 import Tabs from '@mui/material/Tabs';
 import Tab from '@mui/material/Tab';
 import Grid from '@mui/material/Grid';
+import { useSearchParams } from 'react-router-dom';
 import { useAsync, useAsyncRetry } from 'react-use';
 import { useApi } from '@backstage/core-plugin-api';
 import { usePermission } from '@backstage/plugin-permission-react';
@@ -33,6 +34,11 @@ import { DateRange, GenerateKeyRequest, GenerateKeyResponse, UpdateKeyRequest, U
 const PERIOD_LS_KEY = 'litellm_usage_period';
 type DatePreset = 'today' | '24h' | '7d' | '30d';
 
+type PageTab = 'overview' | 'keys' | 'teams' | 'models' | 'audit';
+const PAGE_TABS: readonly PageTab[] = ['overview', 'keys', 'teams', 'models', 'audit'];
+const isPageTab = (v: string | null): v is PageTab =>
+  !!v && (PAGE_TABS as readonly string[]).includes(v);
+
 function initDateRange(): DateRange {
   let preset = '7d';
   try { preset = localStorage.getItem(PERIOD_LS_KEY) ?? '7d'; } catch { /* ignore */ }
@@ -52,7 +58,29 @@ export const LiteLLMPage: React.FC = () => {
   const [currentPreset, setCurrentPreset] = useState<DatePreset>(() => {
     try { return (localStorage.getItem(PERIOD_LS_KEY) as DatePreset) ?? '7d'; } catch { return '7d'; }
   });
-  const [activeTab, setActiveTab] = useState<'overview' | 'keys' | 'teams' | 'models' | 'audit'>('overview');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [activeTab, setActiveTab] = useState<PageTab>(() => {
+    const t = searchParams.get('tab');
+    return isPageTab(t) ? t : 'overview';
+  });
+
+  // Keep `?tab=` in sync so links (e.g. the budget widget's "more keys"
+  // note pointing at `/litellm?tab=keys`) land on the right tab and the URL
+  // stays shareable.
+  const selectTab = useCallback(
+    (tab: PageTab) => {
+      setActiveTab(tab);
+      setSearchParams(
+        prev => {
+          const next = new URLSearchParams(prev);
+          next.set('tab', tab);
+          return next;
+        },
+        { replace: true },
+      );
+    },
+    [setSearchParams],
+  );
 
   const [snackbar, setSnackbar] = useState<{ message: string; severity: 'success' | 'warning' | 'error' } | null>(null);
   const [generateDialogOpen, setGenerateDialogOpen] = useState(false);
@@ -320,7 +348,7 @@ export const LiteLLMPage: React.FC = () => {
   const pageTabs = (
     <Tabs
       value={activeTab}
-      onChange={(_, v) => setActiveTab(v)}
+      onChange={(_, v) => selectTab(v as PageTab)}
       variant="scrollable"
       scrollButtons="auto"
       // Substring class matching so these survive a host MUI classname prefix

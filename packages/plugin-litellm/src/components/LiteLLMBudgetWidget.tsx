@@ -30,6 +30,7 @@ import IconButton from '@mui/material/IconButton';
 import { ExpandMore } from '@mui/icons-material';
 import { alpha } from '@mui/material/styles';
 import { useApi } from '@backstage/core-plugin-api';
+import { Link } from '@backstage/core-components';
 import { liteLlmApiRef } from '../api';
 import { UserInfo, TeamInfo, VirtualKey } from '../types';
 import { fmtUsd } from '../format';
@@ -236,6 +237,43 @@ const CLOSEST_LEVEL_LABEL: Record<BudgetLimit['kind'], string> = {
   team: 'team',
 };
 
+/**
+ * Where "see the rest of my keys" points. The plugin route is mounted at
+ * `/litellm`; `LiteLLMPage` reads `?tab=` to open the Keys tab directly.
+ */
+const KEYS_PATH = '/litellm?tab=keys';
+
+/** Budgeted keys past the visible cap — a link through to the Keys tab. */
+const MoreKeysNote: React.FC<{ count: number }> = ({ count }) => (
+  <Link to={KEYS_PATH} variant="caption">
+    +{count} more budgeted key{count > 1 ? 's' : ''} further from the cap →
+  </Link>
+);
+
+/**
+ * The one thing that's easy to get wrong about LiteLLM budgets: the order
+ * caps are checked in. Short by design.
+ */
+const HierarchyNote: React.FC<{ withReset?: boolean }> = ({ withReset }) => (
+  <Box
+    sx={theme => ({
+      px: 1.5,
+      py: 1.25,
+      borderRadius: 1.5,
+      border: '1px dashed',
+      borderColor: alpha(theme.palette.text.primary, 0.18),
+    })}
+  >
+    <Typography variant="caption" color="text.secondary" display="block">
+      <b>Order:</b> key → personal → team → global. The first cap you reach
+      blocks the request; a key that belongs to a team uses the team's cap,
+      not your personal one.
+      {withReset &&
+        ' A cap with a reset window drops to $0 when the window closes; without one it never resets.'}
+    </Typography>
+  </Box>
+);
+
 /** A LimitCard prefixed with a small KEY / USER / TEAM tag — used in compact mode. */
 const TaggedLimit: React.FC<{ limit: BudgetLimit }> = ({ limit }) => {
   const tone = budgetTone(limit.pct);
@@ -279,10 +317,7 @@ const FullBody: React.FC<{ summary: BudgetSummary }> = ({ summary }) => {
           <LimitCard key={k.sublabel ?? k.label} limit={k} />
         ))}
         {summary.hiddenBudgetedKeys > 0 && (
-          <Typography variant="caption" color="text.secondary">
-            +{summary.hiddenBudgetedKeys} more budgeted
-            key{summary.hiddenBudgetedKeys > 1 ? 's' : ''} further from the cap
-          </Typography>
+          <MoreKeysNote count={summary.hiddenBudgetedKeys} />
         )}
       </LevelFrame>
 
@@ -316,21 +351,8 @@ const FullBody: React.FC<{ summary: BudgetSummary }> = ({ summary }) => {
         </EmptyLimitCard>
       </LevelFrame>
 
-      <Box
-        sx={theme => ({
-          mt: 2,
-          px: 1.5,
-          py: 1.25,
-          borderRadius: 1.5,
-          border: '1px dashed',
-          borderColor: alpha(theme.palette.text.primary, 0.18),
-        })}
-      >
-        <Typography variant="caption" color="text.secondary" display="block">
-          The first cap a request runs into is the one that stops it. A limit with a reset
-          window (e.g. daily or every 30 days) clears its spend to $0 when the window closes;
-          without a window it never resets.
-        </Typography>
+      <Box sx={{ mt: 2 }}>
+        <HierarchyNote withReset />
       </Box>
     </>
   );
@@ -348,14 +370,12 @@ const CompactBody: React.FC<{ summary: BudgetSummary }> = ({ summary }) => {
   }
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.25 }}>
+      <HierarchyNote />
       {summary.keys.map(k => (
         <TaggedLimit key={k.sublabel ?? k.label} limit={k} />
       ))}
       {summary.hiddenBudgetedKeys > 0 && (
-        <Typography variant="caption" color="text.secondary">
-          +{summary.hiddenBudgetedKeys} more budgeted
-          key{summary.hiddenBudgetedKeys > 1 ? 's' : ''} further from the cap
-        </Typography>
+        <MoreKeysNote count={summary.hiddenBudgetedKeys} />
       )}
       {summary.user && <TaggedLimit limit={summary.user} />}
       {summary.teams.map(t => (
