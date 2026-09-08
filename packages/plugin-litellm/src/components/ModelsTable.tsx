@@ -6,6 +6,7 @@ import TableCell from '@mui/material/TableCell';
 import TableContainer from '@mui/material/TableContainer';
 import TableHead from '@mui/material/TableHead';
 import TableRow from '@mui/material/TableRow';
+import TableSortLabel from '@mui/material/TableSortLabel';
 import Typography from '@mui/material/Typography';
 import MenuItem from '@mui/material/MenuItem';
 import Select from '@mui/material/Select';
@@ -56,6 +57,8 @@ export const ModelsTable: React.FC<ModelsTableProps> = ({ allModels, teams, load
   const [selectedTeamId, setSelectedTeamId] = useState<string>('');
   const [filterText, setFilterText] = useState<string>('');
   const [copiedSnackbar, setCopiedSnackbar] = useState(false);
+  const [sortKey, setSortKey] = useState<'model_name' | 'mode' | 'input_cost_per_token' | 'output_cost_per_token' | 'max_input_tokens' | 'max_output_tokens'>('model_name');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
 
   const selectedTeam = useMemo(
     () => teams.find(t => t.team_id === selectedTeamId) ?? null,
@@ -69,16 +72,65 @@ export const ModelsTable: React.FC<ModelsTableProps> = ({ allModels, teams, load
 
   const filteredModels = useMemo(() => {
     const q = filterText.trim().toLowerCase();
-    if (!q) return teamModels;
-    return teamModels.filter(model =>
-      model.model_name.toLowerCase().includes(q) ||
-      (model.access_groups || []).some(group => group.toLowerCase().includes(q)),
-    );
-  }, [teamModels, filterText]);
+    let models = teamModels;
+    if (q) {
+      models = teamModels.filter(model =>
+        model.model_name.toLowerCase().includes(q) ||
+        (model.access_groups || []).some(group => group.toLowerCase().includes(q)),
+      );
+    }
+    return [...models].sort((a, b) => {
+      let aVal: string | number | undefined;
+      let bVal: string | number | undefined;
+      switch (sortKey) {
+        case 'model_name':
+          aVal = a.model_name;
+          bVal = b.model_name;
+          break;
+        case 'mode':
+          aVal = a.mode;
+          bVal = b.mode;
+          break;
+        case 'input_cost_per_token':
+          aVal = a.input_cost_per_token ?? 0;
+          bVal = b.input_cost_per_token ?? 0;
+          break;
+        case 'output_cost_per_token':
+          aVal = a.output_cost_per_token ?? 0;
+          bVal = b.output_cost_per_token ?? 0;
+          break;
+        case 'max_input_tokens':
+          aVal = a.max_input_tokens ?? 0;
+          bVal = b.max_input_tokens ?? 0;
+          break;
+        case 'max_output_tokens':
+          aVal = a.max_output_tokens ?? 0;
+          bVal = b.max_output_tokens ?? 0;
+          break;
+        default:
+          return 0;
+      }
+      if (aVal === undefined || aVal === null) aVal = '';
+      if (bVal === undefined || bVal === null) bVal = '';
+      if (typeof aVal === 'string' && typeof bVal === 'string') {
+        return sortDirection === 'asc' ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
+      }
+      return sortDirection === 'asc' ? (aVal as number) - (bVal as number) : (bVal as number) - (aVal as number);
+    });
+  }, [teamModels, filterText, sortKey, sortDirection]);
 
   const handleCopyModelId = useCallback((modelId: string) => {
     navigator.clipboard.writeText(modelId).then(() => setCopiedSnackbar(true));
   }, []);
+
+  const handleSort = useCallback((key: typeof sortKey) => {
+    if (sortKey === key) {
+      setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortKey(key);
+      setSortDirection('asc');
+    }
+  }, [sortKey]);
 
   const modeColor = (mode: string): string => {
     switch (mode) {
@@ -162,12 +214,24 @@ export const ModelsTable: React.FC<ModelsTableProps> = ({ allModels, teams, load
           <Table size="small" sx={dataTableSx}>
             <TableHead>
               <TableRow>
-                <TableCell>Model ID</TableCell>
-                <TableCell>Mode</TableCell>
-                <TableCell align="right">Input Cost</TableCell>
-                <TableCell align="right">Output Cost</TableCell>
-                <TableCell align="right">Max Input</TableCell>
-                <TableCell align="right">Max Output</TableCell>
+                <TableCell sortDirection={sortKey === 'model_name' ? sortDirection : false}>
+                  <TableSortLabel active={sortKey === 'model_name'} direction={sortKey === 'model_name' ? sortDirection : 'asc'} onClick={() => handleSort('model_name')}>Model ID</TableSortLabel>
+                </TableCell>
+                <TableCell sortDirection={sortKey === 'mode' ? sortDirection : false}>
+                  <TableSortLabel active={sortKey === 'mode'} direction={sortKey === 'mode' ? sortDirection : 'asc'} onClick={() => handleSort('mode')}>Mode</TableSortLabel>
+                </TableCell>
+                <TableCell align="right" sortDirection={sortKey === 'input_cost_per_token' ? sortDirection : false}>
+                  <TableSortLabel active={sortKey === 'input_cost_per_token'} direction={sortKey === 'input_cost_per_token' ? sortDirection : 'asc'} onClick={() => handleSort('input_cost_per_token')}>Input Cost</TableSortLabel>
+                </TableCell>
+                <TableCell align="right" sortDirection={sortKey === 'output_cost_per_token' ? sortDirection : false}>
+                  <TableSortLabel active={sortKey === 'output_cost_per_token'} direction={sortKey === 'output_cost_per_token' ? sortDirection : 'asc'} onClick={() => handleSort('output_cost_per_token')}>Output Cost</TableSortLabel>
+                </TableCell>
+                <TableCell align="right" sortDirection={sortKey === 'max_input_tokens' ? sortDirection : false}>
+                  <TableSortLabel active={sortKey === 'max_input_tokens'} direction={sortKey === 'max_input_tokens' ? sortDirection : 'asc'} onClick={() => handleSort('max_input_tokens')}>Max Input</TableSortLabel>
+                </TableCell>
+                <TableCell align="right" sortDirection={sortKey === 'max_output_tokens' ? sortDirection : false}>
+                  <TableSortLabel active={sortKey === 'max_output_tokens'} direction={sortKey === 'max_output_tokens' ? sortDirection : 'asc'} onClick={() => handleSort('max_output_tokens')}>Max Output</TableSortLabel>
+                </TableCell>
                 <TableCell>Capabilities</TableCell>
               </TableRow>
             </TableHead>
