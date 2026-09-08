@@ -56,6 +56,12 @@ A smaller variant of the home widget for surfaces that only need a one-click sho
 
 ![Create Key card](docs/screenshots/key-card.png)
 
+### Budget Policy card
+
+`LiteLLMBudgetWidget` in its `compact collapsible` form, as it appears beside the usage charts on the `/litellm` Overview tab. The two-line header carries the card title and a summary pill — here `15 limits · closest: team 92%` — that names the enforcement level of the limit nearest its cap. Directly below sits a one-line reminder of the order caps are checked in (`key → personal → team → global`; the first cap you reach blocks the request; a team-bound key uses the team's cap, not your personal one). Then a live spend-vs-cap meter for every limit the signed-in user actually has, grouped by level (`KEY`, `USER`, `TEAM`), each showing spend, percent of budget, and its reset window (`never resets` vs. `resets every 30 days`). Key budgets are ranked by proximity to the cap and capped at three; `+9 more budgeted keys further from the cap →` links through to the Keys tab.
+
+![Budget Policy card](docs/screenshots/budget-policy-widget.png)
+
 ## Installation
 
 This plugin is designed to be used **within a Backstage monorepo**. It uses workspace dependencies and requires the Backstage CLI to build.
@@ -291,7 +297,7 @@ The widget requires the same backend setup as the full `LiteLLMPage` (backend pl
 - **Team** — shared budgets for any team you belong to.
 - **Global** — the proxy-wide cap, which is admin-configured and not visible from here.
 
-Each meter shows spend vs. cap, the percent consumed, and the **reset window** (e.g. "resets every 30 days" vs. "never resets") when LiteLLM exposes it. The policy footnote summarizes the two rules that matter: the first cap a request hits is the one that stops it, and a reset window clears spend to $0 when it closes.
+Each meter shows spend vs. cap, the percent consumed, and the **reset window** (e.g. "resets every 30 days" vs. "never resets") when LiteLLM exposes it. Every variant carries a one-line **enforcement-order** note — `key → personal → team → global`, the first cap you reach blocks the request, and a team-bound key uses the team's cap instead of your personal one; the full variant also spells out that a reset window clears spend to $0 when it closes.
 
 ```tsx
 import { LiteLLMBudgetWidget } from '@acarmisc/backstage-plugin-litellm';
@@ -313,7 +319,7 @@ import { LiteLLMBudgetWidget } from '@acarmisc/backstage-plugin-litellm';
 |------|------|---------|-------------|
 | `title` | `string` | `'Budget Policy'` | Card title override |
 | `maxKeys` | `number` | `3` | Max key budgets to show (closest to the cap first) |
-| `compact` | `boolean` | `false` | Drop the numbered rail + footnote; show only the limits you have |
+| `compact` | `boolean` | `false` | Drop the numbered rail; keep the one-line order note; show only the limits you have |
 | `collapsible` | `boolean` | `false` | Fold the body under a clickable one-line summary header |
 | `defaultExpanded` | `boolean` | `true` | Initial expanded state when `collapsible` |
 | `action` | `ReactNode` | — | Node pinned below a divider at the card bottom (stays visible when collapsed) |
