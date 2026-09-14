@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useMemo } from 'react';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import Table from '@mui/material/Table';
@@ -199,10 +199,10 @@ export const AuditLog: React.FC<AuditLogProps> = ({ api }) => {
   const [pageSize, setPageSize] = useState(25);
   const [filters, setFilters] = useState<Pick<AuditLogsParams, 'action' | 'table_name' | 'changed_by'>>({});
 
-  const fetchParams: AuditLogsParams = useCallback(
+  const fetchParams: AuditLogsParams = useMemo(
     () => ({ page: page + 1, page_size: pageSize, ...filters }),
     [page, pageSize, filters],
-  )();
+  );
 
   const { value, loading, error } = useAsync(
     () => api.getAuditLogs(fetchParams),

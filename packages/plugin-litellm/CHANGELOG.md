@@ -8,7 +8,18 @@ commit/PR that bumps the version in `package.json`. Format follows the
 `backstage/community-plugins`.
 
 Earlier history: `git log -- packages/plugin-litellm` or the
-[GitHub tags](https://github.com/acarmisc/backstage-plugin-litellm-govai/tags).
+ [GitHub tags](https://github.com/acarmisc/backstage-plugin-litellm-govai/tags).
+
+## 0.22.0
+
+### Minor Changes
+
+- fix(`AuditLog`): stop the Audit Log tab's continuous reload / skeleton
+  blink. `fetchParams` was built with an immediately-invoked `useCallback`
+  (`useCallback(...)()`), producing a new object identity every render, which
+  re-triggered the `useAsync` fetch on each render in an infinite loop. It is
+  now memoized with `useMemo`, so the `/audit` request fires once per real
+  page / page-size / filter change.
 
 ## 0.21.3
 
