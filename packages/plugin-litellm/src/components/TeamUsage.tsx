@@ -50,6 +50,17 @@ function budgetTone(isOver: boolean, isNear: boolean): Tone {
 
 const fmtUsd2 = (n: number) => `$${(n ?? 0).toFixed(2)}`;
 
+function visibleBudgetPct(spend: number, budget: number): number {
+  if (budget <= 0) return 0;
+  return Math.min((spend / budget) * 100, 100);
+}
+
+function budgetStatValue(hidden: boolean, budget: number): string {
+  if (hidden) return 'Hidden';
+  if (budget > 0) return fmtUsd2(budget);
+  return 'Unlimited';
+}
+
 interface TeamCardProps {
   team: TeamInfo;
   usage: UsageMetrics | null;
@@ -62,15 +73,29 @@ const TeamCard: React.FC<TeamCardProps> = ({ team, usage, usageLoading, canManag
   const [expanded, setExpanded] = useState(false);
   const chart = useChartTheme();
 
-  const budget = team.max_budget ?? 0;
-  const spend = team.spend ?? 0;
-  const budgetPct = budget > 0 ? Math.min((spend / budget) * 100, 100) : 0;
-  const isOver = budget > 0 && spend >= budget;
-  const isNear = budget > 0 && spend >= budget * 0.8 && !isOver;
+  // When the backend redacts dollar amounts (budget hiding), only the
+  // consumption level survives: pct + status + reset window. Spend charts
+  // and `$` figures must stay hidden — usage spend is zeroed server-side
+  // for the same reason.
+  const hidden = team.budget_hidden === true;
+  const budget = hidden ? 0 : team.max_budget ?? 0;
+  const spend = hidden ? 0 : team.spend ?? 0;
+  const budgetPct = hidden
+    ? Math.min(100, Math.max(0, team.budget_pct ?? 0))
+    : visibleBudgetPct(spend, budget);
+  const isOver = hidden
+    ? team.budget_status === 'over'
+    : budget > 0 && spend >= budget;
+  const isNear = hidden
+    ? team.budget_status === 'near'
+    : budget > 0 && spend >= budget * 0.8 && !isOver;
 
   const dailyData = usage?.daily_usage?.map(d => ({ date: d.date, spend: d.spend })) ?? [];
 
   const renderDailySpendSection = () => {
+    // Spend is redacted server-side when the budget is hidden — a flat $0
+    // chart would mislead, so the section is omitted entirely.
+    if (hidden) return null;
     if (usageLoading) {
       return (
         <Box display="flex" justifyContent="center" py={3}>
@@ -194,13 +219,31 @@ const TeamCard: React.FC<TeamCardProps> = ({ team, usage, usageLoading, canManag
       >
         <Stat label="Members" value={team.members_with_roles?.length ?? '—'} />
         <Stat label="Models" value={team.models?.length ? team.models.length : 'All'} />
-        <Stat label="Budget" value={budget > 0 ? fmtUsd2(budget) : 'Unlimited'} />
-        <Stat label="Spend" value={fmtUsd2(spend)} />
+        <Stat label="Budget" value={budgetStatValue(hidden, budget)} />
+        <Stat label="Spend" value={hidden ? '—' : fmtUsd2(spend)} />
         <Stat label="TPM" value={team.tpm_limit && team.tpm_limit > 0 ? team.tpm_limit.toLocaleString() : '—'} />
         <Stat label="RPM" value={team.rpm_limit && team.rpm_limit > 0 ? team.rpm_limit.toLocaleString() : '—'} />
       </Box>
 
-      {budget > 0 && (
+      {hidden && (
+        <Box mt={2} maxWidth={640}>
+          <Box display="flex" justifyContent="space-between" alignItems="baseline" mb={0.75}>
+            <Typography variant="caption" color="text.secondary" sx={{ fontVariantNumeric: 'tabular-nums' }}>
+              {budgetPct.toFixed(0)}% used
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              Hidden by admin
+            </Typography>
+          </Box>
+          <Meter value={budgetPct} tone={budgetTone(isOver, isNear)} height={5} />
+          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.75 }}>
+            Team budget is hidden — showing usage level only
+            {team.budget_duration ? ` · resets every ${team.budget_duration}` : ''}.
+          </Typography>
+        </Box>
+      )}
+
+      {!hidden && budget > 0 && (
         <Box mt={2} maxWidth={640}>
           <Box display="flex" justifyContent="space-between" alignItems="baseline" mb={0.75}>
             <Typography variant="caption" color="text.secondary" sx={{ fontVariantNumeric: 'tabular-nums' }}>

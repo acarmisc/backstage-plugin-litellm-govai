@@ -87,6 +87,41 @@ describe('buildBudgetSummary', () => {
     const s = buildBudgetSummary(user, [team, t2], []);
     assert.deepStrictEqual(s.teams.map(t => t.label), ['Tight', 'Platform Engineering']);
   });
+
+  test('keeps redacted teams as hidden limits with server pct', () => {
+    const hidden: TeamInfo = {
+      team_id: 't-hidden',
+      team_alias: 'Secret',
+      spend: 0,
+      budget_hidden: true,
+      budget_pct: 92,
+      budget_status: 'near',
+      budget_duration: '30d',
+    };
+    const s = buildBudgetSummary(user, [hidden], []);
+    assert.strictEqual(s.teams.length, 1);
+    assert.strictEqual(s.teams[0].hidden, true);
+    assert.strictEqual(s.teams[0].pct, 92);
+    assert.strictEqual(s.teams[0].budget, 0);
+    assert.strictEqual(s.teams[0].spend, 0);
+    assert.strictEqual(s.teams[0].budgetDuration, '30d');
+  });
+
+  test('hidden team limits still count toward the headline', () => {
+    const hidden: TeamInfo = {
+      team_id: 't-hidden',
+      spend: 0,
+      budget_hidden: true,
+      budget_pct: 99,
+      budget_status: 'near',
+    };
+    const h = budgetHeadline(
+      buildBudgetSummary({ ...user, max_budget: undefined }, [hidden], []),
+    );
+    assert.strictEqual(h.count, 1);
+    assert.strictEqual(h.closest?.kind, 'team');
+    assert.strictEqual(h.closest?.hidden, true);
+  });
 });
 
 describe('budgetHeadline', () => {

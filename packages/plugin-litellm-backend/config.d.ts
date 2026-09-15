@@ -248,6 +248,34 @@ export interface Config {
       };
     };
 
+    /**
+     * Display controls for team budget amounts in the frontend.
+     * Each flag independently hides real dollar budgets while the backend
+     * still exposes the consumption level (percent of cap + ok/near/over
+     * status + reset window). Enforcement is server-side: the backend
+     * redacts max_budget/spend from the corresponding endpoints, so the
+     * dollars are not merely hidden in CSS.
+     */
+    display?: {
+      /**
+       * Hide dollar budgets from regular team members (GET /teams, Teams
+       * cards, TEAM section of the budget widget). Team managers still see
+       * dollars unless hideTeamBudgetForManagers is also set.
+       * @default false
+       * @visibility frontend
+       */
+      hideTeamBudgetForMembers?: boolean;
+
+      /**
+       * Hide dollar budgets even from team managers (GET /teams/managed,
+       * team write responses, ManageTeamDialog budget field which becomes
+       * write-only). Useful when budgets are finance-sensitive.
+       * @default false
+       * @visibility frontend
+       */
+      hideTeamBudgetForManagers?: boolean;
+    };
+
     bridge?: {
       /**
        * When true, mount the /bridge/keys, /bridge/keys (POST), /bridge/models

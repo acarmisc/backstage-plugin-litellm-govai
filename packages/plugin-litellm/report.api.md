@@ -277,6 +277,10 @@ export interface LiteLLMBudgetWidgetProps {
 // @public (undocumented)
 export interface LiteLlmConfig {
     baseUrl: string;
+    display?: {
+        hideTeamBudgetForMembers?: boolean;
+        hideTeamBudgetForManagers?: boolean;
+    };
     keyGeneration?: {
         allowUnlimitedBudget: boolean;
         teamRequired: boolean;
@@ -423,6 +427,9 @@ export interface PaginatedAuditLogs {
 export interface TeamInfo {
     // (undocumented)
     budget_duration?: string;
+    budget_hidden?: boolean;
+    budget_pct?: number;
+    budget_status?: 'ok' | 'near' | 'over';
     // (undocumented)
     max_budget?: number;
     // (undocumented)

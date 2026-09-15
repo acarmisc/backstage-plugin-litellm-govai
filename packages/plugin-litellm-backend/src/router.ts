@@ -55,6 +55,11 @@ import {
   validateTeamWriteInput,
   validateTeamPatchInput,
 } from './teamAdmin';
+import {
+  readTeamBudgetVisibility,
+  redactTeamBudget,
+  redactTeamUsage,
+} from './teamBudgetVisibility';
 
 export { ProvisioningError };
 
@@ -137,6 +142,7 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
   const teamMgmtEnabled = isTeamManagementEnabled(config);
   const objectPermsEnabled = isObjectPermissionsEnabled(config);
   const teamAdminCfg = readTeamAdminConfig(config);
+  const teamBudgetVisibility = readTeamBudgetVisibility(config);
   const catalogClient = options.catalogClient ?? new CatalogClient({ discoveryApi: discovery });
 
   if (provisioningEnabled) {
@@ -154,6 +160,15 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
   if (config.getOptional('litellm.teamAdmin') && !teamMgmtEnabled) {
     logger.warn(
       'litellm.teamAdmin is configured but team management is disabled — set permission.enabled: true and litellm.teamAdmin.group to enable it.',
+    );
+  }
+
+  if (
+    teamBudgetVisibility.hideTeamBudgetForMembers ||
+    teamBudgetVisibility.hideTeamBudgetForManagers
+  ) {
+    logger.info(
+      `LiteLLM team budget hiding enabled — members: ${teamBudgetVisibility.hideTeamBudgetForMembers}, managers: ${teamBudgetVisibility.hideTeamBudgetForManagers}`,
     );
   }
 
@@ -178,6 +193,12 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
         maxBudgetCeiling: teamAdminCfg.maxBudgetCeiling,
         allowUnlimitedBudget: teamAdminCfg.allowUnlimitedBudget,
         objectPermissionsEnabled: objectPermsEnabled,
+      },
+      display: {
+        hideTeamBudgetForMembers:
+          teamBudgetVisibility.hideTeamBudgetForMembers,
+        hideTeamBudgetForManagers:
+          teamBudgetVisibility.hideTeamBudgetForManagers,
       },
     });
   });
@@ -697,7 +718,14 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
           }),
         ),
       );
-      res.json(teams.filter(Boolean) as TeamInfo[]);
+      const list = teams.filter(Boolean) as TeamInfo[];
+      // Member surface: strip dollar amounts when the operator hides them
+      // from members. Managers who need the numbers use /teams/managed.
+      res.json(
+        teamBudgetVisibility.hideTeamBudgetForMembers
+          ? list.map(redactTeamBudget)
+          : list,
+      );
     } catch (error: any) {
       if (error instanceof ProvisioningError) {
         res.status(error.status).json(error.body);
@@ -808,7 +836,12 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
     teamCreateInFlight.set(key, createPromise);
     try {
       const result = await createPromise;
-      res.json(result);
+      // Manager surface: redact dollars when hidden even from managers.
+      res.json(
+        teamBudgetVisibility.hideTeamBudgetForManagers
+          ? redactTeamBudget(result as TeamInfo)
+          : result,
+      );
     } catch (err: any) {
       sendTeamError(err, res);
     } finally {
@@ -867,7 +900,11 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
         teamId,
         owningGroup,
       });
-      res.json(r);
+      res.json(
+        teamBudgetVisibility.hideTeamBudgetForManagers
+          ? redactTeamBudget(r as TeamInfo)
+          : r,
+      );
     } catch (err: any) {
       sendTeamError(err, res);
     }
@@ -947,7 +984,12 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
           typeof t.metadata?.owning_group === 'string' &&
           t.metadata.owning_group === teamAdminCfg.group,
       );
-      res.json(owned);
+      // Manager surface: strip dollar amounts when hidden even from managers.
+      res.json(
+        teamBudgetVisibility.hideTeamBudgetForManagers
+          ? owned.map(redactTeamBudget)
+          : owned,
+      );
     } catch (err) {
       sendTeamError(err, res);
     }
@@ -1139,7 +1181,11 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
           owningGroup,
         });
         const updated = await withTeamFetchRetry(() => client.getTeamInfo(teamId));
-        res.json(updated);
+        res.json(
+          teamBudgetVisibility.hideTeamBudgetForManagers
+            ? redactTeamBudget(updated as TeamInfo)
+            : updated,
+        );
       } catch (err: any) {
         sendTeamError(err, res);
       }
@@ -1177,7 +1223,11 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
           owningGroup,
         });
         const updated = await withTeamFetchRetry(() => client.getTeamInfo(teamId));
-        res.json(updated);
+        res.json(
+          teamBudgetVisibility.hideTeamBudgetForManagers
+            ? redactTeamBudget(updated as TeamInfo)
+            : updated,
+        );
       } catch (err: any) {
         sendTeamError(err, res);
       }
@@ -1276,7 +1326,11 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
           owningGroup,
           vector_stores: requested,
         });
-        res.json(updated);
+        res.json(
+          teamBudgetVisibility.hideTeamBudgetForManagers
+            ? redactTeamBudget(updated as TeamInfo)
+            : updated,
+        );
       } catch (err: any) {
         sendTeamError(err, res);
       }
@@ -1376,7 +1430,11 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
           before,
           after: requested,
         });
-        res.json(updated);
+        res.json(
+          teamBudgetVisibility.hideTeamBudgetForManagers
+            ? redactTeamBudget(updated as TeamInfo)
+            : updated,
+        );
       } catch (err: any) {
         sendTeamError(err, res);
       }
@@ -1396,7 +1454,32 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
         start_date as string,
         end_date as string,
       );
-      res.json(usage);
+      // Spend figures would let a client derive a hidden budget
+      // (budget = spend / pct), so they follow the same hiding flags.
+      // Which flag applies depends on whether the caller is a team manager;
+      // catalog failures fail closed to the member rule.
+      let hide = teamBudgetVisibility.hideTeamBudgetForMembers;
+      if (teamAdminCfg.group) {
+        try {
+          const tokenEntityRef = await resolveUserId(req, auth);
+          const isManager =
+            !!tokenEntityRef &&
+            (await isUserMemberOfGroup(
+              tokenEntityRef,
+              teamAdminCfg.group,
+              catalogClient,
+              auth,
+              logger,
+            ));
+          hide = isManager
+            ? teamBudgetVisibility.hideTeamBudgetForManagers
+            : teamBudgetVisibility.hideTeamBudgetForMembers;
+        } catch (err: any) {
+          logger.warn(`Team-manager check failed, hiding team spend: ${err.message}`);
+          hide = teamBudgetVisibility.hideTeamBudgetForMembers;
+        }
+      }
+      res.json(hide ? redactTeamUsage(usage) : usage);
     } catch (error: any) {
       logger.error('Failed to fetch team usage', error);
       res.status(500).json({ error: error.message });

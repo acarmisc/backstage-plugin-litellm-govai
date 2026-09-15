@@ -18,6 +18,12 @@ export interface BudgetLimit {
   softLimit?: number;
   /** Share of the cap spent, 0..100+ (unclamped). */
   pct: number;
+  /**
+   * True when the backend redacted the dollar amounts (team budget hiding).
+   * `budget`/`spend` are then 0 and only `pct` carries the signal — render
+   * the meter without `$` figures.
+   */
+  hidden?: boolean;
 }
 
 /** The budgets that apply to the current user, grouped by enforcement level. */
@@ -88,8 +94,20 @@ export function buildBudgetSummary(
       : undefined;
 
   const teamLimits: BudgetLimit[] = teams
-    .filter(t => (t.max_budget ?? 0) > 0)
+    .filter(t => (t.max_budget ?? 0) > 0 || t.budget_hidden === true)
     .map(t => {
+      if (t.budget_hidden === true) {
+        return {
+          kind: 'team' as const,
+          label: t.team_alias || 'Untitled team',
+          sublabel: t.team_id,
+          budget: 0,
+          spend: 0,
+          budgetDuration: t.budget_duration,
+          pct: Math.min(100, Math.max(0, t.budget_pct ?? 0)),
+          hidden: true as const,
+        };
+      }
       const spend = t.spend ?? 0;
       return {
         kind: 'team' as const,

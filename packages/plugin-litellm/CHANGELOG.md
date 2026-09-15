@@ -10,6 +10,18 @@ commit/PR that bumps the version in `package.json`. Format follows the
 Earlier history: `git log -- packages/plugin-litellm` or the
  [GitHub tags](https://github.com/acarmisc/backstage-plugin-litellm-govai/tags).
 
+## 0.23.0
+
+### Minor Changes
+
+- feat: team budget hiding. When the backend redacts a team
+  (`budget_hidden`, via `litellm.display.hideTeamBudgetFor*`), Teams cards
+  show `Hidden` + `% used` meter + status pills instead of dollar figures,
+  the team daily-spend chart is omitted, and TEAM budget meters render
+  `% used` with a "Hidden by admin" note. The ManageTeamDialog budget field
+  becomes write-only when `display.hideTeamBudgetForManagers` is set (blank
+  keeps the current value).
+
 ## 0.22.0
 
 ### Minor Changes

@@ -10,6 +10,19 @@ commit/PR that bumps the version in `package.json`. Format follows the
 Earlier history: `git log -- packages/plugin-litellm-backend` or the
 [GitHub tags](https://github.com/acarmisc/backstage-plugin-litellm-govai/tags).
 
+## 0.13.0
+
+### Minor Changes
+
+- feat: independent `litellm.display.hideTeamBudgetForMembers` /
+  `hideTeamBudgetForManagers` flags (default `false`, `@visibility frontend`,
+  exposed via `GET /config`). When set, the backend redacts
+  `max_budget`/`spend` from `GET /teams` (member flag) and
+  `GET /teams/managed` plus team write responses (manager flag), emits
+  `budget_pct` / `budget_status` / `budget_hidden` instead, and zeroes spend
+  in `GET /teams/:id/usage` for affected callers so the cap cannot be
+  derived as `spend / pct`. Unlimited teams are never redacted.
+
 ## 0.12.0
 
 ### Minor Changes

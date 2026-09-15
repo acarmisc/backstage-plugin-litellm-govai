@@ -196,13 +196,19 @@ const LimitCard: React.FC<{ limit: BudgetLimit }> = ({ limit }) => {
             </Typography>
           )}
         </Box>
-        <Typography variant="body2" sx={{ fontWeight: 600, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
-          {fmtUsd(limit.spend)}
-          <Box component="span" color="text.secondary" sx={{ fontWeight: 400 }}>
-            {' / '}
-            {fmtUsd(limit.budget)}
-          </Box>
-        </Typography>
+        {limit.hidden ? (
+          <Typography variant="body2" sx={{ fontWeight: 600, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
+            {pct}% used
+          </Typography>
+        ) : (
+          <Typography variant="body2" sx={{ fontWeight: 600, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
+            {fmtUsd(limit.spend)}
+            <Box component="span" color="text.secondary" sx={{ fontWeight: 400 }}>
+              {' / '}
+              {fmtUsd(limit.budget)}
+            </Box>
+          </Typography>
+        )}
       </Box>
       <Box sx={{ mt: 1 }}>
         <Meter value={limit.pct} tone={tone} height={6} />
@@ -217,8 +223,11 @@ const LimitCard: React.FC<{ limit: BudgetLimit }> = ({ limit }) => {
         }}
       >
         <Typography variant="caption" color="text.secondary" sx={{ fontVariantNumeric: 'tabular-nums' }}>
-          {pct}% of budget
-          {closeTo && ` · soft-limit warning`}
+          {limit.hidden ? (
+            <>Hidden by admin</>
+          ) : (
+            <>{pct}% of budget{closeTo && ` · soft-limit warning`}</>
+          )}
         </Typography>
         <Typography variant="caption" color="text.secondary">
           {fmtBudgetDuration(limit.budgetDuration)

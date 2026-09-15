@@ -122,6 +122,10 @@ export const ManageTeamDialog: FC<ManageTeamDialogProps> = ({
   const allowUnlimitedBudget = config?.teamManagement?.allowUnlimitedBudget ?? false;
   const maxBudgetCeiling =
     config?.teamManagement?.maxBudgetCeiling ?? FALLBACK_BUDGET_CEILING;
+  // When budgets are hidden even from managers, the field becomes write-only:
+  // the current value is never shown, and leaving it blank keeps it unchanged.
+  const hideBudgetForManagers = config?.display?.hideTeamBudgetForManagers ?? false;
+  const budgetWriteOnly = hideBudgetForManagers && mode === 'edit';
 
   const members = useMemo(() => team?.members_with_roles ?? [], [team]);
   const showMembers = mode === 'edit' && !!canManageMembers;
@@ -170,9 +174,14 @@ export const ManageTeamDialog: FC<ManageTeamDialogProps> = ({
       if (mode === 'edit' && team) {
         setAlias(team.team_alias ?? '');
         setModels(team.models ?? []);
-        setMaxBudget(
-          team.max_budget ? String(team.max_budget) : String(maxBudgetCeiling),
-        );
+        if (hideBudgetForManagers) {
+          // Write-only: never prefill (the backend redacts the value anyway).
+          setMaxBudget('');
+        } else {
+          setMaxBudget(
+            team.max_budget ? String(team.max_budget) : String(maxBudgetCeiling),
+          );
+        }
         setUnlimited(allowUnlimitedBudget && !team.max_budget);
         setBudgetDuration(team.budget_duration ?? DEFAULT_BUDGET_DURATION);
       } else {
@@ -193,7 +202,7 @@ export const ManageTeamDialog: FC<ManageTeamDialogProps> = ({
       setMcpIds(team?.object_permission?.mcp_servers ?? []);
       setMcpError(null);
     }
-  }, [open, mode, team, allowUnlimitedBudget, maxBudgetCeiling]);
+  }, [open, mode, team, allowUnlimitedBudget, maxBudgetCeiling, hideBudgetForManagers]);
 
   const handleSubmit = async () => {
     setError(null);
@@ -209,18 +218,22 @@ export const ManageTeamDialog: FC<ManageTeamDialogProps> = ({
     }
 
     if (!unlimited) {
-      if (!maxBudget) {
-        setError('Budget is required when unlimited budgets are disabled');
-        return;
-      }
-      const budget = parseFloat(maxBudget);
-      if (isNaN(budget) || budget <= 0) {
-        setError('Budget must be a positive number');
-        return;
-      }
-      if (budget > maxBudgetCeiling) {
-        setError(`Budget cannot exceed $${maxBudgetCeiling}`);
-        return;
+      // Write-only mode: a blank budget leaves the hidden value unchanged.
+      const budgetLeftBlank = budgetWriteOnly && !maxBudget.trim();
+      if (!budgetLeftBlank) {
+        if (!maxBudget) {
+          setError('Budget is required when unlimited budgets are disabled');
+          return;
+        }
+        const budget = parseFloat(maxBudget);
+        if (isNaN(budget) || budget <= 0) {
+          setError('Budget must be a positive number');
+          return;
+        }
+        if (budget > maxBudgetCeiling) {
+          setError(`Budget cannot exceed $${maxBudgetCeiling}`);
+          return;
+        }
       }
     }
 
@@ -236,10 +249,18 @@ export const ManageTeamDialog: FC<ManageTeamDialogProps> = ({
           ...(budgetDuration && { budget_duration: budgetDuration }),
         } as CreateTeamRequest;
       } else {
+        // Write-only mode: a blank budget omits the field (leave unchanged).
+        // Otherwise validation above guarantees a non-empty value here.
+        let budgetField: { max_budget?: number | null } = {};
+        if (unlimited) {
+          budgetField = { max_budget: null };
+        } else if (maxBudget.trim()) {
+          budgetField = { max_budget: parseFloat(maxBudget) };
+        }
         payload = {
           team_alias: alias.trim(),
           models,
-          ...(unlimited ? { max_budget: null } : { max_budget: parseFloat(maxBudget) }),
+          ...budgetField,
           ...(budgetDuration && { budget_duration: budgetDuration }),
         } as UpdateTeamRequest;
       }
@@ -359,13 +380,17 @@ export const ManageTeamDialog: FC<ManageTeamDialogProps> = ({
         />
 
         <TextField
-          label="Max Budget ($)"
+          label={budgetWriteOnly ? 'New Max Budget ($)' : 'Max Budget ($)'}
           type="number"
           value={maxBudget}
           onChange={e => setMaxBudget(e.target.value)}
           disabled={submitting || unlimited}
           inputProps={{ min: 0, max: maxBudgetCeiling }}
-          helperText={`Maximum: $${maxBudgetCeiling}`}
+          helperText={
+            budgetWriteOnly
+              ? 'Current budget is hidden — leave blank to keep it, or enter a new value'
+              : `Maximum: $${maxBudgetCeiling}`
+          }
           fullWidth
         />
 

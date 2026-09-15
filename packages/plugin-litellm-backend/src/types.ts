@@ -37,6 +37,16 @@ export interface TeamInfo {
   /** Spend-reset period for max_budget, e.g. "30d". */
   budget_duration?: string;
   spend: number;
+  /**
+   * Share of max_budget consumed (0-100), present only on redacted records.
+   * Set by the backend when litellm.display.hideTeamBudgetFor* is enabled so
+   * clients can render the consumption level without dollar amounts.
+   */
+  budget_pct?: number;
+  /** ok | near (>=80%) | over (>=100%), present only on redacted records. */
+  budget_status?: 'ok' | 'near' | 'over';
+  /** True when max_budget/spend were stripped by budget hiding. */
+  budget_hidden?: boolean;
   members_with_roles?: TeamMember[];
   models?: string[];
   tpm_limit?: number;

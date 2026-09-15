@@ -376,6 +376,8 @@ export interface LiteLLMUserKey {
     // (undocumented)
     blocked?: boolean | null;
     // (undocumented)
+    budget_duration?: string | null;
+    // (undocumented)
     created_at: string;
     // (undocumented)
     expires?: string | null;
@@ -489,6 +491,15 @@ export function readRoleConfigs(config: Config): RoleConfig[];
 // @public
 export function readTeamAdminConfig(config: Config): TeamAdminConfig;
 
+// @public (undocumented)
+export function readTeamBudgetVisibility(config: Config): TeamBudgetVisibility;
+
+// @public
+export function redactTeamBudget(team: TeamInfo): TeamInfo;
+
+// @public
+export function redactTeamUsage(usage: UsageMetrics): UsageMetrics;
+
 // @public
 export function resolveBridgeUserId(claims: BridgeClaims, userIdDomain?: string): string;
 
@@ -546,9 +557,27 @@ export interface TeamAdminConfig {
     maxBudgetCeiling: number;
 }
 
+// @public
+export type TeamBudgetStatus = 'ok' | 'near' | 'over';
+
+// @public (undocumented)
+export function teamBudgetStatusFor(spend: number, budget: number): TeamBudgetStatus;
+
+// @public
+export interface TeamBudgetVisibility {
+    // (undocumented)
+    hideTeamBudgetForManagers: boolean;
+    // (undocumented)
+    hideTeamBudgetForMembers: boolean;
+}
+
 // @public (undocumented)
 export interface TeamInfo {
     blocked?: boolean;
+    budget_duration?: string;
+    budget_hidden?: boolean;
+    budget_pct?: number;
+    budget_status?: 'ok' | 'near' | 'over';
     // (undocumented)
     max_budget?: number;
     // (undocumented)
@@ -777,6 +806,7 @@ export interface UsageModelBreakdown {
 
 // @public (undocumented)
 export interface UserInfo {
+    budget_duration?: string;
     can_view_audit?: boolean;
     // (undocumented)
     current_spend?: number;
@@ -812,6 +842,8 @@ export function validateTeamWriteInput(input: TeamWriteInput, cfg: TeamAdminConf
 export interface VirtualKey {
     // (undocumented)
     blocked?: boolean;
+    // (undocumented)
+    budget_duration?: string;
     // (undocumented)
     created_at: string;
     // (undocumented)

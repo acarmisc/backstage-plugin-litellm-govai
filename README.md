@@ -174,6 +174,22 @@ litellm:
     # Set to false to allow personal, team-less keys.
     teamRequired: true   # default
 
+  # Optional — hide real team budget dollars while still showing the level
+  # of consumption (percent of cap, ok/near/over status, reset window).
+  # The two flags are independent and enforced server-side (the backend
+  # redacts max_budget/spend, including team usage spend so the budget
+  # cannot be derived as spend / pct).
+  display:
+    # Hide dollars from regular team members (Teams cards, TEAM budget
+    # meters, team daily-spend chart). Managers still see dollars unless
+    # hideTeamBudgetForManagers is also set.
+    hideTeamBudgetForMembers: false   # default
+
+    # Hide dollars even from team managers (managed teams, write responses,
+    # team usage). The ManageTeamDialog budget field becomes write-only:
+    # blank keeps the current value, a new value overwrites it.
+    hideTeamBudgetForManagers: false  # default
+
   # Optional — delegated team management (see "Team Management" below).
   # The whole feature is fail-closed: it stays dark unless `permission.enabled`
   # is true AND `group` is set. Every list below is an allowlist that starts
@@ -231,6 +247,8 @@ litellm:
 | `litellm.provisioning.roles[].metadata` | object | no | — | Merged over default metadata |
 | `litellm.keyGeneration.allowUnlimitedBudget` | boolean | no | `false` | Show the "Unlimited budget" checkbox in the Generate New Key form |
 | `litellm.keyGeneration.teamRequired` | boolean | no | `true` | Require a team to be selected before a key can be generated |
+| `litellm.display.hideTeamBudgetForMembers` | boolean | no | `false` | Hide team budget dollars from members (percent + status still shown, enforced server-side) |
+| `litellm.display.hideTeamBudgetForManagers` | boolean | no | `false` | Hide team budget dollars even from managers (budget field becomes write-only) |
 | `litellm.teamAdmin.group` | string | no† | — | Backstage group whose members may manage teams. Setting this + `permission.enabled` enables the feature |
 | `litellm.teamAdmin.allowedModels` | string[] | no | `[]` | Models a team admin may assign to a team |
 | `litellm.teamAdmin.allowedModelAccessGroups` | string[] | no | `[]` | Model access-group names a team admin may assign |
@@ -480,6 +498,36 @@ relations, not token claims.)
   and is best avoided — block a team instead.
 - Team / member / access changes appear in the **Audit Log** tab under the
   `Team`, `Team member`, and `Team access (KB / MCP)` table filters.
+
+## Hiding team budgets (`litellm.display`)
+
+When team budgets are finance-sensitive, `litellm.display` hides the real
+dollar amounts while still showing the level of consumption. The two flags
+are independent:
+
+- `hideTeamBudgetForMembers` — members see `72% used` + `Over budget` /
+  `Near limit` pills + reset window on Teams cards and TEAM budget meters;
+  the `Budget` stat reads `Hidden` and the team daily-spend chart is omitted.
+- `hideTeamBudgetForManagers` — same treatment on the manager surface
+  (managed teams, team write responses, team usage). The ManageTeamDialog
+  budget field becomes write-only: blank keeps the current value.
+
+Enforcement is server-side: the backend strips `max_budget`/`spend` from
+`GET /teams` (member flag) and `GET /teams/managed` plus team write
+responses (manager flag), emits `budget_pct` / `budget_status` /
+`budget_hidden` instead, and zeroes spend in `GET /teams/:id/usage` for
+affected callers (otherwise `budget = spend / pct` would leak the cap).
+Which usage flag applies depends on whether the caller belongs to
+`litellm.teamAdmin.group`; catalog failures fail closed to the member rule.
+Unlimited teams (no budget) are never redacted — there are no dollars to
+hide.
+
+```yaml
+litellm:
+  display:
+    hideTeamBudgetForMembers: true
+    hideTeamBudgetForManagers: false
+```
 
 ## Development
 

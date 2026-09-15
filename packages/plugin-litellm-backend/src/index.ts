@@ -25,6 +25,13 @@ export {
 } from './teamAdmin';
 export type { TeamAdminConfig, TeamAdminCheck, TeamWriteInput, TeamWriteValidation, TeamPatchValidation } from './teamAdmin';
 export {
+  readTeamBudgetVisibility,
+  redactTeamBudget,
+  redactTeamUsage,
+  teamBudgetStatusFor,
+} from './teamBudgetVisibility';
+export type { TeamBudgetVisibility, TeamBudgetStatus } from './teamBudgetVisibility';
+export {
   KeycloakJWTVerifier,
   newDefaultVerifier,
   readBridgeConfig,

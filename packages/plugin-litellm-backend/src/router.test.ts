@@ -83,6 +83,7 @@ function mockClient(overrides: {
   getTeamInfo?: (id: string) => Promise<any>;
   listTeams?: () => Promise<any[]>;
   getUsage?: (s: string, e: string, uid?: string) => Promise<UsageMetrics>;
+  getTeamUsage?: (teamId: string, s: string, e: string) => Promise<UsageMetrics>;
   getAuditLogs?: (p: any) => Promise<any>;
   createTeam?: (r: any) => Promise<any>;
   updateTeam?: (r: any) => Promise<any>;
@@ -105,6 +106,7 @@ function mockClient(overrides: {
     getTeamInfo: [],
     listTeams: [],
     getUsage: [],
+    getTeamUsage: [],
     getAuditLogs: [],
     createTeam: [],
     updateTeam: [],
@@ -195,12 +197,17 @@ function mockClient(overrides: {
             daily_usage: [], daily_by_model: [],
           });
     },
-    getTeamUsage: () => Promise.resolve({
-      total_spend: 0, total_tokens: 0, prompt_tokens: 0,
-      completion_tokens: 0, api_requests: 0, successful_requests: 0,
-      failed_requests: 0, usage_by_model: {}, usage_by_key: {},
-      daily_usage: [], daily_by_model: [],
-    }),
+    getTeamUsage: (teamId: string, s?: string, e?: string) => {
+      calls.getTeamUsage.push({ teamId, s, e });
+      return overrides.getTeamUsage
+        ? overrides.getTeamUsage(teamId, s!, e!)
+        : Promise.resolve({
+          total_spend: 0, total_tokens: 0, prompt_tokens: 0,
+          completion_tokens: 0, api_requests: 0, successful_requests: 0,
+          failed_requests: 0, usage_by_model: {}, usage_by_key: {},
+          daily_usage: [], daily_by_model: [],
+        });
+    },
     getAuditLogs: (p: any) => {
       calls.getAuditLogs.push(p);
       return overrides.getAuditLogs
@@ -2381,5 +2388,246 @@ describe('router /provisioning/preview', () => {
       await new Promise<void>(r => h.server.close(() => r()));
       void CatalogClient;
     }
+  });
+});
+describe('team budget visibility', () => {
+  const teamRecord = {
+    team_id: 't1',
+    team_alias: 'Squad',
+    max_budget: 500,
+    budget_duration: '30d',
+    spend: 460,
+  };
+  const unlimitedTeam = { team_id: 't-free', spend: 12.5 };
+
+  async function close(h: Harness) {
+    await new Promise<void>(r => h.server.close(() => r()));
+  }
+
+  test('/config exposes display flags defaulting to false', async () => {
+    const h = await startHarness({});
+    try {
+      const { body } = await req(h.baseUrl, 'GET', '/config');
+      assert.strictEqual(body.display.hideTeamBudgetForMembers, false);
+      assert.strictEqual(body.display.hideTeamBudgetForManagers, false);
+    } finally {
+      await close(h);
+    }
+  });
+
+  test('/config reflects the display flags', async () => {
+    const h = await startHarness({
+      config: {
+        'litellm.display.hideTeamBudgetForMembers': true,
+        'litellm.display.hideTeamBudgetForManagers': true,
+      },
+    });
+    try {
+      const { body } = await req(h.baseUrl, 'GET', '/config');
+      assert.strictEqual(body.display.hideTeamBudgetForMembers, true);
+      assert.strictEqual(body.display.hideTeamBudgetForManagers, true);
+    } finally {
+      await close(h);
+    }
+  });
+
+  test('GET /teams redacts dollars when hideTeamBudgetForMembers is set', async () => {
+    const h = await startHarness({
+      config: {
+        'litellm.userIdDomain': 'example.com',
+        'litellm.display.hideTeamBudgetForMembers': true,
+      },
+      client: mockClient({
+        userInfo: { user_id: 'alice@example.com', teams: ['t1', 't-free'] },
+        getTeamInfo: async (id: string) =>
+          id === 't1' ? { ...teamRecord } : { ...unlimitedTeam },
+      }),
+    });
+    try {
+      const { status, body } = await req(h.baseUrl, 'GET', '/teams', {
+        authRef: 'user:default/alice',
+      });
+      assert.strictEqual(status, 200);
+      assert.strictEqual(body.length, 2);
+      const redacted = body.find((t: any) => t.team_id === 't1');
+      assert.strictEqual(redacted.max_budget, undefined);
+      assert.strictEqual(redacted.spend, 0);
+      assert.strictEqual(redacted.budget_hidden, true);
+      assert.strictEqual(redacted.budget_status, 'near'); // 460/500 = 92%
+      assert.ok(Math.abs(redacted.budget_pct - 92) < 1e-9);
+      assert.strictEqual(redacted.budget_duration, '30d');
+      // Unlimited teams carry no dollars to hide — untouched.
+      const free = body.find((t: any) => t.team_id === 't-free');
+      assert.strictEqual(free.budget_hidden, undefined);
+      assert.strictEqual(free.spend, 12.5);
+    } finally {
+      await close(h);
+    }
+  });
+
+  test('GET /teams keeps dollars when the flag is off', async () => {
+    const h = await startHarness({
+      config: { 'litellm.userIdDomain': 'example.com' },
+      client: mockClient({
+        userInfo: { user_id: 'alice@example.com', teams: ['t1'] },
+        getTeamInfo: async () => ({ ...teamRecord }),
+      }),
+    });
+    try {
+      const { body } = await req(h.baseUrl, 'GET', '/teams', {
+        authRef: 'user:default/alice',
+      });
+      assert.strictEqual(body[0].max_budget, 500);
+      assert.strictEqual(body[0].spend, 460);
+      assert.strictEqual(body[0].budget_hidden, undefined);
+    } finally {
+      await close(h);
+    }
+  });
+
+  test('GET /teams/managed redacts only when hideTeamBudgetForManagers is set', async () => {
+    const managedTeam = {
+      ...teamRecord,
+      metadata: { owning_group: 'group:default/admins' },
+    };
+    const startManaged = (displayConfig: Record<string, any>) =>
+      startHarness({
+        config: {
+          'permission.enabled': true,
+          'litellm.teamAdmin.group': 'group:default/admins',
+          ...displayConfig,
+        },
+        client: mockClient({ listTeams: async () => [{ ...managedTeam }] }),
+        catalogClient: mockCatalog(['group:default/admins']),
+      });
+    const h1 = await startManaged({});
+    try {
+      const { body } = await req(h1.baseUrl, 'GET', '/teams/managed', {
+        authRef: 'user:default/alice',
+      });
+      assert.strictEqual(body[0].max_budget, 500);
+    } finally {
+      await close(h1);
+    }
+    const h2 = await startManaged({
+      'litellm.display.hideTeamBudgetForManagers': true,
+    });
+    try {
+      const { body } = await req(h2.baseUrl, 'GET', '/teams/managed', {
+        authRef: 'user:default/alice',
+      });
+      assert.strictEqual(body[0].max_budget, undefined);
+      assert.strictEqual(body[0].budget_hidden, true);
+      assert.strictEqual(body[0].budget_status, 'near');
+    } finally {
+      await close(h2);
+    }
+  });
+
+  test('GET /teams/:id/usage zeroes spend when the member flag is set', async () => {
+    const spendy = {
+      total_spend: 123.45, total_tokens: 1000, prompt_tokens: 600,
+      completion_tokens: 400, api_requests: 10, successful_requests: 9,
+      failed_requests: 1,
+      usage_by_model: { 'gpt-4o': {
+        total_spend: 123.45, total_tokens: 1000, prompt_tokens: 600,
+        completion_tokens: 400, api_requests: 10, successful_requests: 9,
+        failed_requests: 1,
+      } },
+      usage_by_key: {},
+      daily_usage: [{
+        date: '2026-01-01', spend: 123.45, total_tokens: 1000,
+        prompt_tokens: 600, completion_tokens: 400, api_requests: 10,
+        successful_requests: 9, failed_requests: 1,
+      }],
+      daily_by_model: [],
+    };
+    const h = await startHarness({
+      config: { 'litellm.display.hideTeamBudgetForMembers': true },
+      client: mockClient({ getTeamUsage: async () => ({ ...spendy }) }),
+    });
+    try {
+      const { status, body } = await req(
+        h.baseUrl, 'GET', '/teams/t1/usage?start_date=2026-01-01&end_date=2026-01-31',
+        { authRef: 'user:default/alice' },
+      );
+      assert.strictEqual(status, 200);
+      assert.strictEqual(body.total_spend, 0);
+      assert.strictEqual(body.usage_by_model['gpt-4o'].total_spend, 0);
+      assert.strictEqual(body.daily_usage[0].spend, 0);
+      // Non-monetary signal survives.
+      assert.strictEqual(body.total_tokens, 1000);
+      assert.strictEqual(body.api_requests, 10);
+    } finally {
+      await close(h);
+    }
+  });
+
+  test('GET /teams/:id/usage keeps spend when no flag is set', async () => {
+    const h = await startHarness({
+      client: mockClient({
+        getTeamUsage: async () => ({
+          total_spend: 7.5, total_tokens: 50, prompt_tokens: 30,
+          completion_tokens: 20, api_requests: 2, successful_requests: 2,
+          failed_requests: 0, usage_by_model: {}, usage_by_key: {},
+          daily_usage: [], daily_by_model: [],
+        }),
+      }),
+    });
+    try {
+      const { body } = await req(
+        h.baseUrl, 'GET', '/teams/t1/usage?start_date=2026-01-01&end_date=2026-01-31',
+        { authRef: 'user:default/alice' },
+      );
+      assert.strictEqual(body.total_spend, 7.5);
+    } finally {
+      await close(h);
+    }
+  });
+});
+
+describe('teamBudgetVisibility helpers', () => {
+  test('redactTeamBudget marks over-budget teams as over', async () => {
+    const { redactTeamBudget } = await import('./teamBudgetVisibility');
+    const out = redactTeamBudget({ team_id: 't', spend: 600, max_budget: 500 } as any);
+    assert.strictEqual(out.budget_hidden, true);
+    assert.strictEqual(out.budget_status, 'over');
+    assert.strictEqual(out.budget_pct, 100); // clamped for the meter
+    assert.strictEqual(out.max_budget, undefined);
+  });
+
+  test('redactTeamUsage zeroes every spend field', async () => {
+    const { redactTeamUsage } = await import('./teamBudgetVisibility');
+    const out = redactTeamUsage({
+      total_spend: 5, total_tokens: 10, prompt_tokens: 6,
+      completion_tokens: 4, api_requests: 1, successful_requests: 1,
+      failed_requests: 0,
+      usage_by_model: { m: {
+        total_spend: 5, total_tokens: 10, prompt_tokens: 6,
+        completion_tokens: 4, api_requests: 1, successful_requests: 1,
+        failed_requests: 0,
+      } },
+      usage_by_key: { k: {
+        total_spend: 5, total_tokens: 10, prompt_tokens: 6,
+        completion_tokens: 4, api_requests: 1, successful_requests: 1,
+        failed_requests: 0,
+      } },
+      daily_usage: [{
+        date: 'd', spend: 5, total_tokens: 10, prompt_tokens: 6,
+        completion_tokens: 4, api_requests: 1, successful_requests: 1,
+        failed_requests: 0,
+      }],
+      daily_by_model: [{
+        date: 'd', model: 'm', spend: 5, prompt_tokens: 6,
+        completion_tokens: 4, total_tokens: 10, api_requests: 1,
+        successful_requests: 1, failed_requests: 0,
+      }],
+    } as any);
+    assert.strictEqual(out.total_spend, 0);
+    assert.strictEqual(out.usage_by_model.m.total_spend, 0);
+    assert.strictEqual(out.usage_by_key.k.total_spend, 0);
+    assert.strictEqual(out.daily_usage[0].spend, 0);
+    assert.strictEqual(out.daily_by_model[0].spend, 0);
+    assert.strictEqual(out.total_tokens, 10);
   });
 });

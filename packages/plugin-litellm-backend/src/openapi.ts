@@ -74,6 +74,10 @@ export const openApiSpec: OpenApiSpec = {
                 allowUnlimitedBudget: { type: 'boolean' },
                 teamRequired: { type: 'boolean' },
               } },
+              display: { type: 'object', properties: {
+                hideTeamBudgetForMembers: { type: 'boolean' },
+                hideTeamBudgetForManagers: { type: 'boolean' },
+              } },
             } } } },
           },
         },
@@ -177,6 +181,10 @@ export const openApiSpec: OpenApiSpec = {
       get: {
         tags: ['Teams'],
         summary: 'List teams the current user belongs to',
+        description:
+          'When litellm.display.hideTeamBudgetForMembers is set, max_budget/spend ' +
+          'are stripped and budget_pct/budget_status/budget_hidden carry the ' +
+          'consumption level instead.',
         responses: { '200': { description: 'Array of teams' } },
       },
     },
@@ -184,6 +192,9 @@ export const openApiSpec: OpenApiSpec = {
       get: {
         tags: ['Teams'],
         summary: 'Usage metrics for a team',
+        description:
+          'Spend fields are zeroed when the caller is subject to team budget ' +
+          'hiding (member or manager flag, whichever applies to them).',
         parameters: [
           { name: 'teamId', in: 'path', required: true, schema: { type: 'string' } },
           { name: 'start_date', in: 'query', required: true, schema: { type: 'string' } },

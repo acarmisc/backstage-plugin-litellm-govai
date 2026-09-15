@@ -33,6 +33,12 @@ export interface TeamInfo {
   max_budget?: number;
   budget_duration?: string;
   spend: number;
+  /** Share of max_budget consumed (0-100), present only on redacted records. */
+  budget_pct?: number;
+  /** ok | near (>=80%) | over (>=100%), present only on redacted records. */
+  budget_status?: 'ok' | 'near' | 'over';
+  /** True when the backend stripped max_budget/spend (budget hiding enabled). */
+  budget_hidden?: boolean;
   members_with_roles?: TeamMember[];
   models?: string[];
   tpm_limit?: number;
@@ -190,6 +196,13 @@ export interface LiteLlmConfig {
     allowUnlimitedBudget: boolean;
     /** Whether knowledge-base / MCP management routes are enabled (opt-in). */
     objectPermissionsEnabled?: boolean;
+  };
+  /** Team-budget hiding switches, set via litellm.display in app-config.yaml. */
+  display?: {
+    /** Dollars hidden from regular members (percent + status still shown). */
+    hideTeamBudgetForMembers?: boolean;
+    /** Dollars hidden even from team managers (budget field becomes write-only). */
+    hideTeamBudgetForManagers?: boolean;
   };
 }
 
