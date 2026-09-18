@@ -60,6 +60,7 @@ import {
   redactTeamBudget,
   redactTeamUsage,
 } from './teamBudgetVisibility';
+import { readOpencodeConfig } from './opencode';
 
 export { ProvisioningError };
 
@@ -108,6 +109,25 @@ async function withTeamFetchRetry<T>(
   }
 }
 
+/**
+ * Only loopback http://localhost:<port>/callback redirect URIs are accepted —
+ * the OpenCode plugin runs its callback listener on 127.0.0.1. This
+ * keeps the flow from being usable as an open redirect.
+ */
+function isValidRedirectUri(uri: string | undefined): boolean {
+  if (!uri) return false;
+  try {
+    const url = new URL(uri);
+    return (
+      url.protocol === 'http:' &&
+      (url.hostname === 'localhost' || url.hostname === '127.0.0.1') &&
+      url.pathname === '/callback'
+    );
+  } catch {
+    return false;
+  }
+}
+
 export interface RouterOptions {
   config: Config;
   logger: any;
@@ -143,6 +163,7 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
   const objectPermsEnabled = isObjectPermissionsEnabled(config);
   const teamAdminCfg = readTeamAdminConfig(config);
   const teamBudgetVisibility = readTeamBudgetVisibility(config);
+  const opencodeCfg = readOpencodeConfig(config);
   const catalogClient = options.catalogClient ?? new CatalogClient({ discoveryApi: discovery });
 
   if (provisioningEnabled) {
@@ -188,6 +209,7 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
     res.json({
       baseUrl: publicBaseUrl,
       keyGeneration: { allowUnlimitedBudget, teamRequired },
+      opencode: { enabled: opencodeCfg.enabled },
       teamManagement: {
         enabled: teamMgmtEnabled,
         maxBudgetCeiling: teamAdminCfg.maxBudgetCeiling,
@@ -520,6 +542,148 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
       res.status(500).json({ error: error.message });
     }
   });
+
+  // ── OpenCode SSO-connect ─────────────────────────────────────────────────
+  //
+  // Client side: the opencode-portal-auth plugin. Handshake contract (see
+  // that package's README):
+  //
+  //   GET /opencode/connect?team=<id>&redirect_uri=http://localhost:<port>/callback
+  //     → (SSO-authenticated) generate/reuse a virtual key bound to the
+  //       user and optional team → 302 {redirect_uri}?key=<api-key>
+  //
+  // Mounted only when litellm.opencode.enabled is true. Key creation is
+  // gated by the same litellmKeyCreatePermission as POST /keys/generate.
+  if (opencodeCfg.enabled) {
+    logger.info(
+      `OpenCode connect endpoint enabled — duration=${opencodeCfg.keyDuration}, maxBudget=$${opencodeCfg.maxBudget}`,
+    );
+
+    router.get('/opencode/connect', async (req: Request, res: Response) => {
+      try {
+        // The request comes from the browser (user session), so SSO
+        // auth applies exactly like for any other UI route.
+        const tokenEntityRef = await resolveUserId(req, auth);
+        if (!tokenEntityRef) {
+          res.status(401).json({ error: 'Authentication required' });
+          return;
+        }
+
+        const redirectUri = req.query.redirect_uri as string | undefined;
+        if (!isValidRedirectUri(redirectUri)) {
+          res.status(400).json({
+            error: 'Invalid redirect_uri — expected http://localhost:<port>/callback',
+          });
+          return;
+        }
+
+        if (!(await assertPermission(req, litellmKeyCreatePermission))) {
+          sendPermissionDenied(res, litellmKeyCreatePermission);
+          return;
+        }
+
+        const userId = toLiteLLMUserId(tokenEntityRef, userIdDomain);
+        const userInfo = await getOrProvisionUser(
+          client,
+          tokenEntityRef,
+          userId,
+          provisioningEnabled,
+          provisioningDefaults,
+          roleConfigs,
+          catalogClient,
+          auth,
+          logger,
+        );
+
+        // Optional team binding: must be one of the user's own teams so
+        // the connect flow can never mint a key billed to someone else.
+        const teamId = req.query.team as string | undefined;
+        if (teamId) {
+          const userTeams = userInfo?.teams ?? [];
+          if (!userTeams.includes(teamId)) {
+            res.status(403).json({
+              error: 'Access denied: team is not one of your teams',
+              team: teamId,
+            });
+            return;
+          }
+        } else if (opencodeCfg.requireTeam) {
+          res.status(400).json({ error: 'A team is required for this connection' });
+          return;
+        }
+
+        // Alias is stable per user+team so re-connecting rotates the same
+        // logical key slot instead of accumulating duplicates. LiteLLM
+        // rejects duplicate aliases, so on conflict we look up the existing
+        // key and reuse it (the user gets a working connection either way).
+        const alias = teamId
+          ? `opencode-${userId}-${teamId}`
+          : `opencode-${userId}`;
+        const existing = await client
+          .listKeys(userId)
+          .catch(() => [] as VirtualKey[]);
+
+        // Reuse a healthy existing key for this slot rather than failing
+        // on the alias collision LiteLLM would raise. Blocked keys are
+        // skipped so a blocked slot can be recovered by re-connecting.
+        const reusable = existing.find(
+          k =>
+            k.key_alias === alias &&
+            !k.blocked &&
+            k.user_id === userId,
+        );
+
+        let key: string;
+        if (reusable?.token ?? reusable?.key) {
+          key = reusable.token ?? reusable.key!;
+        } else {
+          const profile = await resolveUserProfile(
+            tokenEntityRef,
+            catalogClient,
+            auth,
+            logger,
+          );
+          const result = await client.generateKey({
+            alias,
+            duration: opencodeCfg.keyDuration,
+            max_budget: opencodeCfg.maxBudget,
+            team_id: teamId,
+            metadata: {
+              ...opencodeCfg.metadata,
+              created_via: 'opencode-connect',
+              created_by_backstage_user: tokenEntityRef,
+              ...(profile.email && { created_by_email: profile.email }),
+              ...(teamId && { opencode_team: teamId }),
+            },
+            user_id: userId,
+          } as GenerateKeyRequest);
+          if (!result.key) {
+            res.status(502).json({ error: 'LiteLLM returned no key material' });
+            return;
+          }
+          key = result.key;
+        }
+
+        const url = new URL(redirectUri!);
+        url.searchParams.set('key', key);
+        if (teamId) url.searchParams.set('team', teamId);
+        logger.info({
+          action: 'opencode.connect',
+          userId,
+          team: teamId ?? null,
+          reused: Boolean(reusable?.token ?? reusable?.key),
+        });
+        res.redirect(302, url.href);
+      } catch (error: any) {
+        if (error instanceof ProvisioningError) {
+          res.status(error.status).json(error.body);
+          return;
+        }
+        logger.error('OpenCode connect failed', error);
+        res.status(500).json({ error: error.message });
+      }
+    });
+  }
 
   router.post('/keys/:keyId/update', async (req: Request, res: Response) => {
     try {

@@ -346,6 +346,36 @@ function mockCatalog(memberOf: string[] = [], kind: string = 'User'): any {
   };
 }
 
+/**
+ * Like req() but does not follow redirects — returns the raw Location
+ * header so connect-flow tests can assert on the 302 target.
+ */
+function reqNoRedirect(
+  baseUrl: string,
+  path: string,
+  opts: { authRef?: string } = {},
+): Promise<{ status: number; location?: string; body: any }> {
+  return new Promise((resolve, reject) => {
+    const headers: Record<string, string> = {};
+    if (opts.authRef !== undefined) headers.authorization = `Bearer ${opts.authRef}`;
+    const r = http.request(`${baseUrl}${path}`, { method: 'GET', headers }, res => {
+      let data = '';
+      res.on('data', (c) => (data += c));
+      res.on('end', () => {
+        let parsed: any;
+        try { parsed = data ? JSON.parse(data) : {}; } catch { parsed = data; }
+        resolve({
+          status: res.statusCode ?? 0,
+          location: res.headers.location,
+          body: parsed,
+        });
+      });
+    });
+    r.on('error', reject);
+    r.end();
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -2629,5 +2659,194 @@ describe('teamBudgetVisibility helpers', () => {
     assert.strictEqual(out.daily_usage[0].spend, 0);
     assert.strictEqual(out.daily_by_model[0].spend, 0);
     assert.strictEqual(out.total_tokens, 10);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// OpenCode connect flow (litellm.opencode.enabled)
+// ---------------------------------------------------------------------------
+
+describe('router /opencode/connect — disabled by default', () => {
+  let h: Harness;
+  before(async () => { h = await startHarness({}); });
+  after(async () => { await new Promise<void>(r => h.server.close(() => r())); });
+
+  test('404s when litellm.opencode.enabled is not set', async () => {
+    const { status } = await reqNoRedirect(
+      h.baseUrl,
+      '/opencode/connect?redirect_uri=http://localhost:1456/callback',
+      { authRef: 'user:default/alice' },
+    );
+    assert.strictEqual(status, 404);
+  });
+});
+
+describe('router /opencode/connect — enabled', () => {
+  let h: Harness;
+  const CONNECT = '/opencode/connect?redirect_uri=http://localhost:1456/callback';
+
+  before(async () => {
+    h = await startHarness({
+      config: {
+        'litellm.opencode.enabled': true,
+        'litellm.userIdDomain': 'example.com',
+      },
+      client: mockClient({
+        userInfo: { user_id: 'alice@example.com', teams: ['finance', 'marketing'] },
+        listKeys: () => Promise.resolve([]),
+      }),
+    });
+  });
+  after(async () => { await new Promise<void>(r => h.server.close(() => r())); });
+
+  test('401 without authentication', async () => {
+    const { status } = await reqNoRedirect(h.baseUrl, CONNECT);
+    assert.strictEqual(status, 401);
+  });
+
+  test('400 with a non-loopback redirect_uri', async () => {
+    const { status } = await reqNoRedirect(
+      h.baseUrl,
+      '/opencode/connect?redirect_uri=https://evil.example.com/callback',
+      { authRef: 'user:default/alice' },
+    );
+    assert.strictEqual(status, 400);
+  });
+
+  test('mints a personal key and 302s back with key material', async () => {
+    const { status, location } = await reqNoRedirect(h.baseUrl, CONNECT, {
+      authRef: 'user:default/alice',
+    });
+    assert.strictEqual(status, 302);
+    const url = new URL(location!);
+    assert.strictEqual(url.origin, 'http://localhost:1456');
+    assert.strictEqual(url.pathname, '/callback');
+    assert.strictEqual(url.searchParams.get('key'), 'sk-new');
+    assert.strictEqual(url.searchParams.get('team'), null);
+
+    // The generated key is bound to the resolved user, with connect-flow metadata.
+    assert.strictEqual(h.client.calls.generateKey.length, 1);
+    const gen = h.client.calls.generateKey[0];
+    assert.strictEqual(gen.user_id, 'alice@example.com');
+    assert.strictEqual(gen.alias, 'opencode-alice@example.com');
+    assert.strictEqual(gen.metadata.created_via, 'opencode-connect');
+  });
+
+  test('binds the key to a user team and echoes it back', async () => {
+    const { status, location } = await reqNoRedirect(
+      h.baseUrl,
+      `${CONNECT}&team=finance`,
+      { authRef: 'user:default/alice' },
+    );
+    assert.strictEqual(status, 302);
+    const url = new URL(location!);
+    assert.strictEqual(url.searchParams.get('team'), 'finance');
+    const gen = h.client.calls.generateKey.at(-1);
+    assert.strictEqual(gen.team_id, 'finance');
+    assert.strictEqual(gen.alias, 'opencode-alice@example.com-finance');
+  });
+
+  test('403 when the team is not one of the user teams', async () => {
+    const { status, body } = await reqNoRedirect(
+      h.baseUrl,
+      `${CONNECT}&team=secret-team`,
+      { authRef: 'user:default/alice' },
+    );
+    assert.strictEqual(status, 403);
+    assert.match(body.error, /not one of your teams/);
+  });
+
+  test('reuses an existing healthy key for the same slot instead of generating', async () => {
+    const h2 = await startHarness({
+      config: {
+        'litellm.opencode.enabled': true,
+        'litellm.userIdDomain': 'example.com',
+      },
+      client: mockClient({
+        userInfo: { user_id: 'alice@example.com', teams: ['finance'] },
+        listKeys: () =>
+          Promise.resolve([
+            {
+              key: 'sk-existing',
+              token: 'sk-existing',
+              key_alias: 'opencode-alice@example.com',
+              user_id: 'alice@example.com',
+              spend: 0,
+              created_at: '2026-01-01',
+            },
+          ]),
+      }),
+    });
+    try {
+      const { status, location } = await reqNoRedirect(
+        h2.baseUrl,
+        CONNECT,
+        { authRef: 'user:default/alice' },
+      );
+      assert.strictEqual(status, 302);
+      const url = new URL(location!);
+      assert.strictEqual(url.searchParams.get('key'), 'sk-existing');
+      assert.strictEqual(h2.client.calls.generateKey.length, 0);
+    } finally {
+      await new Promise<void>(r => h2.server.close(() => r()));
+    }
+  });
+
+  test('generates fresh when the existing slot key is blocked', async () => {
+    const h2 = await startHarness({
+      config: { 'litellm.opencode.enabled': true },
+      client: mockClient({
+        userInfo: { user_id: 'alice@example.com', teams: [] },
+        listKeys: () =>
+          Promise.resolve([
+            {
+              key: 'sk-blocked',
+              token: 'sk-blocked',
+              key_alias: 'opencode-alice@example.com',
+              user_id: 'alice@example.com',
+              blocked: true,
+              spend: 0,
+              created_at: '2026-01-01',
+            },
+          ]),
+      }),
+    });
+    try {
+      const { status, location } = await reqNoRedirect(
+        h2.baseUrl,
+        CONNECT,
+        { authRef: 'user:default/alice' },
+      );
+      assert.strictEqual(status, 302);
+      assert.strictEqual(new URL(location!).searchParams.get('key'), 'sk-new');
+      assert.strictEqual(h2.client.calls.generateKey.length, 1);
+    } finally {
+      await new Promise<void>(r => h2.server.close(() => r()));
+    }
+  });
+
+  test('400 when requireTeam is configured and no team given', async () => {
+    const h2 = await startHarness({
+      config: {
+        'litellm.opencode.enabled': true,
+        'litellm.opencode.requireTeam': true,
+      },
+      client: mockClient({
+        userInfo: { user_id: 'alice@example.com', teams: ['finance'] },
+      }),
+    });
+    try {
+      const { status } = await reqNoRedirect(h2.baseUrl, CONNECT, {
+        authRef: 'user:default/alice',
+      });
+      assert.strictEqual(status, 400);
+    } finally {
+      await new Promise<void>(r => h2.server.close(() => r()));
+    }
+  });
+
+  test('/config exposes opencode.enabled for the frontend', async () => {
+    const { body } = await req(h.baseUrl, 'GET', '/config');
+    assert.strictEqual(body.opencode.enabled, true);
   });
 });
