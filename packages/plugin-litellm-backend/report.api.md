@@ -285,6 +285,7 @@ export class LiteLLMClient {
     generateKey(request: GenerateKeyRequest): Promise<GenerateKeyResponse>;
     // (undocumented)
     getAuditLogs(params: AuditLogsParams): Promise<PaginatedAuditLogs>;
+    getSpendLogs(params: SpendLogsParams): Promise<SpendLogEntry[]>;
     getTeamInfo(teamId: string): Promise<TeamInfo>;
     // (undocumented)
     getTeamUsage(teamId: string, startDate: string, endDate: string): Promise<UsageMetrics>;
@@ -427,6 +428,9 @@ export interface ModelInfo {
 // @public
 export function newDefaultVerifier(cfg: BridgeConfig): TokenVerifier;
 
+// @public
+export function normalizeRequestTags(tags: SpendLogEntry['request_tags']): string[];
+
 // @public (undocumented)
 export interface PaginatedAuditLogs {
     // (undocumented)
@@ -532,6 +536,44 @@ export interface RoleConfig {
     tpmLimit?: number;
     // (undocumented)
     userRole?: string;
+}
+
+// @public
+export interface SpendLogEntry {
+    api_key?: string;
+    // (undocumented)
+    completion_tokens?: number;
+    // (undocumented)
+    endTime?: string;
+    metadata?: Record<string, unknown> | string | null;
+    // (undocumented)
+    model?: string;
+    // (undocumented)
+    prompt_tokens?: number;
+    // (undocumented)
+    request_id?: string;
+    request_tags?: string[] | Record<string, string>;
+    // (undocumented)
+    spend?: number;
+    startTime?: string;
+    // (undocumented)
+    team_id?: string;
+    // (undocumented)
+    total_tokens?: number;
+    // (undocumented)
+    user?: string;
+}
+
+// @public (undocumented)
+export interface SpendLogsParams {
+    api_key?: string;
+    end_date: string;
+    page_size?: number;
+    start_date: string;
+    // (undocumented)
+    team_id?: string;
+    // (undocumented)
+    user_id?: string;
 }
 
 // @public

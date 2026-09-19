@@ -309,6 +309,44 @@ export interface PaginatedAuditLogs {
   total_pages: number;
 }
 
+/** One row from LiteLLM's `/spend/logs` (per-request spend log entry). */
+export interface SpendLogEntry {
+  request_id?: string;
+  /** ISO timestamp of the call. */
+  startTime?: string;
+  endTime?: string;
+  spend?: number;
+  total_tokens?: number;
+  prompt_tokens?: number;
+  completion_tokens?: number;
+  model?: string;
+  /** Virtual key alias or hash the request was billed to. */
+  api_key?: string;
+  user?: string;
+  team_id?: string;
+  /**
+   * Tags attached to the request (e.g. `channel:backstage`,
+   * `session:<thread>`, `invoked-by:<user>`). Shape varies across LiteLLM
+   * versions (array or object) and is normalised to a string[].
+   */
+  request_tags?: string[] | Record<string, string>;
+  /** LiteLLM `metadata` blob; carries trace ids and session grouping. */
+  metadata?: Record<string, unknown> | string | null;
+}
+
+export interface SpendLogsParams {
+  /** ISO date `YYYY-MM-DD` (inclusive). */
+  start_date: string;
+  /** ISO date `YYYY-MM-DD` (inclusive). */
+  end_date: string;
+  /** Restrict to the given virtual key. */
+  api_key?: string;
+  user_id?: string;
+  team_id?: string;
+  /** Max rows to return (LiteLLM caps at 1000 per page). */
+  page_size?: number;
+}
+
 export interface AuditLogsParams {
   page?: number;
   page_size?: number;

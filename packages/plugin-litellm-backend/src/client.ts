@@ -17,9 +17,24 @@ import {
   UpdateTeamRequest,
   AuditLogsParams,
   PaginatedAuditLogs,
+  SpendLogEntry,
+  SpendLogsParams,
 } from './types';
 
 const DEFAULT_TIMEOUT = 30000;
+
+/**
+ * LiteLLM versions differ on `request_tags`: an array of `k:v` strings in
+ * current builds, but historically an object map. Normalise both to a flat
+ * string array so callers can `includes('session:...')` uniformly.
+ */
+export function normalizeRequestTags(
+  tags: SpendLogEntry['request_tags'],
+): string[] {
+  if (!tags) return [];
+  if (Array.isArray(tags)) return tags.filter((t): t is string => typeof t === 'string');
+  return Object.entries(tags).map(([k, v]) => `${k}:${v}`);
+}
 
 /**
  * Typed error for failed upstream LiteLLM responses. Preserves the HTTP
@@ -503,6 +518,45 @@ export class LiteLLMClient {
         url: r?.url ?? undefined,
       }))
       .filter(r => r.id);
+  }
+
+  /**
+   * Reads per-request spend logs from LiteLLM (`GET /spend/logs`), filtered
+   * by date range and optionally by key/user/team. Rows are normalised so
+   * `request_tags` is always a `string[]` (LiteLLM returns either an array
+   * or an object depending on version) — callers group by tag to attribute
+   * spend to a conversation or caller.
+   *
+   * This is the admin/DB-backed endpoint: it can return a large number of
+   * rows, so callers should keep the date window tight and cap `page_size`.
+   */
+  async getSpendLogs(params: SpendLogsParams): Promise<SpendLogEntry[]> {
+    const query = new URLSearchParams({
+      start_date: params.start_date,
+      end_date: params.end_date,
+    });
+    if (params.api_key) query.append('api_key', params.api_key);
+    if (params.user_id) query.append('user_id', params.user_id);
+    if (params.team_id) query.append('team_id', params.team_id);
+    if (params.page_size) query.append('page_size', String(params.page_size));
+
+    const raw = await this.request<any>(`/spend/logs?${query.toString()}`);
+    const rows: any[] = Array.isArray(raw) ? raw : raw?.data ?? [];
+    return rows.map(row => ({
+      request_id: row?.request_id,
+      startTime: row?.startTime ?? row?.start_time,
+      endTime: row?.endTime ?? row?.end_time,
+      spend: row?.spend ?? 0,
+      total_tokens: row?.total_tokens ?? 0,
+      prompt_tokens: row?.prompt_tokens ?? 0,
+      completion_tokens: row?.completion_tokens ?? 0,
+      model: row?.model,
+      api_key: row?.api_key,
+      user: row?.user,
+      team_id: row?.team_id,
+      request_tags: normalizeRequestTags(row?.request_tags),
+      metadata: row?.metadata,
+    }));
   }
 
   private emptyUsage(): UsageMetrics {
