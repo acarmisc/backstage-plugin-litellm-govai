@@ -344,6 +344,31 @@ import { LiteLLMBudgetWidget } from '@acarmisc/backstage-plugin-litellm';
 
 Like the home widget it needs the backend plugin configured and the user provisioned in LiteLLM.
 
+### Budget Gauges (condensed homepage card)
+
+When the full `LiteLLMBudgetWidget` takes too much vertical space — e.g. a homepage column beside other cards — `LiteLLMBudgetGauges` is the condensed form: **one ring gauge per enforcement level**, `Key` · `User` · `Team`, in that fixed order. Each ring shows the limit at that level **nearest its cap** (percent in the centre), with the limit's name, spend-vs-cap, and reset window under it. When a level holds several limits, the ring is the closest to its cap and a `+N more` link counts the rest through to the Keys tab; a level with no cap renders an empty ring with a short note, so the card keeps a stable three-ring shape.
+
+```tsx
+import { LiteLLMBudgetGauges } from '@acarmisc/backstage-plugin-litellm';
+
+// In your HomePage composition:
+<LiteLLMBudgetGauges />
+
+// With a create-key shortcut pinned below a divider:
+<LiteLLMBudgetGauges action={<CreateKeyButton />} />
+```
+
+**Props:**
+
+| Prop | Type | Default | Description |
+|------|------|---------|-------------|
+| `title` | `string` | `'Budget'` | Card title override |
+| `size` | `number` | `72` | Ring diameter in px |
+| `keysHref` | `string` | `'/litellm?tab=keys'` | Where the `+N more` key link points |
+| `action` | `ReactNode` | — | Node pinned below a divider at the card bottom |
+
+Like the other widgets it needs the backend plugin configured and the user provisioned in LiteLLM.
+
 ### Autoprovisioning
 
 When `litellm.provisioning.enabled` is `true`, the backend automatically creates a LiteLLM user the first time a Backstage user hits any plugin endpoint (user info, keys, teams, or usage). The flow is:

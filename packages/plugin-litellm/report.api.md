@@ -262,6 +262,17 @@ export interface LiteLlmApiInterface {
 export const liteLlmApiRef: ApiRef<LiteLlmApiInterface>;
 
 // @public (undocumented)
+export const LiteLLMBudgetGauges: React_2.FC<LiteLLMBudgetGaugesProps>;
+
+// @public (undocumented)
+export interface LiteLLMBudgetGaugesProps {
+    action?: React_2.ReactNode;
+    keysHref?: string;
+    size?: number;
+    title?: string;
+}
+
+// @public (undocumented)
 export const LiteLLMBudgetWidget: React_2.FC<LiteLLMBudgetWidgetProps>;
 
 // @public (undocumented)

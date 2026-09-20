@@ -58,6 +58,9 @@ const budgetWidgetsPage = PageBlueprint.make({
       const { LiteLLMBudgetWidget } = await import(
         '../src/components/LiteLLMBudgetWidget'
       );
+      const { LiteLLMBudgetGauges } = await import(
+        '../src/components/LiteLLMBudgetGauges'
+      );
       return (
         <Box
           sx={{
@@ -72,6 +75,14 @@ const budgetWidgetsPage = PageBlueprint.make({
           <LiteLLMBudgetWidget compact collapsible />
           <LiteLLMBudgetWidget
             compact
+            action={
+              <Button variant="contained" fullWidth>
+                Create LiteLLM key
+              </Button>
+            }
+          />
+          <LiteLLMBudgetGauges />
+          <LiteLLMBudgetGauges
             action={
               <Button variant="contained" fullWidth>
                 Create LiteLLM key

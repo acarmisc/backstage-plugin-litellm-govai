@@ -1,6 +1,7 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert';
 import {
+  buildBudgetGauges,
   buildBudgetSummary,
   budgetHeadline,
   fmtBudgetDuration,
@@ -121,6 +122,51 @@ describe('buildBudgetSummary', () => {
     assert.strictEqual(h.count, 1);
     assert.strictEqual(h.closest?.kind, 'team');
     assert.strictEqual(h.closest?.hidden, true);
+  });
+});
+
+describe('buildBudgetGauges', () => {
+  test('returns exactly key, user, team in order', () => {
+    const g = buildBudgetGauges(buildBudgetSummary(user, [team], keys));
+    assert.deepStrictEqual(g.map(x => x.kind), ['key', 'user', 'team']);
+  });
+
+  test('each gauge is the limit of its level nearest the cap', () => {
+    const g = buildBudgetGauges(buildBudgetSummary(user, [team], keys));
+    assert.strictEqual(g[0].limit?.label, 'near');
+    assert.strictEqual(g[1].limit?.label, 'Personal budget');
+    assert.strictEqual(g[2].limit?.label, 'Platform Engineering');
+  });
+
+  test('key count includes keys hidden by the display cap', () => {
+    const g = buildBudgetGauges(buildBudgetSummary(user, [team], keys, 1));
+    assert.strictEqual(g[0].count, 3);
+  });
+
+  test('levels without a cap yield a gauge with no limit', () => {
+    const g = buildBudgetGauges(
+      buildBudgetSummary({ ...user, max_budget: undefined }, [], []),
+    );
+    assert.strictEqual(g[0].count, 0);
+    assert.strictEqual(g[0].limit, undefined);
+    assert.strictEqual(g[1].limit, undefined);
+    assert.strictEqual(g[2].limit, undefined);
+  });
+
+  test('a hidden team limit still drives its gauge', () => {
+    const hidden: TeamInfo = {
+      team_id: 't-hidden',
+      team_alias: 'Secret',
+      spend: 0,
+      budget_hidden: true,
+      budget_pct: 92,
+    };
+    const g = buildBudgetGauges(
+      buildBudgetSummary({ ...user, max_budget: undefined }, [hidden], []),
+    );
+    assert.strictEqual(g[2].count, 1);
+    assert.strictEqual(g[2].limit?.pct, 92);
+    assert.strictEqual(g[2].limit?.hidden, true);
   });
 });
 

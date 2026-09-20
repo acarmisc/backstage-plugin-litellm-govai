@@ -130,6 +130,50 @@ export function buildBudgetSummary(
   };
 }
 
+/** One gauge in the condensed homepage card — a single enforcement level. */
+export interface BudgetGauge {
+  kind: 'key' | 'user' | 'team';
+  /**
+   * The limit of this level nearest its cap, or undefined when the user has
+   * no cap at this level (render an empty gauge).
+   */
+  limit?: BudgetLimit;
+  /** How many limits apply at this level (1 for a personal budget). */
+  count: number;
+}
+
+const GAUGE_KINDS: Array<BudgetGauge['kind']> = ['key', 'user', 'team'];
+
+/**
+ * Collapses a `BudgetSummary` to exactly one gauge per enforcement level —
+ * key, user, team — carrying the limit nearest its cap and how many limits
+ * that level holds. Every level is always returned, with `limit` undefined
+ * when the user has no cap there, so the caller can render a stable row.
+ *
+ * Pass a summary built with a large `maxKeys` (e.g. `keys.length`) so the
+ * nearest key is present even when it falls outside the display cap; a key
+ * count hidden by that cap is still reflected in `count`.
+ */
+export function buildBudgetGauges(summary: BudgetSummary): BudgetGauge[] {
+  const byLevel: Record<BudgetGauge['kind'], BudgetLimit[]> = {
+    key: summary.keys,
+    user: summary.user ? [summary.user] : [],
+    team: summary.teams,
+  };
+  return GAUGE_KINDS.map(kind => {
+    const limits = byLevel[kind];
+    const count =
+      kind === 'key' ? limits.length + summary.hiddenBudgetedKeys : limits.length;
+    return {
+      kind,
+      count,
+      limit: limits.length
+        ? limits.reduce((a, b) => (b.pct > a.pct ? b : a))
+        : undefined,
+    };
+  });
+}
+
 /**
  * One-line summary of a `BudgetSummary`, for a collapsed/compact header:
  * how many concrete limits the user is subject to, and the one closest to

@@ -10,6 +10,22 @@ commit/PR that bumps the version in `package.json`. Format follows the
 Earlier history: `git log -- packages/plugin-litellm` or the
  [GitHub tags](https://github.com/acarmisc/backstage-plugin-litellm-govai/tags).
 
+## 0.24.0
+
+### Minor Changes
+
+- feat(`LiteLLMBudgetGauges`): condensed budget card for a homepage column.
+  Renders one ring gauge per enforcement level — `Key` · `User` · `Team` —
+  in a fixed order, each showing the limit at that level nearest its cap
+  (percent in the centre, name, spend-vs-cap, and reset window below). When a
+  level holds several limits the ring is the closest to its cap and a
+  `+N more` link counts the rest through to the Keys tab; a level with no cap
+  renders an empty ring with a short note, so the card keeps a stable
+  three-ring shape. Props: `title`, `size`, `keysHref`, `action`. Backed by a
+  new `buildBudgetGauges(summary)` helper and a reusable theme-aware `Gauge`
+  primitive (clamps the arc at a full turn while the centre label keeps the
+  real percent above 100%).
+
 ## 0.23.0
 
 ### Minor Changes
