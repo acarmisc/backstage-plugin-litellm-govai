@@ -9,20 +9,30 @@
  * user has no cap at that level, so the card keeps a stable shape as data
  * loads and across users. When a level holds several limits, the ring shows
  * the one closest to its cap and a "+N more" link counts the rest.
+ *
+ * The bottom action bar is composable: pass any subset of `ctas` — mint a new
+ * key, open the LiteLLM module, or expand the full per-limit list in place —
+ * in the order you want. `action` remains an escape hatch for a fully custom
+ * node; when either is present it renders below a divider.
  */
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import Paper from '@mui/material/Paper';
 import Box from '@mui/material/Box';
+import Button from '@mui/material/Button';
 import Typography from '@mui/material/Typography';
 import CircularProgress from '@mui/material/CircularProgress';
 import Alert from '@mui/material/Alert';
+import Collapse from '@mui/material/Collapse';
+import { ExpandMore } from '@mui/icons-material';
 import { useApi } from '@backstage/core-plugin-api';
 import { Link } from '@backstage/core-components';
 import { liteLlmApiRef } from '../api';
 import { UserInfo, TeamInfo, VirtualKey } from '../types';
 import { fmtUsd } from '../format';
 import { Gauge, StatusPill } from './ui';
+import { BudgetLimitList, LimitListPanel } from './BudgetLimitList';
 import {
+  allBudgetLimits,
   buildBudgetGauges,
   buildBudgetSummary,
   budgetHeadline,
@@ -32,6 +42,19 @@ import {
   fmtBudgetDuration,
 } from '../budget';
 
+/** The module page; `?tab=` picks the tab and `?generate=1` opens the dialog. */
+const MODULE_PATH = '/litellm';
+
+/** Preset action-bar buttons. `label` overrides the default copy. */
+export type BudgetCtaKind = 'new-key' | 'module' | 'all-limits';
+export interface BudgetCtaSpec {
+  kind: BudgetCtaKind;
+  /** Override the default label. */
+  label?: string;
+}
+/** Either a bare kind (`'module'`) or a spec object (`{ kind: 'module' }`). */
+export type BudgetCta = BudgetCtaKind | BudgetCtaSpec;
+
 export interface LiteLLMBudgetGaugesProps {
   /** Optional title override. Defaults to 'Budget'. */
   title?: string;
@@ -39,15 +62,30 @@ export interface LiteLLMBudgetGaugesProps {
   size?: number;
   /** Where the "+N more" key link points. Defaults to the Keys tab. */
   keysHref?: string;
+  /** Where the module CTA points. Defaults to the LiteLLM page. */
+  moduleHref?: string;
   /**
-   * Node rendered at the card bottom, below a divider — e.g. a "create key"
-   * button.
+   * Called when the "new key" CTA is used. When omitted, the CTA deep-links
+   * to the module with `?generate=1`, which opens the generate-key dialog.
    */
+  onCreateKey?: () => void;
+  /**
+   * Action-bar buttons to render, in order. Defaults to
+   * `['new-key', 'module', 'all-limits']`. Pass `[]` to hide the bar; the
+   * `all-limits` entry is dropped automatically when the user has no limits.
+   */
+  ctas?: BudgetCta[];
+  /** Max key limits listed in the expanded view. Defaults to 8. */
+  maxExpandedKeys?: number;
+  /** Controlled expanded state for the all-limits view. */
+  expanded?: boolean;
+  /** Initial expanded state when uncontrolled. Defaults to false. */
+  defaultExpanded?: boolean;
+  /** Notified whenever the expanded state changes. */
+  onExpandedChange?: (expanded: boolean) => void;
+  /** Fully custom node pinned below the CTAs, below a divider. */
   action?: React.ReactNode;
 }
-
-/** Where "see all keys" points; `LiteLLMPage` reads `?tab=` to open it. */
-const DEFAULT_KEYS_HREF = '/litellm?tab=keys';
 
 /** One-word level names, and the note shown when the level has no cap. */
 const LEVEL: Record<BudgetGauge['kind'], { name: string; none: string }> = {
@@ -56,11 +94,15 @@ const LEVEL: Record<BudgetGauge['kind'], { name: string; none: string }> = {
   team: { name: 'Team', none: 'No team budget' },
 };
 
-/**
- * Compact USD for the tight gauge caption — drops trailing cents so a
- * "$187.42 / $500" pair fits one ~90px column. Keeps two decimals when they
- * carry information.
- */
+const DEFAULT_CTAS: BudgetCtaKind[] = ['new-key', 'module', 'all-limits'];
+
+const CTA_LABELS: Record<BudgetCtaKind, string> = {
+  'new-key': 'New key',
+  module: 'Open module',
+  'all-limits': 'All limits',
+};
+
+/** Compact USD for the tight gauge caption — drops trailing cents. */
 function fmtUsdShort(n: number): string {
   const v = n ?? 0;
   if (v >= 100 && Number.isInteger(v)) return `$${v}`;
@@ -182,7 +224,14 @@ const LevelGauge: React.FC<{ gauge: BudgetGauge; size: number; keysHref: string 
 export const LiteLLMBudgetGauges: React.FC<LiteLLMBudgetGaugesProps> = ({
   title = 'Budget',
   size = 72,
-  keysHref = DEFAULT_KEYS_HREF,
+  keysHref,
+  moduleHref = MODULE_PATH,
+  onCreateKey,
+  ctas,
+  maxExpandedKeys = 8,
+  expanded,
+  defaultExpanded = false,
+  onExpandedChange,
   action,
 }) => {
   const api = useApi(liteLlmApiRef);
@@ -191,6 +240,18 @@ export const LiteLLMBudgetGauges: React.FC<LiteLLMBudgetGaugesProps> = ({
   const [user, setUser] = useState<UserInfo | null>(null);
   const [teams, setTeams] = useState<TeamInfo[]>([]);
   const [keys, setKeys] = useState<VirtualKey[]>([]);
+
+  const isControlled = expanded !== undefined;
+  const [uncontrolledExpanded, setUncontrolledExpanded] = useState(defaultExpanded);
+  const isExpanded = isControlled ? expanded! : uncontrolledExpanded;
+
+  const toggleExpanded = useCallback(() => {
+    const next = !isExpanded;
+    if (!isControlled) setUncontrolledExpanded(next);
+    onExpandedChange?.(next);
+  }, [isControlled, isExpanded, onExpandedChange]);
+
+  const keysTabHref = keysHref ?? `${moduleHref}?tab=keys`;
 
   useEffect(() => {
     let cancelled = false;
@@ -218,7 +279,7 @@ export const LiteLLMBudgetGauges: React.FC<LiteLLMBudgetGaugesProps> = ({
   }, [api]);
 
   // Keep every budgeted key so the nearest-per-level gauge is accurate even
-  // beyond the full widget's display cap; the count still drives the caption.
+  // beyond the full widget's display cap.
   const summary = useMemo(
     () => buildBudgetSummary(user, teams, keys, keys.length),
     [user, teams, keys],
@@ -226,10 +287,81 @@ export const LiteLLMBudgetGauges: React.FC<LiteLLMBudgetGaugesProps> = ({
   const gauges = useMemo(() => buildBudgetGauges(summary), [summary]);
   const headline = useMemo(() => budgetHeadline(summary), [summary]);
 
+  // Expanded view: every concrete limit, but cap the key entries so a user
+  // with dozens of keys doesn't get an endless list.
+  const expandedSummary = useMemo(
+    () => buildBudgetSummary(user, teams, keys, maxExpandedKeys),
+    [user, teams, keys, maxExpandedKeys],
+  );
+  const expandedLimits = useMemo(
+    () => allBudgetLimits(expandedSummary),
+    [expandedSummary],
+  );
+
   const summaryText =
     headline.count === 0
       ? 'no limits apply'
       : `${headline.count} limit${headline.count === 1 ? '' : 's'}`;
+
+  const resolvedCtas = useMemo<(BudgetCtaSpec & { kind: BudgetCtaKind })[]>(() => {
+    const list = ctas ?? DEFAULT_CTAS;
+    return list
+      .map(cta => (typeof cta === 'string' ? { kind: cta } : cta))
+      .filter(cta => cta.kind !== 'all-limits' || headline.count > 0);
+  }, [ctas, headline.count]);
+
+  const renderCta = (cta: BudgetCtaSpec & { kind: BudgetCtaKind }, index: number) => {
+    const label = cta.label ?? CTA_LABELS[cta.kind];
+    const key = `${cta.kind}-${index}`;
+    switch (cta.kind) {
+      case 'new-key':
+        return onCreateKey ? (
+          <Button key={key} size="small" variant="contained" onClick={onCreateKey}>
+            {label}
+          </Button>
+        ) : (
+          <Button
+            key={key}
+            size="small"
+            variant="contained"
+            component={Link}
+            to={`${moduleHref}?generate=1`}
+          >
+            {label}
+          </Button>
+        );
+      case 'module':
+        return (
+          <Button key={key} size="small" variant="outlined" component={Link} to={moduleHref}>
+            {label}
+          </Button>
+        );
+      case 'all-limits':
+        return (
+          <Button
+            key={key}
+            size="small"
+            variant="text"
+            onClick={toggleExpanded}
+            endIcon={
+              <ExpandMore
+                sx={{
+                  transform: isExpanded ? 'rotate(180deg)' : 'none',
+                  transition: theme => theme.transitions.create('transform'),
+                }}
+              />
+            }
+          >
+            {label}
+          </Button>
+        );
+      /* istanbul ignore next — exhaustiveness */
+      default:
+        return null;
+    }
+  };
+
+  const hasFooter = resolvedCtas.length > 0 || !!action;
 
   return (
     <Paper sx={{ p: 2 }}>
@@ -259,21 +391,48 @@ export const LiteLLMBudgetGauges: React.FC<LiteLLMBudgetGaugesProps> = ({
       )}
 
       {!loading && !error && (
-        <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
-          {gauges.map(gauge => (
-            <LevelGauge key={gauge.kind} gauge={gauge} size={size} keysHref={keysHref} />
-          ))}
-        </Box>
+        <>
+          <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
+            {gauges.map(gauge => (
+              <LevelGauge key={gauge.kind} gauge={gauge} size={size} keysHref={keysTabHref} />
+            ))}
+          </Box>
+
+          <Collapse in={isExpanded} unmountOnExit>
+            <Box
+              sx={{
+                mt: 1.5,
+                // Bound the expanded list so a user with many limits still
+                // keeps the card compact and the toggle within reach.
+                maxHeight: 300,
+                overflowY: 'auto',
+              }}
+            >
+              <LimitListPanel>
+                <BudgetLimitList
+                  limits={expandedLimits}
+                  hiddenKeyCount={expandedSummary.hiddenBudgetedKeys}
+                  keysHref={keysTabHref}
+                />
+              </LimitListPanel>
+            </Box>
+          </Collapse>
+        </>
       )}
 
-      {action && (
+      {hasFooter && (
         <Box
           sx={theme => ({
             mt: 2,
             pt: 2,
             borderTop: `1px solid ${theme.palette.divider}`,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 1,
+            flexWrap: 'wrap',
           })}
         >
+          {resolvedCtas.map(renderCta)}
           {action}
         </Box>
       )}

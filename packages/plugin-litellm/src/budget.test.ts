@@ -1,6 +1,7 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert';
 import {
+  allBudgetLimits,
   buildBudgetGauges,
   buildBudgetSummary,
   budgetHeadline,
@@ -167,6 +168,34 @@ describe('buildBudgetGauges', () => {
     assert.strictEqual(g[2].count, 1);
     assert.strictEqual(g[2].limit?.pct, 92);
     assert.strictEqual(g[2].limit?.hidden, true);
+  });
+});
+
+describe('allBudgetLimits', () => {
+  test('flattens keys, personal, then teams', () => {
+    const s = buildBudgetSummary(user, [team], keys);
+    const all = allBudgetLimits(s);
+    assert.deepStrictEqual(
+      all.map(l => l.label),
+      ['near', 'mid', 'far', 'Personal budget', 'Platform Engineering'],
+    );
+  });
+
+  test('omits the personal budget when unset', () => {
+    const s = buildBudgetSummary({ ...user, max_budget: undefined }, [team], keys);
+    const all = allBudgetLimits(s);
+    assert.ok(!all.some(l => l.kind === 'user'));
+    assert.ok(all.some(l => l.kind === 'team'));
+  });
+
+  test('respects the summary key cap', () => {
+    const s = buildBudgetSummary(user, [], keys, 1);
+    assert.strictEqual(allBudgetLimits(s).filter(l => l.kind === 'key').length, 1);
+  });
+
+  test('empty summary yields an empty list', () => {
+    const s = buildBudgetSummary({ ...user, max_budget: undefined }, [], []);
+    assert.deepStrictEqual(allBudgetLimits(s), []);
   });
 });
 

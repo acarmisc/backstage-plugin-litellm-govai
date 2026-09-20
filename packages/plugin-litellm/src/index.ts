@@ -9,7 +9,12 @@ export type { LiteLLMHomeWidgetProps } from './components/LiteLLMHomeWidget';
 export { LiteLLMBudgetWidget } from './components/LiteLLMBudgetWidget';
 export type { LiteLLMBudgetWidgetProps } from './components/LiteLLMBudgetWidget';
 export { LiteLLMBudgetGauges } from './components/LiteLLMBudgetGauges';
-export type { LiteLLMBudgetGaugesProps } from './components/LiteLLMBudgetGauges';
+export type {
+  LiteLLMBudgetGaugesProps,
+  BudgetCta,
+  BudgetCtaKind,
+  BudgetCtaSpec,
+} from './components/LiteLLMBudgetGauges';
 export { GenerateKeyDialog } from './components/GenerateKeyDialog';
 export { ManageTeamDialog } from './components/ManageTeamDialog';
 export { LiteLlmApi, liteLlmApiRef } from './api';

@@ -61,6 +61,19 @@ export interface AuditLogsParams {
     table_name?: string;
 }
 
+// @public
+export type BudgetCta = BudgetCtaKind | BudgetCtaSpec;
+
+// @public
+export type BudgetCtaKind = 'new-key' | 'module' | 'all-limits';
+
+// @public (undocumented)
+export interface BudgetCtaSpec {
+    // (undocumented)
+    kind: BudgetCtaKind;
+    label?: string;
+}
+
 // @public (undocumented)
 export interface CreateTeamRequest {
     // (undocumented)
@@ -267,7 +280,14 @@ export const LiteLLMBudgetGauges: React_2.FC<LiteLLMBudgetGaugesProps>;
 // @public (undocumented)
 export interface LiteLLMBudgetGaugesProps {
     action?: React_2.ReactNode;
+    ctas?: BudgetCta[];
+    defaultExpanded?: boolean;
+    expanded?: boolean;
     keysHref?: string;
+    maxExpandedKeys?: number;
+    moduleHref?: string;
+    onCreateKey?: () => void;
+    onExpandedChange?: (expanded: boolean) => void;
     size?: number;
     title?: string;
 }

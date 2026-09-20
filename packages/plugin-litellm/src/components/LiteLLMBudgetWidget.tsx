@@ -30,18 +30,21 @@ import IconButton from '@mui/material/IconButton';
 import { ExpandMore } from '@mui/icons-material';
 import { alpha } from '@mui/material/styles';
 import { useApi } from '@backstage/core-plugin-api';
-import { Link } from '@backstage/core-components';
 import { liteLlmApiRef } from '../api';
 import { UserInfo, TeamInfo, VirtualKey } from '../types';
-import { fmtUsd } from '../format';
-import { Meter, StatusPill, Tone } from './ui';
+import { StatusPill, Tone } from './ui';
+import {
+  levelToneColor,
+  LimitCard,
+  MoreKeysNote,
+  TaggedLimit,
+} from './BudgetLimitList';
 import {
   buildBudgetSummary,
   budgetHeadline,
   BudgetLimit,
   BudgetSummary,
   budgetTone,
-  fmtBudgetDuration,
 } from '../budget';
 
 export interface LiteLLMBudgetWidgetProps {
@@ -74,16 +77,6 @@ interface LevelFrameProps {
   tone?: Tone;
   isLast?: boolean;
   children: React.ReactNode;
-}
-
-function levelToneColor(tone: Tone | undefined, theme: any): string {
-  switch (tone) {
-    case 'success': return theme.palette.success.main;
-    case 'warning': return theme.palette.warning.main;
-    case 'danger': return theme.palette.error.main;
-    case 'info': return theme.palette.info.main;
-    default: return theme.palette.primary.main;
-  }
 }
 
 const LevelFrame: React.FC<LevelFrameProps> = ({
@@ -164,81 +157,6 @@ const EmptyLimitCard: React.FC<{ children: React.ReactNode }> = ({ children }) =
   </Paper>
 );
 
-const LimitCard: React.FC<{ limit: BudgetLimit }> = ({ limit }) => {
-  const tone = budgetTone(limit.pct);
-  const pct = Math.round(limit.pct);
-  const closeTo = limit.softLimit !== undefined && limit.spend >= limit.softLimit;
-  return (
-    <Paper variant="outlined" sx={{ px: 1.5, py: 1.25, borderRadius: 1.5 }}>
-      <Box sx={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 1.5 }}>
-        <Box sx={{ minWidth: 0, flex: 1 }}>
-          <Typography
-            variant="body2"
-            sx={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
-            title={limit.sublabel ? `${limit.label} · ${limit.sublabel}` : limit.label}
-          >
-            {limit.label}
-          </Typography>
-          {limit.sublabel && (
-            <Typography
-              variant="caption"
-              color="text.secondary"
-              sx={{
-                fontSize: 10.5,
-                fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-                display: 'block',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
-              }}
-            >
-              {limit.sublabel}
-            </Typography>
-          )}
-        </Box>
-        {limit.hidden ? (
-          <Typography variant="body2" sx={{ fontWeight: 600, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
-            {pct}% used
-          </Typography>
-        ) : (
-          <Typography variant="body2" sx={{ fontWeight: 600, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>
-            {fmtUsd(limit.spend)}
-            <Box component="span" color="text.secondary" sx={{ fontWeight: 400 }}>
-              {' / '}
-              {fmtUsd(limit.budget)}
-            </Box>
-          </Typography>
-        )}
-      </Box>
-      <Box sx={{ mt: 1 }}>
-        <Meter value={limit.pct} tone={tone} height={6} />
-      </Box>
-      <Box
-        sx={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          gap: 1,
-          mt: 0.75,
-        }}
-      >
-        <Typography variant="caption" color="text.secondary" sx={{ fontVariantNumeric: 'tabular-nums' }}>
-          {limit.hidden ? (
-            <>Hidden by admin</>
-          ) : (
-            <>{pct}% of budget{closeTo && ` · soft-limit warning`}</>
-          )}
-        </Typography>
-        <Typography variant="caption" color="text.secondary">
-          {fmtBudgetDuration(limit.budgetDuration)
-            ? `resets ${fmtBudgetDuration(limit.budgetDuration)}`
-            : 'never resets'}
-        </Typography>
-      </Box>
-    </Paper>
-  );
-};
-
 /** How each enforcement level reads in the collapsed summary line. */
 const CLOSEST_LEVEL_LABEL: Record<BudgetLimit['kind'], string> = {
   key: 'key',
@@ -251,13 +169,6 @@ const CLOSEST_LEVEL_LABEL: Record<BudgetLimit['kind'], string> = {
  * `/litellm`; `LiteLLMPage` reads `?tab=` to open the Keys tab directly.
  */
 const KEYS_PATH = '/litellm?tab=keys';
-
-/** Budgeted keys past the visible cap — a link through to the Keys tab. */
-const MoreKeysNote: React.FC<{ count: number }> = ({ count }) => (
-  <Link to={KEYS_PATH} variant="caption">
-    +{count} more budgeted key{count > 1 ? 's' : ''} further from the cap →
-  </Link>
-);
 
 /**
  * The one thing that's easy to get wrong about LiteLLM budgets: the order
@@ -283,31 +194,6 @@ const HierarchyNote: React.FC<{ withReset?: boolean }> = ({ withReset }) => (
   </Box>
 );
 
-/** A LimitCard prefixed with a small KEY / USER / TEAM tag — used in compact mode. */
-const TaggedLimit: React.FC<{ limit: BudgetLimit }> = ({ limit }) => {
-  const tone = budgetTone(limit.pct);
-  return (
-    <Box>
-      <Typography
-        sx={theme => ({
-          fontSize: 11,
-          fontWeight: 700,
-          letterSpacing: '0.08em',
-          textTransform: 'uppercase',
-          color:
-            tone === 'accent'
-              ? theme.palette.text.secondary
-              : levelToneColor(tone, theme),
-          mb: 0.5,
-        })}
-      >
-        {limit.kind}
-      </Typography>
-      <LimitCard limit={limit} />
-    </Box>
-  );
-};
-
 /** Full body: the numbered key→personal→team→global rail plus the policy footnote. */
 const FullBody: React.FC<{ summary: BudgetSummary }> = ({ summary }) => {
   const hasBudgetedKeys = summary.keys.length + summary.hiddenBudgetedKeys > 0;
@@ -326,7 +212,7 @@ const FullBody: React.FC<{ summary: BudgetSummary }> = ({ summary }) => {
           <LimitCard key={k.sublabel ?? k.label} limit={k} />
         ))}
         {summary.hiddenBudgetedKeys > 0 && (
-          <MoreKeysNote count={summary.hiddenBudgetedKeys} />
+          <MoreKeysNote count={summary.hiddenBudgetedKeys} href={KEYS_PATH} />
         )}
       </LevelFrame>
 
@@ -384,7 +270,7 @@ const CompactBody: React.FC<{ summary: BudgetSummary }> = ({ summary }) => {
         <TaggedLimit key={k.sublabel ?? k.label} limit={k} />
       ))}
       {summary.hiddenBudgetedKeys > 0 && (
-        <MoreKeysNote count={summary.hiddenBudgetedKeys} />
+        <MoreKeysNote count={summary.hiddenBudgetedKeys} href={KEYS_PATH} />
       )}
       {summary.user && <TaggedLimit limit={summary.user} />}
       {summary.teams.map(t => (

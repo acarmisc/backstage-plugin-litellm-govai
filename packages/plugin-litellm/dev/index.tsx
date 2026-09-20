@@ -83,11 +83,16 @@ const budgetWidgetsPage = PageBlueprint.make({
           />
           <LiteLLMBudgetGauges />
           <LiteLLMBudgetGauges
+            ctas={['module']}
             action={
               <Button variant="contained" fullWidth>
                 Create LiteLLM key
               </Button>
             }
+          />
+          <LiteLLMBudgetGauges
+            defaultExpanded
+            ctas={['new-key', 'module']}
           />
         </Box>
       );

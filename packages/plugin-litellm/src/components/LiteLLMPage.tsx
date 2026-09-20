@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import Box from '@mui/material/Box';
 import Snackbar from '@mui/material/Snackbar';
 import Alert from '@mui/material/Alert';
@@ -64,6 +64,25 @@ export const LiteLLMPage: React.FC = () => {
     return isPageTab(t) ? t : 'overview';
   });
 
+  // `?generate=1` (e.g. from a homepage budget card's "New key" CTA) opens the
+  // generate-key dialog on arrival. The param is cleared once honoured so a
+  // manual close doesn't immediately reopen it on the next render.
+  const [generateDialogOpen, setGenerateDialogOpen] = useState(
+    () => searchParams.get('generate') === '1',
+  );
+  useEffect(() => {
+    if (searchParams.get('generate') !== '1') return;
+    setGenerateDialogOpen(true);
+    setSearchParams(
+      prev => {
+        const next = new URLSearchParams(prev);
+        next.delete('generate');
+        return next;
+      },
+      { replace: true },
+    );
+  }, [searchParams, setSearchParams]);
+
   // Keep `?tab=` in sync so links (e.g. the budget widget's "more keys"
   // note pointing at `/litellm?tab=keys`) land on the right tab and the URL
   // stays shareable.
@@ -83,7 +102,6 @@ export const LiteLLMPage: React.FC = () => {
   );
 
   const [snackbar, setSnackbar] = useState<{ message: string; severity: 'success' | 'warning' | 'error' } | null>(null);
-  const [generateDialogOpen, setGenerateDialogOpen] = useState(false);
   const [manageTeam, setManageTeam] = useState<{ mode: 'create' | 'edit'; team?: TeamInfo } | null>(null);
 
   // Team usage cache: teamId -> UsageMetrics

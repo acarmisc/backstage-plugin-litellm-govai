@@ -130,6 +130,21 @@ export function buildBudgetSummary(
   };
 }
 
+/**
+ * Every concrete limit across all levels, keys first then personal then
+ * teams. The per-level slices are already sorted by proximity to the cap, so
+ * each level's limits stay ordered; this is the flat list for a "show all
+ * limits" view. Keys beyond a display `maxKeys` are not included — build the
+ * summary with a large `maxKeys` when the full list is needed.
+ */
+export function allBudgetLimits(summary: BudgetSummary): BudgetLimit[] {
+  return [
+    ...summary.keys,
+    ...(summary.user ? [summary.user] : []),
+    ...summary.teams,
+  ];
+}
+
 /** One gauge in the condensed homepage card — a single enforcement level. */
 export interface BudgetGauge {
   kind: 'key' | 'user' | 'team';

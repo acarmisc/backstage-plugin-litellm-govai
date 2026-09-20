@@ -348,15 +348,40 @@ Like the home widget it needs the backend plugin configured and the user provisi
 
 When the full `LiteLLMBudgetWidget` takes too much vertical space — e.g. a homepage column beside other cards — `LiteLLMBudgetGauges` is the condensed form: **one ring gauge per enforcement level**, `Key` · `User` · `Team`, in that fixed order. Each ring shows the limit at that level **nearest its cap** (percent in the centre), with the limit's name, spend-vs-cap, and reset window under it. When a level holds several limits, the ring is the closest to its cap and a `+N more` link counts the rest through to the Keys tab; a level with no cap renders an empty ring with a short note, so the card keeps a stable three-ring shape.
 
+**Composable CTAs.** The bar under the card is assembled from a `ctas` list, so each host picks the actions it wants, in the order it wants:
+
+| CTA kind | Default label | Behaviour |
+|----------|---------------|-----------|
+| `new-key` | `New key` | `onCreateKey()` if supplied, else deep-links to `/litellm?generate=1`, which opens the generate-key dialog (`LiteLLMPage` honours the param) |
+| `module` | `Open module` | Links to the LiteLLM page (`moduleHref`) |
+| `all-limits` | `All limits` | Expands an in-place list of every limit you have (bounded height, scrolls); auto-hidden when you have no limits |
+
 ```tsx
 import { LiteLLMBudgetGauges } from '@acarmisc/backstage-plugin-litellm';
 
-// In your HomePage composition:
+// Defaults to ['new-key', 'module', 'all-limits']:
 <LiteLLMBudgetGauges />
 
-// With a create-key shortcut pinned below a divider:
-<LiteLLMBudgetGauges action={<CreateKeyButton />} />
+// Just jump into the module:
+<LiteLLMBudgetGauges ctas={['module']} />
+
+// Two CTAs, custom copy, and the full list visible on load:
+<LiteLLMBudgetGauges
+  ctas={[{ kind: 'new-key', label: 'Create key' }, 'all-limits']}
+  defaultExpanded
+/>
+
+// Own the new-key flow (e.g. open your own dialog):
+<LiteLLMBudgetGauges
+  ctas={['new-key']}
+  onCreateKey={() => setMyDialogOpen(true)}
+/>
+
+// Escape hatch — any node below the CTAs:
+<LiteLLMBudgetGauges action={<MyCustomFooter />} />
 ```
+
+Passing `ctas={[]}` hides the bar; `action` still renders on its own. `expanded` / `defaultExpanded` / `onExpandedChange` give controlled or uncontrolled access to the all-limits view.
 
 **Props:**
 
@@ -364,8 +389,15 @@ import { LiteLLMBudgetGauges } from '@acarmisc/backstage-plugin-litellm';
 |------|------|---------|-------------|
 | `title` | `string` | `'Budget'` | Card title override |
 | `size` | `number` | `72` | Ring diameter in px |
-| `keysHref` | `string` | `'/litellm?tab=keys'` | Where the `+N more` key link points |
-| `action` | `ReactNode` | — | Node pinned below a divider at the card bottom |
+| `keysHref` | `string` | `` `${moduleHref}?tab=keys` `` | Where the `+N more` key link points |
+| `moduleHref` | `string` | `'/litellm'` | Where the `module` CTA and `new-key` deep-link point |
+| `onCreateKey` | `() => void` | — | Handle the `new-key` CTA yourself instead of deep-linking |
+| `ctas` | `BudgetCta[]` | `['new-key', 'module', 'all-limits']` | Action-bar buttons, in order |
+| `maxExpandedKeys` | `number` | `8` | Max key limits listed in the expanded view |
+| `expanded` | `boolean` | — | Controlled expanded state for the all-limits view |
+| `defaultExpanded` | `boolean` | `false` | Initial expanded state when uncontrolled |
+| `onExpandedChange` | `(expanded: boolean) => void` | — | Notified whenever the expanded state changes |
+| `action` | `ReactNode` | — | Fully custom node pinned below the CTAs, below a divider |
 
 Like the other widgets it needs the backend plugin configured and the user provisioned in LiteLLM.
 

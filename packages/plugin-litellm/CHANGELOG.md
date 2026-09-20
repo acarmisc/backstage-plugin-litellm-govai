@@ -10,6 +10,24 @@ commit/PR that bumps the version in `package.json`. Format follows the
 Earlier history: `git log -- packages/plugin-litellm` or the
  [GitHub tags](https://github.com/acarmisc/backstage-plugin-litellm-govai/tags).
 
+## 0.25.0
+
+### Minor Changes
+
+- feat(`LiteLLMBudgetGauges`): composable action bar and an in-place
+  all-limits view. The bar is assembled from a `ctas` list — `new-key`
+  (calls `onCreateKey`, else deep-links to `/litellm?generate=1`),
+  `module` (`moduleHref`), and `all-limits` (expands a bounded, scrollable
+  list of every limit; auto-hidden when none apply) — so hosts pick the
+  actions and order they want. New props: `ctas`, `moduleHref`,
+  `onCreateKey`, `maxExpandedKeys`, `expanded` / `defaultExpanded` /
+  `onExpandedChange` (controlled or uncontrolled), alongside the existing
+  `action` escape hatch. `LiteLLMPage` now honours `?generate=1`, opening
+  the generate-key dialog on arrival.
+- refactor: extract the shared limit card, tagged limit, and "+N more" note
+  into `BudgetLimitList`, reused by both budget widgets; add
+  `allBudgetLimits(summary)`.
+
 ## 0.24.0
 
 ### Minor Changes
