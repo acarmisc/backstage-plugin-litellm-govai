@@ -111,10 +111,21 @@ export interface DateRange {
     start: Date;
 }
 
-// Warning: (ae-forgotten-export) The symbol "GenerateKeyDialogProps" needs to be exported by the entry point index.d.ts
-//
-// @public (undocumented)
-export const GenerateKeyDialog: React_2.FC<GenerateKeyDialogProps>;
+// @public @deprecated (undocumented)
+export const GenerateKeyDialog: React_2.FC<{
+    open: boolean;
+    onClose: () => void;
+    keys: VirtualKey[];
+    models: ModelInfo[];
+    teams: TeamInfo[];
+    username?: string;
+    keyGenerationSettings?: {
+        allowUnlimitedBudget: boolean;
+        teamRequired: boolean;
+    };
+    onGenerateKey: (request: GenerateKeyRequest) => Promise<GenerateKeyResponse>;
+    onGetConfig: () => Promise<LiteLlmConfig>;
+}>;
 
 // @public (undocumented)
 export interface GenerateKeyRequest {
@@ -145,6 +156,41 @@ export interface GenerateKeyResponse {
     key_alias?: string;
     // (undocumented)
     max_budget?: number;
+}
+
+// @public (undocumented)
+export const KeyFormDialog: React_2.FC<KeyFormDialogProps>;
+
+// @public
+export type KeyFormDialogMode = 'create' | 'edit';
+
+// @public (undocumented)
+export interface KeyFormDialogProps {
+    keyGenerationSettings?: {
+        allowUnlimitedBudget: boolean;
+        teamRequired: boolean;
+    };
+    // (undocumented)
+    keys: VirtualKey[];
+    keyToEdit?: VirtualKey | null;
+    mode: KeyFormDialogMode;
+    // (undocumented)
+    models: ModelInfo[];
+    // (undocumented)
+    onClose: () => void;
+    // (undocumented)
+    onCreateKey: (request: GenerateKeyRequest) => Promise<GenerateKeyResponse>;
+    // (undocumented)
+    onGetConfig: () => Promise<LiteLlmConfig>;
+    // (undocumented)
+    onResetKeySpend?: (keyId: string) => Promise<void>;
+    // (undocumented)
+    onUpdateKey: (keyId: string, request: UpdateKeyRequest) => Promise<void>;
+    // (undocumented)
+    open: boolean;
+    // (undocumented)
+    teams: TeamInfo[];
+    username?: string;
 }
 
 // Warning: (ae-forgotten-export) The symbol "KeysTableProps" needs to be exported by the entry point index.d.ts
@@ -514,8 +560,7 @@ export interface UpdateKeyRequest {
     duration?: string;
     // (undocumented)
     key_alias?: string;
-    // (undocumented)
-    max_budget?: number;
+    max_budget?: number | null;
     // (undocumented)
     models?: string[];
     // (undocumented)
@@ -715,6 +760,7 @@ export interface VirtualKey {
     rpm_limit?: number;
     // (undocumented)
     spend: number;
+    team_id?: string;
     // (undocumented)
     token?: string;
     // (undocumented)

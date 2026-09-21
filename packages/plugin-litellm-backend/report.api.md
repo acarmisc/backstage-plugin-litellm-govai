@@ -902,6 +902,7 @@ export interface VirtualKey {
     rpm_limit?: number;
     // (undocumented)
     spend: number;
+    team_id?: string;
     // (undocumented)
     token: string;
     // (undocumented)

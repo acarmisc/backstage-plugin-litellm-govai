@@ -71,6 +71,8 @@ export interface VirtualKey {
   rpm_limit?: number;
   models?: string[];
   user_id?: string;
+  /** Team the key is bound to, when any (used to scope the model picker). */
+  team_id?: string;
   blocked?: boolean;
 }
 
@@ -162,7 +164,8 @@ export interface GenerateKeyRequest {
 export interface UpdateKeyRequest {
   key_alias?: string;
   models?: string[];
-  max_budget?: number;
+  /** Positive number caps spend; null clears it (unlimited, gated by allowUnlimitedBudget). */
+  max_budget?: number | null;
   tpm_limit?: number;
   rpm_limit?: number;
   team_id?: string;

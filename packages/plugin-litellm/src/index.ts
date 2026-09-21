@@ -15,6 +15,8 @@ export type {
   BudgetCtaKind,
   BudgetCtaSpec,
 } from './components/LiteLLMBudgetGauges';
+export { KeyFormDialog } from './components/KeyFormDialog';
+export type { KeyFormDialogMode, KeyFormDialogProps } from './components/KeyFormDialog';
 export { GenerateKeyDialog } from './components/GenerateKeyDialog';
 export { ManageTeamDialog } from './components/ManageTeamDialog';
 export { LiteLlmApi, liteLlmApiRef } from './api';

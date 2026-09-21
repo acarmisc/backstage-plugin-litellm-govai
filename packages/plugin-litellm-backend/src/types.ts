@@ -95,6 +95,8 @@ export interface VirtualKey {
   rpm_limit?: number;
   models?: string[];
   user_id?: string;
+  /** Team the key is bound to, when any (mirrors LiteLLM /user/info team_id). */
+  team_id?: string;
   blocked?: boolean;
 }
 

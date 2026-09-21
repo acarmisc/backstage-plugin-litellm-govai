@@ -10,6 +10,14 @@ commit/PR that bumps the version in `package.json`. Format follows the
 Earlier history: `git log -- packages/plugin-litellm-backend` or the
 [GitHub tags](https://github.com/acarmisc/backstage-plugin-litellm-govai/tags).
 
+## 0.15.0
+
+### Minor Changes
+
+- feat(`VirtualKey`): carries `team_id` from LiteLLM `/user/info` so the
+  frontend can scope the key-form model picker to the key's team in edit
+  mode.
+
 ## 0.13.0
 
 ### Minor Changes

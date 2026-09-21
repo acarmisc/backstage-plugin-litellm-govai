@@ -86,11 +86,12 @@ The **Models** tab lists every model the LiteLLM proxy exposes, with per-model i
 - `litellmPlugin` — the frontend plugin instance
 - `LiteLLMPage` — main plugin page (keys, usage, team context)
 - `LiteLLMHomeWidget` — homepage usage summary card
-- `GenerateKeyDialog` — shared "Generate New Key" dialog (surfaces failures inline, warns on duplicate aliases)
+- `KeyFormDialog` — shared key form for both generating and editing a key (surfaces failures inline, warns on duplicate aliases, team-scoped model picker, unlimited-budget toggle when gated on)
+- `GenerateKeyDialog` — deprecated wrapper around `KeyFormDialog` with `mode="create"`
 - `DashboardHeader`, `KeysTable`, `UsageStats`, `TeamUsage` — individual page sections, exported for composition
 - `LiteLlmApi`, `liteLlmApiRef` — API client and its Backstage API ref
 
-Note: `DashboardHeader` and `KeysTable` are composition pieces driven by `LiteLLMPage` and their props differ from older versions. `LiteLLMPage` is the supported entry point; composing the sections directly means keeping them in sync with the page's data wiring (keys, models, teams, and the `onGenerateKeyClick` callback).
+Note: `DashboardHeader` and `KeysTable` are composition pieces driven by `LiteLLMPage` and their props differ from older versions. `LiteLLMPage` is the supported entry point; composing the sections directly means keeping them in sync with the page's data wiring (keys, models, teams, and the `onGenerateKeyClick`/`onEditKey` callbacks).
 
 ## License
 

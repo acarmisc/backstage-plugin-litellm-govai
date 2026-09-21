@@ -10,6 +10,34 @@ commit/PR that bumps the version in `package.json`. Format follows the
 Earlier history: `git log -- packages/plugin-litellm` or the
  [GitHub tags](https://github.com/acarmisc/backstage-plugin-litellm-govai/tags).
 
+## 0.26.0
+
+### Minor Changes
+
+- feat(`KeyFormDialog`): one shared key form for both creating and editing
+  keys. Create mode keeps the previous behaviour (pre-filled alias, duration
+  select, team-scoped model picker, budget estimate, post-generation screen
+  with snippets). Edit mode now behaves like creation everywhere it used to
+  differ: budget validation, inline error alerts (instead of console-only
+  failures), duplicate-alias warning, team-scoped model filtering, and a
+  gated "Unlimited budget" toggle that sends `max_budget: null` to clear the
+  cap. Expiry is intentionally immutable after creation, and the team binding
+  is read-only in edit mode.
+- feat: `KeysTable` gains an `onEditKey(key)` callback and loses its inline
+  edit dialog; editing opens the shared `KeyFormDialog` at page level.
+  `onUpdateKey` / `onResetKeySpend` / `models` props are gone from
+  `KeysTable` (the page wires them into the dialog instead).
+- feat(`UpdateKeyRequest`): `max_budget` now accepts `null` to clear the
+  budget.
+- feat(`VirtualKey`): carries `team_id` from LiteLLM `/user/info`.
+- deprecate(`GenerateKeyDialog`): kept as a thin wrapper around
+  `KeyFormDialog mode="create"`; new hosts should import `KeyFormDialog`.
+
+### Patch Changes
+
+- dev: the mock API's `updateKey` now applies patches instead of returning
+  the original key.
+
 ## 0.25.0
 
 ### Minor Changes

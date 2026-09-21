@@ -221,6 +221,7 @@ export class LiteLLMClient {
       rpm_limit: k.rpm_limit ?? undefined,
       models: k.models ?? [],
       user_id: k.user_id ?? undefined,
+      team_id: k.team_id ?? undefined,
       blocked: k.blocked ?? undefined,
     };
   }

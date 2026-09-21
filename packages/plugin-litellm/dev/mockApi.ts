@@ -33,7 +33,7 @@ const models: ModelInfo[] = [
 
 const keys: VirtualKey[] = [
   { key: 'sk-...ab12', key_alias: 'jane-doe-personal', created_at: iso(30), expires_at: iso(-60), spend: 4.32, max_budget: 10, tpm_limit: 100000, rpm_limit: 1000, models: ['gpt-4o', 'claude-3-5-sonnet'], user_id: 'user:default/jane.doe' },
-  { key: 'sk-...cd34', key_alias: 'platform-ai-bot', created_at: iso(12), spend: 41.8, max_budget: 100, models: [], user_id: 'user:default/jane.doe' },
+  { key: 'sk-...cd34', key_alias: 'platform-ai-bot', created_at: iso(12), spend: 41.8, max_budget: 100, models: [], user_id: 'user:default/jane.doe', team_id: 'team-platform-eng' },
   { key: 'sk-...ef56', key_alias: 'quick-test-key', created_at: iso(2), expires_at: iso(-5), spend: 0.02, max_budget: 5, models: ['gpt-4o'], user_id: 'user:default/jane.doe', blocked: true },
 ];
 
@@ -151,8 +151,16 @@ export class MockLiteLlmApi implements LiteLlmApiInterface {
   async generateKey(_request: GenerateKeyRequest): Promise<GenerateKeyResponse> {
     return { key: 'sk-...new1', key_alias: _request.alias, expires_at: undefined, max_budget: _request.max_budget ?? undefined };
   }
-  async updateKey(keyId: string, _request: UpdateKeyRequest): Promise<VirtualKey> {
-    return keys.find(k => k.key === keyId) ?? keys[0];
+  async updateKey(keyId: string, request: UpdateKeyRequest): Promise<VirtualKey> {
+    const target = keys.find(k => k.key === keyId) ?? keys[0];
+    return {
+      ...target,
+      ...(request.key_alias !== undefined && { key_alias: request.key_alias }),
+      ...(request.models !== undefined && { models: request.models }),
+      ...(request.max_budget !== undefined && { max_budget: request.max_budget ?? undefined }),
+      ...(request.tpm_limit !== undefined && { tpm_limit: request.tpm_limit }),
+      ...(request.rpm_limit !== undefined && { rpm_limit: request.rpm_limit }),
+    };
   }
   async deleteKey(_keyId: string) { return { success: true }; }
   async blockKey(_keyId: string) {}

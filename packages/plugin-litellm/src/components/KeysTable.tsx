@@ -16,7 +16,6 @@ import DialogContent from '@mui/material/DialogContent';
 import DialogActions from '@mui/material/DialogActions';
 import TextField from '@mui/material/TextField';
 import CircularProgress from '@mui/material/CircularProgress';
-import Autocomplete from '@mui/material/Autocomplete';
 import Skeleton from '@mui/material/Skeleton';
 import InputAdornment from '@mui/material/InputAdornment';
 import { alpha } from '@mui/material/styles';
@@ -24,8 +23,6 @@ import { ContentCopy, Delete, Add, Edit, Autorenew, Search, Lock, LockOpen } fro
 import { expiryStatus } from '../api';
 import {
   VirtualKey,
-  ModelInfo,
-  UpdateKeyRequest,
 } from '../types';
 import {
   EmptyState,
@@ -40,22 +37,16 @@ import {
 
 interface KeysTableProps {
   keys: VirtualKey[];
-  models: ModelInfo[];
-  /** Opens the shared "Generate New Key" dialog (rendered at page level). */
+  /** Opens the shared key form dialog in create mode (rendered at page level). */
   onGenerateKeyClick: () => void;
+  /** Opens the shared key form dialog in edit mode for the given key. */
+  onEditKey: (key: VirtualKey) => void;
   loading: boolean;
-  onUpdateKey: (keyId: string, request: UpdateKeyRequest) => Promise<void>;
   onBlockKey: (keyId: string) => Promise<void>;
   onUnblockKey: (keyId: string) => Promise<void>;
-  onResetKeySpend: (keyId: string) => Promise<void>;
   onDeleteKey: (keyId: string) => Promise<void>;
   onPruneExpiredKeys: () => Promise<{ pruned: number }>;
 }
-
-const maskKey = (key: string): string => {
-  if (key.length <= 8) return '***';
-  return `${key.slice(0, 4)}...${key.slice(-4)}`;
-};
 
 const shortKeyId = (token: string): string => {
   if (!token) return '-';
@@ -143,39 +134,6 @@ function BudgetCell({ spend, maxBudget }: { spend: number; maxBudget?: number })
   );
 }
 
-function fmtCost(perToken?: number): string | null {
-  if (!perToken) return null;
-  const per1k = perToken * 1000;
-  return per1k < 0.01 ? `$${(perToken * 1_000_000).toFixed(2)}/M` : `$${per1k.toFixed(3)}/1K`;
-}
-
-function formatContextWindow(
-  maxInput?: number,
-  maxOutput?: number,
-): string | null {
-  if (!maxInput && !maxOutput) return null;
-  const fmt = (n?: number) => {
-    if (!n) return null;
-    if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-    if (n >= 1_000) return `${Math.round(n / 1000)}K`;
-    return String(n);
-  };
-  const inPart = fmt(maxInput);
-  const outPart = fmt(maxOutput);
-  if (inPart && outPart) return `ctx ${inPart} in / ${outPart} out`;
-  if (inPart) return `ctx ${inPart}`;
-  if (outPart) return `ctx ${outPart} out`;
-  return null;
-}
-
-const keyToEditForm = (k: VirtualKey): UpdateKeyRequest => ({
-  key_alias: k.key_alias ?? '',
-  models: k.models ?? [],
-  max_budget: k.max_budget,
-  tpm_limit: k.tpm_limit,
-  rpm_limit: k.rpm_limit,
-});
-
 type SortKey = 'alias' | 'created' | 'expires' | 'budget' | 'limits' | 'models';
 type SortDirection = 'asc' | 'desc';
 
@@ -193,20 +151,14 @@ function compareKeys(a: VirtualKey, b: VirtualKey, sortKey: SortKey): number {
 
 export const KeysTable: React.FC<KeysTableProps> = ({
   keys,
-  models,
   loading,
   onGenerateKeyClick,
-  onUpdateKey,
+  onEditKey,
   onBlockKey,
   onUnblockKey,
-  onResetKeySpend,
   onDeleteKey,
   onPruneExpiredKeys,
 }) => {
-  const [editingKey, setEditingKey] = useState<VirtualKey | null>(null);
-  const [editForm, setEditForm] = useState<UpdateKeyRequest>({});
-  const [editSubmitting, setEditSubmitting] = useState(false);
-
   // Block/unblock
   const [blockingKeyId, setBlockingKeyId] = useState<string | null>(null);
 
@@ -214,9 +166,8 @@ export const KeysTable: React.FC<KeysTableProps> = ({
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [deleteSubmitting, setDeleteSubmitting] = useState(false);
 
-  // Reset spend (lives inside edit dialog)
-  const [resetSpendConfirm, setResetSpendConfirm] = useState(false);
-  const [resetSpendSubmitting, setResetSpendSubmitting] = useState(false);
+  // Reset spend moved into the shared KeyFormDialog (edit mode)
+
 
   // Filter
   const [filterText, setFilterText] = useState('');
@@ -247,31 +198,8 @@ export const KeysTable: React.FC<KeysTableProps> = ({
     });
   }, [keys, filterText, sortKey, sortDirection]);
 
-  const editSelectedModels = models.filter(m => (editForm.models || []).includes(m.model_name));
-
   const handleOpenEdit = (k: VirtualKey) => {
-    setEditingKey(k);
-    setEditForm(keyToEditForm(k));
-  };
-
-  const handleCloseEdit = () => {
-    setEditingKey(null);
-    setEditForm({});
-    setResetSpendConfirm(false);
-  };
-
-  const handleUpdate = async () => {
-    if (!editingKey) return;
-    setEditSubmitting(true);
-    try {
-      await onUpdateKey(editingKey.token ?? editingKey.key, editForm);
-      handleCloseEdit();
-    } catch (error) {
-      // eslint-disable-next-line no-console -- TODO: surface via a snackbar/alert instead of console-only
-      console.error('Failed to update key:', error);
-    } finally {
-      setEditSubmitting(false);
-    }
+    onEditKey(k);
   };
 
   const handleToggleBlock = async (key: VirtualKey) => {
@@ -285,18 +213,6 @@ export const KeysTable: React.FC<KeysTableProps> = ({
       }
     } finally {
       setBlockingKeyId(null);
-    }
-  };
-
-  const handleResetSpend = async () => {
-    if (!editingKey) return;
-    setResetSpendSubmitting(true);
-    try {
-      await onResetKeySpend(editingKey.token ?? editingKey.key);
-      setResetSpendConfirm(false);
-      handleCloseEdit();
-    } finally {
-      setResetSpendSubmitting(false);
     }
   };
 
@@ -335,29 +251,6 @@ export const KeysTable: React.FC<KeysTableProps> = ({
       setPruneSubmitting(false);
       setPruneConfirmCount(null);
     }
-  };
-
-  const modelOption = (m: ModelInfo) => {
-    const inCost = fmtCost(m.input_cost_per_token);
-    const outCost = fmtCost(m.output_cost_per_token);
-    const ctx = formatContextWindow(m.max_input_tokens, m.max_output_tokens);
-    return (
-      <Box>
-        <span>{m.model_name}</span>
-        {m.supports_function_calling && ' 🔧'}
-        {m.supports_vision && ' 👁️'}
-        {ctx && (
-          <Typography variant="caption" color="text.secondary" sx={{ ml: 1 }}>
-            {ctx}
-          </Typography>
-        )}
-        {(inCost || outCost) && (
-          <Typography variant="caption" color="text.secondary" sx={{ ml: 1 }}>
-            {inCost} in · {outCost} out
-          </Typography>
-        )}
-      </Box>
-    );
   };
 
   const renderTableBody = () => {
@@ -612,114 +505,6 @@ export const KeysTable: React.FC<KeysTableProps> = ({
           </Table>
         </TableContainer>
       </SectionCard>
-
-
-      {/* Edit dialog */}
-      <Dialog open={!!editingKey} onClose={handleCloseEdit} maxWidth="sm" fullWidth>
-        <DialogTitle>Edit Key</DialogTitle>
-        <DialogContent>
-          {editingKey && (
-            <Box display="flex" flexDirection="column" gap={2} mt={1}>
-              <Typography variant="body2" color="text.secondary">
-                <code style={{ fontFamily: 'monospace', color: 'inherit' }}>{maskKey(editingKey.key)}</code>
-              </Typography>
-              <TextField
-                label="Alias"
-                value={editForm.key_alias || ''}
-                onChange={(e) => setEditForm({ ...editForm, key_alias: e.target.value })}
-                fullWidth
-              />
-
-              {models.length > 0 && (
-                <Autocomplete
-                  multiple
-                  options={models}
-                  groupBy={m => m.mode || 'other'}
-                  getOptionLabel={m => m.model_name}
-                  value={editSelectedModels}
-                  onChange={(_e, selected) =>
-                    setEditForm({ ...editForm, models: selected.map(m => m.model_name) })
-                  }
-                  renderOption={(props, m) => <li {...props}>{modelOption(m)}</li>}
-                  renderInput={params => (
-                    <TextField {...params} label="Models" fullWidth />
-                  )}
-                />
-              )}
-
-              <TextField
-                label="Max Budget (USD)"
-                type="number"
-                value={editForm.max_budget ?? ''}
-                onChange={(e) =>
-                  setEditForm({ ...editForm, max_budget: e.target.value ? Number(e.target.value) : undefined })
-                }
-                fullWidth
-              />
-              <TextField
-                label="TPM Limit"
-                type="number"
-                value={editForm.tpm_limit ?? ''}
-                onChange={(e) =>
-                  setEditForm({ ...editForm, tpm_limit: e.target.value ? Number(e.target.value) : undefined })
-                }
-                helperText="Max tokens per minute this key can consume across all models. Leave blank for no limit."
-                fullWidth
-              />
-              <TextField
-                label="RPM Limit"
-                type="number"
-                value={editForm.rpm_limit ?? ''}
-                onChange={(e) =>
-                  setEditForm({ ...editForm, rpm_limit: e.target.value ? Number(e.target.value) : undefined })
-                }
-                helperText="Max requests per minute this key can make across all models. Leave blank for no limit."
-                fullWidth
-              />
-
-              <Box mt={1} pt={2} borderTop="1px solid" sx={{ borderColor: 'divider' }}>
-                <Typography variant="caption" color="text.secondary" display="block" mb={1}>
-                  Danger Zone
-                </Typography>
-                {!resetSpendConfirm ? (
-                  <Button
-                    size="small"
-                    color="warning"
-                    variant="outlined"
-                    onClick={() => setResetSpendConfirm(true)}
-                  >
-                    Reset Spend to $0
-                  </Button>
-                ) : (
-                  <Box display="flex" alignItems="center" gap={1} flexWrap="wrap">
-                    <Typography variant="body2" color="warning.main">
-                      Zero out spend counter?
-                    </Typography>
-                    <Button
-                      size="small"
-                      color="warning"
-                      variant="contained"
-                      disabled={resetSpendSubmitting}
-                      onClick={handleResetSpend}
-                    >
-                      {resetSpendSubmitting ? <CircularProgress size={16} /> : 'Confirm'}
-                    </Button>
-                    <Button size="small" onClick={() => setResetSpendConfirm(false)}>
-                      Cancel
-                    </Button>
-                  </Box>
-                )}
-              </Box>
-            </Box>
-          )}
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={handleCloseEdit}>Cancel</Button>
-          <Button onClick={handleUpdate} variant="contained" color="primary" disabled={editSubmitting}>
-            {editSubmitting ? <CircularProgress size={24} /> : 'Save'}
-          </Button>
-        </DialogActions>
-      </Dialog>
 
       {/* Delete confirmation dialog */}
       <Dialog open={!!deleteConfirmId} onClose={() => setDeleteConfirmId(null)} maxWidth="xs" fullWidth>

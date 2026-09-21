@@ -14,7 +14,7 @@ import { useApi } from '@backstage/core-plugin-api';
 import { usePermission } from '@backstage/plugin-permission-react';
 import { DashboardHeader } from './DashboardHeader';
 import { KeysTable } from './KeysTable';
-import { GenerateKeyDialog } from './GenerateKeyDialog';
+import { KeyFormDialog } from './KeyFormDialog';
 import { ManageTeamDialog } from './ManageTeamDialog';
 import { UsageStats } from './UsageStats';
 import { LiteLLMBudgetWidget } from './LiteLLMBudgetWidget';
@@ -29,7 +29,7 @@ import {
   litellmTeamKnowledgebaseManagePermission,
   litellmTeamMcpManagePermission,
 } from '../permissions';
-import { DateRange, GenerateKeyRequest, GenerateKeyResponse, UpdateKeyRequest, UsageMetrics, CreateTeamRequest, UpdateTeamRequest, TeamInfo } from '../types';
+import { DateRange, GenerateKeyRequest, GenerateKeyResponse, UpdateKeyRequest, UsageMetrics, CreateTeamRequest, UpdateTeamRequest, TeamInfo, VirtualKey } from '../types';
 
 const PERIOD_LS_KEY = 'litellm_usage_period';
 type DatePreset = 'today' | '24h' | '7d' | '30d';
@@ -103,6 +103,9 @@ export const LiteLLMPage: React.FC = () => {
 
   const [snackbar, setSnackbar] = useState<{ message: string; severity: 'success' | 'warning' | 'error' } | null>(null);
   const [manageTeam, setManageTeam] = useState<{ mode: 'create' | 'edit'; team?: TeamInfo } | null>(null);
+  /** Which key is open in the shared key form dialog; null = create mode. */
+  const [keyToEdit, setKeyToEdit] = useState<VirtualKey | null>(null);
+  const keyFormOpen = generateDialogOpen || !!keyToEdit;
 
   // Team usage cache: teamId -> UsageMetrics
   const [teamUsageCache, setTeamUsageCache] = useState<Record<string, UsageMetrics | null>>({});
@@ -418,13 +421,11 @@ export const LiteLLMPage: React.FC = () => {
       {activeTab === 'keys' && (
         <KeysTable
           keys={keys ?? []}
-          models={allowedModels}
           loading={keysLoading || modelsLoading}
           onGenerateKeyClick={() => setGenerateDialogOpen(true)}
-          onUpdateKey={handleUpdateKey}
+          onEditKey={setKeyToEdit}
           onBlockKey={handleBlockKey}
           onUnblockKey={handleUnblockKey}
-          onResetKeySpend={handleResetKeySpend}
           onDeleteKey={handleDeleteKey}
           onPruneExpiredKeys={handlePruneExpiredKeys}
         />
@@ -464,15 +465,22 @@ export const LiteLLMPage: React.FC = () => {
 
       {activeTab === 'audit' && userInfo.can_view_audit && <AuditLog api={api} />}
 
-      <GenerateKeyDialog
-        open={generateDialogOpen}
-        onClose={() => setGenerateDialogOpen(false)}
+      <KeyFormDialog
+        open={keyFormOpen}
+        onClose={() => {
+          setGenerateDialogOpen(false);
+          setKeyToEdit(null);
+        }}
+        mode={keyToEdit ? 'edit' : 'create'}
+        keyToEdit={keyToEdit}
         keys={keys ?? []}
         models={allowedModels}
         teams={teams ?? []}
         username={userInfo.user_id}
         keyGenerationSettings={liteLlmConfig?.keyGeneration}
-        onGenerateKey={handleGenerateKey}
+        onCreateKey={handleGenerateKey}
+        onUpdateKey={handleUpdateKey}
+        onResetKeySpend={handleResetKeySpend}
         onGetConfig={() => api.getConfig()}
       />
 
