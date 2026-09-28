@@ -17,6 +17,8 @@ export type {
 } from './components/LiteLLMBudgetGauges';
 export { KeyFormDialog } from './components/KeyFormDialog';
 export type { KeyFormDialogMode, KeyFormDialogProps } from './components/KeyFormDialog';
+export { GenerateKeyButton } from './components/GenerateKeyButton';
+export type { GenerateKeyButtonProps } from './components/GenerateKeyButton';
 export { GenerateKeyDialog } from './components/GenerateKeyDialog';
 export { ManageTeamDialog } from './components/ManageTeamDialog';
 export { LiteLlmApi, liteLlmApiRef } from './api';

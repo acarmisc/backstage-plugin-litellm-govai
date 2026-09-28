@@ -10,6 +10,29 @@ commit/PR that bumps the version in `package.json`. Format follows the
 Earlier history: `git log -- packages/plugin-litellm` or the
  [GitHub tags](https://github.com/acarmisc/backstage-plugin-litellm-govai/tags).
 
+## 0.27.0
+
+### Minor Changes
+
+- feat(`LiteLLMBudgetGauges`): the card is now a fixed four-column row —
+  `Key` · `User` · `Team` gauges plus a `Usage` mini-chart of daily token
+  usage (stacked input/output sparkline with the month-to-date token total
+  underneath). The usage period is frozen to month-to-date (1st of the
+  month through today, local calendar days) — no period selector. Usage
+  loads independently, so a failed usage fetch leaves the gauges untouched
+  and the chart renders its empty state.
+- feat(`GenerateKeyButton`): new shared "Generate New Key" CTA (contained +
+  `Add` icon, `onClick` or deep-link `to` modes), used by the plugin page
+  (`DashboardHeader`, `KeysTable` toolbar and empty state) and the homepage
+  budget card's `new-key` CTA. Replaces the divergent `New key` /
+  `Create LiteLLM key` copies — the gauges' `new-key` default label is now
+  `Generate New Key`, identical to the plugin page.
+
+### Patch Changes
+
+- dev: the mock API's `getUsage` honours the requested window so frozen
+  month-to-date periods render a realistic number of points.
+
 ## 0.26.0
 
 ### Minor Changes

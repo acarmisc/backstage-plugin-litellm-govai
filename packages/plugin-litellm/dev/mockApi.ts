@@ -169,7 +169,16 @@ export class MockLiteLlmApi implements LiteLlmApiInterface {
   async pruneExpiredKeys() { return { pruned: 1 }; }
   async listModels(): Promise<ModelInfo[]> { return models; }
   async getTeams(): Promise<TeamInfo[]> { return teams; }
-  async getUsage(_startDate: string, _endDate: string): Promise<UsageMetrics> { return usageMetrics(7); }
+  async getUsage(startDate: string, endDate: string): Promise<UsageMetrics> {
+    // Honour the requested window so frozen periods (e.g. the budget card's
+    // month-to-date chart) render a realistic number of points in dev.
+    const start = new Date(startDate).getTime();
+    const end = new Date(endDate).getTime();
+    const days = Number.isFinite(start) && Number.isFinite(end)
+      ? Math.min(62, Math.max(1, Math.round((end - start) / day) + 1))
+      : 7;
+    return usageMetrics(days);
+  }
   async getTeamUsage(_teamId: string, _startDate: string, _endDate: string): Promise<UsageMetrics> { return usageMetrics(7); }
   async getAuditLogs(_params: AuditLogsParams): Promise<PaginatedAuditLogs> {
     return {

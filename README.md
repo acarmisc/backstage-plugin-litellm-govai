@@ -346,13 +346,13 @@ Like the home widget it needs the backend plugin configured and the user provisi
 
 ### Budget Gauges (condensed homepage card)
 
-When the full `LiteLLMBudgetWidget` takes too much vertical space — e.g. a homepage column beside other cards — `LiteLLMBudgetGauges` is the condensed form: **one ring gauge per enforcement level**, `Key` · `User` · `Team`, in that fixed order. Each ring shows the limit at that level **nearest its cap** (percent in the centre), with the limit's name, spend-vs-cap, and reset window under it. When a level holds several limits, the ring is the closest to its cap and a `+N more` link counts the rest through to the Keys tab; a level with no cap renders an empty ring with a short note, so the card keeps a stable three-ring shape.
+When the full `LiteLLMBudgetWidget` takes too much vertical space — e.g. a homepage column beside other cards — `LiteLLMBudgetGauges` is the condensed form: **one ring gauge per enforcement level**, `Key` · `User` · `Team`, **plus a month-to-date daily token-usage mini-chart**, in a fixed four-column row. Each ring shows the limit at that level **nearest its cap** (percent in the centre), with the limit's name, spend-vs-cap, and reset window under it. When a level holds several limits, the ring is the closest to its cap and a `+N more` link counts the rest through to the Keys tab; a level with no cap renders an empty ring with a short note, so the card keeps a stable shape. The chart stacks daily input/output tokens from the 1st of the current month through today (frozen period — no selector) with the MTD token total underneath.
 
 **Composable CTAs.** The bar under the card is assembled from a `ctas` list, so each host picks the actions it wants, in the order it wants:
 
 | CTA kind | Default label | Behaviour |
 |----------|---------------|-----------|
-| `new-key` | `New key` | `onCreateKey()` if supplied, else deep-links to `/litellm?generate=1`, which opens the generate-key dialog (`LiteLLMPage` honours the param) |
+| `new-key` | `Generate New Key` | Shared `GenerateKeyButton` — identical copy, icon and styling to the plugin page. Calls `onCreateKey()` if supplied, else deep-links to `/litellm?generate=1`, which opens the generate-key dialog (`LiteLLMPage` honours the param) |
 | `module` | `Open module` | Links to the LiteLLM page (`moduleHref`) |
 | `all-limits` | `All limits` | Expands an in-place list of every limit you have (bounded height, scrolls); auto-hidden when you have no limits |
 
@@ -367,7 +367,7 @@ import { LiteLLMBudgetGauges } from '@acarmisc/backstage-plugin-litellm';
 
 // Two CTAs, custom copy, and the full list visible on load:
 <LiteLLMBudgetGauges
-  ctas={[{ kind: 'new-key', label: 'Create key' }, 'all-limits']}
+  ctas={[{ kind: 'new-key', label: 'Generate New Key' }, 'all-limits']}
   defaultExpanded
 />
 

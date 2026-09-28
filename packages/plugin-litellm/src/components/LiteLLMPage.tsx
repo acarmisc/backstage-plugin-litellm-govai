@@ -64,8 +64,8 @@ export const LiteLLMPage: React.FC = () => {
     return isPageTab(t) ? t : 'overview';
   });
 
-  // `?generate=1` (e.g. from a homepage budget card's "New key" CTA) opens the
-  // generate-key dialog on arrival. The param is cleared once honoured so a
+  // `?generate=1` (e.g. from a homepage budget card's "Generate New Key"
+  // CTA) opens the generate-key dialog on arrival. The param is cleared once honoured so a
   // manual close doesn't immediately reopen it on the next render.
   const [generateDialogOpen, setGenerateDialogOpen] = useState(
     () => searchParams.get('generate') === '1',

@@ -3,13 +3,12 @@ import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import Skeleton from '@mui/material/Skeleton';
 import Paper from '@mui/material/Paper';
-import Button from '@mui/material/Button';
 import Divider from '@mui/material/Divider';
 import { alpha } from '@mui/material/styles';
-import { Add } from '@mui/icons-material';
 import { UserInfo, TeamInfo, VirtualKey } from '../types';
 import { expiryStatus } from '../api';
 import { TagChip, Tone } from './ui';
+import { GenerateKeyButton } from './GenerateKeyButton';
 
 interface DashboardHeaderProps {
   userInfo: UserInfo;
@@ -139,15 +138,7 @@ export const DashboardHeader: React.FC<DashboardHeaderProps> = ({
           </Box>
         </Box>
 
-        <Button
-          variant="contained"
-          color="primary"
-          disableElevation
-          startIcon={<Add />}
-          onClick={onGenerateKeyClick}
-        >
-          Generate New Key
-        </Button>
+        <GenerateKeyButton onClick={onGenerateKeyClick} />
       </Box>
 
       <Divider />

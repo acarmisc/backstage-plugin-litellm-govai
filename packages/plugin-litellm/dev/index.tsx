@@ -54,12 +54,14 @@ const budgetWidgetsPage = PageBlueprint.make({
     icon: <TrendingUpIcon />,
     loader: async () => {
       const { default: Box } = await import('@mui/material/Box');
-      const { default: Button } = await import('@mui/material/Button');
       const { LiteLLMBudgetWidget } = await import(
         '../src/components/LiteLLMBudgetWidget'
       );
       const { LiteLLMBudgetGauges } = await import(
         '../src/components/LiteLLMBudgetGauges'
+      );
+      const { GenerateKeyButton } = await import(
+        '../src/components/GenerateKeyButton'
       );
       return (
         <Box
@@ -75,20 +77,12 @@ const budgetWidgetsPage = PageBlueprint.make({
           <LiteLLMBudgetWidget compact collapsible />
           <LiteLLMBudgetWidget
             compact
-            action={
-              <Button variant="contained" fullWidth>
-                Create LiteLLM key
-              </Button>
-            }
+            action={<GenerateKeyButton />}
           />
           <LiteLLMBudgetGauges />
           <LiteLLMBudgetGauges
             ctas={['module']}
-            action={
-              <Button variant="contained" fullWidth>
-                Create LiteLLM key
-              </Button>
-            }
+            action={<GenerateKeyButton />}
           />
           <LiteLLMBudgetGauges
             defaultExpanded

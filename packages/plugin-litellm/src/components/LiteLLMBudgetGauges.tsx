@@ -1,19 +1,26 @@
 /**
  * Condensed budget card for a homepage column: one ring gauge per
- * enforcement level (key → personal → team), each showing the limit nearest
- * its cap. Where the full `LiteLLMBudgetWidget` lists every limit as a
- * spend-vs-cap meter, this trades detail for density — a single row of rings
- * with a label and spend figure under each.
+ * enforcement level (key → personal → team) plus a month-to-date daily
+ * token-usage mini-chart, in a fixed four-column row. Each gauge shows the
+ * limit nearest its cap; where the full `LiteLLMBudgetWidget` lists every
+ * limit as a spend-vs-cap meter, this trades detail for density — a single
+ * row with a label and spend figure under each gauge, and the MTD token
+ * total under the chart.
  *
  * Gauges are always rendered in the same order, with an empty ring when the
  * user has no cap at that level, so the card keeps a stable shape as data
  * loads and across users. When a level holds several limits, the ring shows
  * the one closest to its cap and a "+N more" link counts the rest.
  *
- * The bottom action bar is composable: pass any subset of `ctas` — mint a new
- * key, open the LiteLLM module, or expand the full per-limit list in place —
- * in the order you want. `action` remains an escape hatch for a fully custom
- * node; when either is present it renders below a divider.
+ * The usage period is frozen to month-to-date (no period selector): the
+ * chart always covers the 1st of the current month through today.
+ *
+ * The bottom action bar is composable: pass any subset of `ctas` — generate
+ * a new key, open the LiteLLM module, or expand the full per-limit list in
+ * place — in the order you want. `action` remains an escape hatch for a
+ * fully custom node; when either is present it renders below a divider. The
+ * `new-key` CTA renders the shared `GenerateKeyButton`, identical to the
+ * one on the plugin page.
  */
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import Paper from '@mui/material/Paper';
@@ -24,12 +31,14 @@ import CircularProgress from '@mui/material/CircularProgress';
 import Alert from '@mui/material/Alert';
 import Collapse from '@mui/material/Collapse';
 import { ExpandMore } from '@mui/icons-material';
+import { AreaChart, Area, ResponsiveContainer, Tooltip } from 'recharts';
 import { useApi } from '@backstage/core-plugin-api';
 import { Link } from '@backstage/core-components';
 import { liteLlmApiRef } from '../api';
 import { UserInfo, TeamInfo, VirtualKey } from '../types';
-import { fmtUsd } from '../format';
-import { Gauge, StatusPill } from './ui';
+import { fmtUsd, fmtInt } from '../format';
+import { Gauge, StatusPill, ChartTooltip, SERIES, fmtCompact } from './ui';
+import { GenerateKeyButton } from './GenerateKeyButton';
 import { BudgetLimitList, LimitListPanel } from './BudgetLimitList';
 import {
   allBudgetLimits,
@@ -65,8 +74,9 @@ export interface LiteLLMBudgetGaugesProps {
   /** Where the module CTA points. Defaults to the LiteLLM page. */
   moduleHref?: string;
   /**
-   * Called when the "new key" CTA is used. When omitted, the CTA deep-links
-   * to the module with `?generate=1`, which opens the generate-key dialog.
+   * Called when the "Generate New Key" CTA is used. When omitted, the CTA
+   * deep-links to the module with `?generate=1`, which opens the
+   * generate-key dialog.
    */
   onCreateKey?: () => void;
   /**
@@ -97,7 +107,7 @@ const LEVEL: Record<BudgetGauge['kind'], { name: string; none: string }> = {
 const DEFAULT_CTAS: BudgetCtaKind[] = ['new-key', 'module', 'all-limits'];
 
 const CTA_LABELS: Record<BudgetCtaKind, string> = {
-  'new-key': 'New key',
+  'new-key': 'Generate New Key',
   module: 'Open module',
   'all-limits': 'All limits',
 };
@@ -221,6 +231,163 @@ const LevelGauge: React.FC<{ gauge: BudgetGauge; size: number; keysHref: string 
   );
 };
 
+/** Month-to-date range as `YYYY-MM-DD` strings: the 1st of the current month through today. */
+export function monthToDateRange(now: Date = new Date()): { startDate: string; endDate: string } {
+  // Local calendar days, not UTC slices: `toISOString().split('T')[0]` shifts
+  // the date at month boundaries for non-UTC hosts, which would either clip
+  // today off the chart or pull in a day from the previous month.
+  const toDay = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(
+      d.getDate(),
+    ).padStart(2, '0')}`;
+  const start = new Date(now.getFullYear(), now.getMonth(), 1);
+  return { startDate: toDay(start), endDate: toDay(now) };
+}
+
+interface DailyTokens {
+  date: string;
+  input: number;
+  output: number;
+}
+
+/**
+ * Fourth column of the budget card: a sparkline of daily token usage
+ * (stacked input/output) frozen to month-to-date, with the MTD token total
+ * underneath. Same column width and label language as the gauges so the
+ * four-column row stays aligned.
+ */
+const UsageMiniChart: React.FC<{
+  data: DailyTokens[];
+  totalTokens: number;
+  loading: boolean;
+  height: number;
+}> = ({ data, totalTokens, loading, height }) => {
+  const renderPlot = () => {
+    if (loading) {
+      return (
+        <Box display="flex" justifyContent="center" alignItems="center" height="100%">
+          <CircularProgress size={20} />
+        </Box>
+      );
+    }
+    if (data.length === 0) {
+      return (
+        <Box
+          display="flex"
+          justifyContent="center"
+          alignItems="center"
+          height="100%"
+          sx={theme => ({ color: theme.palette.text.secondary, fontSize: 18 })}
+        >
+          —
+        </Box>
+      );
+    }
+    return (
+      <ResponsiveContainer width="100%" height="100%">
+        <AreaChart data={data} margin={{ top: 4, right: 0, bottom: 0, left: 0 }}>
+          <Tooltip content={<ChartTooltip valueFormatter={fmtInt} />} />
+          <Area
+            type="monotone"
+            dataKey="input"
+            name="Input"
+            stackId="tok"
+            stroke={SERIES.input}
+            strokeWidth={1.5}
+            fill={SERIES.input}
+            fillOpacity={0.25}
+            dot={false}
+            isAnimationActive={false}
+          />
+          <Area
+            type="monotone"
+            dataKey="output"
+            name="Output"
+            stackId="tok"
+            stroke={SERIES.output}
+            strokeWidth={1.5}
+            fill={SERIES.output}
+            fillOpacity={0.25}
+            dot={false}
+            isAnimationActive={false}
+          />
+        </AreaChart>
+      </ResponsiveContainer>
+    );
+  };
+
+  const renderCaption = () => {
+    if (loading) {
+      return (
+        <Typography variant="caption" color="text.secondary" sx={{ mt: 0.25, fontSize: 11 }}>
+          …
+        </Typography>
+      );
+    }
+    if (data.length === 0) {
+      return (
+        <Typography
+          variant="caption"
+          color="text.secondary"
+          sx={{ mt: 0.25, fontSize: 10.5, textAlign: 'center' }}
+        >
+          No usage this month
+        </Typography>
+      );
+    }
+    return (
+      <>
+        <Typography
+          variant="caption"
+          title={`${fmtInt(totalTokens)} tokens month to date`}
+          sx={{
+            mt: 0.25,
+            fontSize: 11,
+            fontWeight: 600,
+            maxWidth: '100%',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+            fontVariantNumeric: 'tabular-nums',
+          }}
+        >
+          {fmtCompact(totalTokens)} tokens
+        </Typography>
+        <Typography variant="caption" color="text.secondary" sx={{ fontSize: 10.5 }}>
+          month to date
+        </Typography>
+      </>
+    );
+  };
+
+  return (
+    <Box
+      sx={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        minWidth: 0,
+        flex: 1,
+      }}
+    >
+      <Box sx={{ height, width: '100%' }}>{renderPlot()}</Box>
+      <Typography
+        sx={theme => ({
+          mt: 0.75,
+          fontSize: 10.5,
+          fontWeight: 700,
+          letterSpacing: '0.08em',
+          textTransform: 'uppercase',
+          color: theme.palette.text.secondary,
+        })}
+      >
+        Usage
+      </Typography>
+      {renderCaption()}
+    </Box>
+  );
+};
+
 export const LiteLLMBudgetGauges: React.FC<LiteLLMBudgetGaugesProps> = ({
   title = 'Budget',
   size = 72,
@@ -240,6 +407,9 @@ export const LiteLLMBudgetGauges: React.FC<LiteLLMBudgetGaugesProps> = ({
   const [user, setUser] = useState<UserInfo | null>(null);
   const [teams, setTeams] = useState<TeamInfo[]>([]);
   const [keys, setKeys] = useState<VirtualKey[]>([]);
+  const [usageLoading, setUsageLoading] = useState(true);
+  const [dailyTokens, setDailyTokens] = useState<DailyTokens[]>([]);
+  const [mtdTokens, setMtdTokens] = useState(0);
 
   const isControlled = expanded !== undefined;
   const [uncontrolledExpanded, setUncontrolledExpanded] = useState(defaultExpanded);
@@ -256,23 +426,46 @@ export const LiteLLMBudgetGauges: React.FC<LiteLLMBudgetGaugesProps> = ({
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
+    setUsageLoading(true);
     setError(null);
-    Promise.allSettled([api.getUserInfo(), api.getTeams(), api.listKeys()]).then(
-      ([userResult, teamsResult, keysResult]) => {
-        if (cancelled) return;
-        if (userResult.status === 'fulfilled') {
-          setUser(userResult.value);
-        } else {
-          setUser(null);
-          setError(
-            userResult.reason?.message ?? 'Failed to load your LiteLLM profile',
-          );
-        }
-        setTeams(teamsResult.status === 'fulfilled' ? teamsResult.value : []);
-        setKeys(keysResult.status === 'fulfilled' ? keysResult.value : []);
-        setLoading(false);
-      },
-    );
+    // The usage chart is frozen to month-to-date — no period selector.
+    const { startDate, endDate } = monthToDateRange();
+    Promise.allSettled([
+      api.getUserInfo(),
+      api.getTeams(),
+      api.listKeys(),
+      api.getUsage(startDate, endDate),
+    ]).then(([userResult, teamsResult, keysResult, usageResult]) => {
+      if (cancelled) return;
+      if (userResult.status === 'fulfilled') {
+        setUser(userResult.value);
+      } else {
+        setUser(null);
+        setError(
+          userResult.reason?.message ?? 'Failed to load your LiteLLM profile',
+        );
+      }
+      setTeams(teamsResult.status === 'fulfilled' ? teamsResult.value : []);
+      setKeys(keysResult.status === 'fulfilled' ? keysResult.value : []);
+      setLoading(false);
+      // Usage degrades independently: a failed usage fetch leaves the
+      // gauges untouched and the chart column renders its empty state.
+      if (usageResult.status === 'fulfilled') {
+        const daily = usageResult.value.daily_usage ?? [];
+        setDailyTokens(
+          daily.map(d => ({
+            date: d.date,
+            input: d.prompt_tokens,
+            output: d.completion_tokens,
+          })),
+        );
+        setMtdTokens(usageResult.value.total_tokens ?? 0);
+      } else {
+        setDailyTokens([]);
+        setMtdTokens(0);
+      }
+      setUsageLoading(false);
+    });
     return () => {
       cancelled = true;
     };
@@ -315,20 +508,13 @@ export const LiteLLMBudgetGauges: React.FC<LiteLLMBudgetGaugesProps> = ({
     const key = `${cta.kind}-${index}`;
     switch (cta.kind) {
       case 'new-key':
+        // The shared plugin-page CTA — identical copy, icon and styling
+        // everywhere. Deep-links to the module's generate-key dialog unless
+        // the host takes over with `onCreateKey`.
         return onCreateKey ? (
-          <Button key={key} size="small" variant="contained" onClick={onCreateKey}>
-            {label}
-          </Button>
+          <GenerateKeyButton key={key} size="small" label={label} onClick={onCreateKey} />
         ) : (
-          <Button
-            key={key}
-            size="small"
-            variant="contained"
-            component={Link}
-            to={`${moduleHref}?generate=1`}
-          >
-            {label}
-          </Button>
+          <GenerateKeyButton key={key} size="small" label={label} to={`${moduleHref}?generate=1`} />
         );
       case 'module':
         return (
@@ -396,6 +582,12 @@ export const LiteLLMBudgetGauges: React.FC<LiteLLMBudgetGaugesProps> = ({
             {gauges.map(gauge => (
               <LevelGauge key={gauge.kind} gauge={gauge} size={size} keysHref={keysTabHref} />
             ))}
+            <UsageMiniChart
+              data={dailyTokens}
+              totalTokens={mtdTokens}
+              loading={usageLoading}
+              height={size}
+            />
           </Box>
 
           <Collapse in={isExpanded} unmountOnExit>

@@ -111,6 +111,17 @@ export interface DateRange {
     start: Date;
 }
 
+// @public (undocumented)
+export const GenerateKeyButton: React_2.FC<GenerateKeyButtonProps>;
+
+// @public
+export interface GenerateKeyButtonProps {
+    label?: string;
+    onClick?: () => void;
+    size?: 'small' | 'medium' | 'large';
+    to?: string;
+}
+
 // @public @deprecated (undocumented)
 export const GenerateKeyDialog: React_2.FC<{
     open: boolean;

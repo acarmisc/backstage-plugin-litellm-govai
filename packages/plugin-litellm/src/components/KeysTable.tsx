@@ -19,8 +19,9 @@ import CircularProgress from '@mui/material/CircularProgress';
 import Skeleton from '@mui/material/Skeleton';
 import InputAdornment from '@mui/material/InputAdornment';
 import { alpha } from '@mui/material/styles';
-import { ContentCopy, Delete, Add, Edit, Autorenew, Search, Lock, LockOpen } from '@mui/icons-material';
+import { ContentCopy, Delete, Edit, Autorenew, Search, Lock, LockOpen } from '@mui/icons-material';
 import { expiryStatus } from '../api';
+import { GenerateKeyButton } from './GenerateKeyButton';
 import {
   VirtualKey,
 } from '../types';
@@ -277,17 +278,11 @@ export const KeysTable: React.FC<KeysTableProps> = ({
                 message="No keys yet"
                 hint="Generate your first key to start calling models."
                 action={
-                  <Button
-                    variant="contained"
-                    color="primary"
+                  <GenerateKeyButton
                     size="small"
-                    disableElevation
-                    startIcon={<Add />}
+                    label="Generate Your First Key"
                     onClick={onGenerateKeyClick}
-                    sx={{ mt: 1 }}
-                  >
-                    Generate Your First Key
-                  </Button>
+                  />
                 }
               />
             )}
@@ -461,15 +456,7 @@ export const KeysTable: React.FC<KeysTableProps> = ({
                 Prune expired ({expiredKeys.length})
               </Button>
             )}
-            <Button
-              variant="contained"
-              color="primary"
-              disableElevation
-              startIcon={<Add />}
-              onClick={onGenerateKeyClick}
-            >
-              Generate New Key
-            </Button>
+            <GenerateKeyButton onClick={onGenerateKeyClick} />
           </>
         }
       >
