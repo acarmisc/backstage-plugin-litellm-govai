@@ -18,6 +18,10 @@ export interface GenerateKeyButtonProps {
   label?: string;
   /** Button size — card footers use `small`, page headers the default. */
   size?: 'small' | 'medium' | 'large';
+  /** Stretch to the container width (card-footers). Defaults to false. */
+  fullWidth?: boolean;
+  /** Disabled state (e.g. until the account data loads). A disabled `to` renders inert. */
+  disabled?: boolean;
 }
 
 export const GenerateKeyButton: React.FC<GenerateKeyButtonProps> = ({
@@ -25,14 +29,17 @@ export const GenerateKeyButton: React.FC<GenerateKeyButtonProps> = ({
   onClick,
   label = 'Generate New Key',
   size,
+  fullWidth = false,
+  disabled = false,
 }) => {
-  if (onClick) {
+  if (onClick && !disabled) {
     return (
       <Button
         variant="contained"
         color="primary"
         disableElevation
         size={size}
+        fullWidth={fullWidth}
         startIcon={<Add />}
         onClick={onClick}
       >
@@ -40,13 +47,14 @@ export const GenerateKeyButton: React.FC<GenerateKeyButtonProps> = ({
       </Button>
     );
   }
-  if (to) {
+  if (to && !disabled) {
     return (
       <Button
         variant="contained"
         color="primary"
         disableElevation
         size={size}
+        fullWidth={fullWidth}
         startIcon={<Add />}
         component={Link}
         to={to}
@@ -61,6 +69,7 @@ export const GenerateKeyButton: React.FC<GenerateKeyButtonProps> = ({
       color="primary"
       disableElevation
       size={size}
+      fullWidth={fullWidth}
       startIcon={<Add />}
       disabled
     >

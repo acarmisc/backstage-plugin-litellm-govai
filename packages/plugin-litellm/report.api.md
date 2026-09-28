@@ -116,6 +116,8 @@ export const GenerateKeyButton: React_2.FC<GenerateKeyButtonProps>;
 
 // @public
 export interface GenerateKeyButtonProps {
+    disabled?: boolean;
+    fullWidth?: boolean;
     label?: string;
     onClick?: () => void;
     size?: 'small' | 'medium' | 'large';

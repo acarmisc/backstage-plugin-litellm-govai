@@ -10,6 +10,15 @@ commit/PR that bumps the version in `package.json`. Format follows the
 Earlier history: `git log -- packages/plugin-litellm` or the
  [GitHub tags](https://github.com/acarmisc/backstage-plugin-litellm-govai/tags).
 
+## 0.28.0
+
+### Minor Changes
+
+- feat(`GenerateKeyButton`): new `fullWidth` / `disabled` props, so hosts
+  with a full-width gated CTA (e.g. a homepage card that stays disabled
+  until the account data loads) can use the shared button instead of their
+  own inline copy. A disabled `to` renders inert rather than linking.
+
 ## 0.27.0
 
 ### Minor Changes
