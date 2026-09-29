@@ -19,7 +19,7 @@ import {
 } from './types';
 import { profileCacheInstance } from './profileCache';
 
-class ApiError extends Error {
+export class ApiError extends Error {
   body: unknown;
   status: number;
   constructor(message: string, status: number, body: unknown) {
