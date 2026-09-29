@@ -964,6 +964,221 @@ describe('router key-mutation routes — ownership guard (rec #18 regression)', 
       await new Promise<void>(r => h.server.close(() => r()));
     }
   });
+  test('PR-3: reject unknown field team_id with 400', async () => {
+    const h = await mutationHarness();
+    try {
+      const { status, body } = await req(h.baseUrl, 'POST', '/keys/hash-own/update', {
+        authRef: 'user:default/alice',
+        body: { key_alias: 'new-alias', team_id: 'different-team' },
+      });
+      assert.strictEqual(status, 400);
+      assert.match(body.error || body.details?.[0]?.message || '', /team_id|Unknown key/i);
+      assert.strictEqual(h.client.calls.updateKey.length, 0);
+    } finally {
+      await new Promise<void>(r => h.server.close(() => r()));
+    }
+  });
+
+  test('PR-3: reject unknown field spend with 400', async () => {
+    const h = await mutationHarness();
+    try {
+      const { status, body } = await req(h.baseUrl, 'POST', '/keys/hash-own/update', {
+        authRef: 'user:default/alice',
+        body: { key_alias: 'new', spend: 0 },
+      });
+      assert.strictEqual(status, 400);
+      assert.match(body.error || body.details?.[0]?.message || '', /spend|Unknown key/i);
+      assert.strictEqual(h.client.calls.updateKey.length, 0);
+    } finally {
+      await new Promise<void>(r => h.server.close(() => r()));
+    }
+  });
+
+  test('PR-3: reject unknown fields blocked, user_id, key, duration with 400', async () => {
+    const h = await mutationHarness();
+    try {
+      const { status, body } = await req(h.baseUrl, 'POST', '/keys/hash-own/update', {
+        authRef: 'user:default/alice',
+        body: { key_alias: 'new', blocked: false, user_id: 'alice', key: 'new-key', duration: '30d' },
+      });
+      assert.strictEqual(status, 400);
+      assert.ok(body.error || body.details, 'Expected error or details');
+      assert.strictEqual(h.client.calls.updateKey.length, 0);
+    } finally {
+      await new Promise<void>(r => h.server.close(() => r()));
+    }
+  });
+
+  test('PR-3: valid alias change sends only allowed fields upstream', async () => {
+    const h = await mutationHarness();
+    try {
+      const { status } = await req(h.baseUrl, 'POST', '/keys/hash-own/update', {
+        authRef: 'user:default/alice',
+        body: { key_alias: 'new-alias' },
+      });
+      assert.strictEqual(status, 200);
+      assert.strictEqual(h.client.calls.updateKey.length, 1);
+      const payload = h.client.calls.updateKey[0];
+      assert.strictEqual(payload.key, 'hash-own');
+      assert.strictEqual(payload.key_alias, 'new-alias');
+      assert.strictEqual(Object.keys(payload).length, 2, `Expected only 'key' and 'key_alias', got: ${Object.keys(payload).join(', ')}`);
+    } finally {
+      await new Promise<void>(r => h.server.close(() => r()));
+    }
+  });
+
+  test('PR-3: disallowed model rejected with 400', async () => {
+    const h = await startHarness({
+      config: { 'litellm.userIdDomain': 'example.com' },
+      client: mockClient({
+        listKeys: (uid?: string) =>
+          Promise.resolve([
+            {
+              key: 'sk-...own',
+              token: 'hash-own',
+              key_alias: 'test-key',
+              created_at: '2024-01-01T00:00:00Z',
+              spend: 0,
+              team_id: 't1',
+              user_id: uid,
+            } as VirtualKey,
+          ]),
+        getTeamInfo: async () => ({
+          team_id: 't1',
+          spend: 0,
+          models: ['gpt-4o', 'claude-3-sonnet'],
+        }),
+      }),
+    });
+    try {
+      const { status, body } = await req(h.baseUrl, 'POST', '/keys/hash-own/update', {
+        authRef: 'user:default/alice',
+        body: { models: ['gpt-4o', 'o1'] },
+      });
+      assert.strictEqual(status, 400);
+      assert.match(body.error || '', /not allowed/i);
+      assert.deepStrictEqual(body.disallowed_models, ['o1']);
+      assert.strictEqual(h.client.calls.updateKey.length, 0);
+    } finally {
+      await new Promise<void>(r => h.server.close(() => r()));
+    }
+  });
+
+  test('PR-3: max_budget null with allowUnlimitedBudget=false rejected with 400', async () => {
+    const h = await startHarness({
+      config: {
+        'litellm.userIdDomain': 'example.com',
+        'litellm.keyGeneration.allowUnlimitedBudget': false,
+      },
+      client: mockClient({
+        listKeys: (uid?: string) =>
+          Promise.resolve([
+            {
+              key: 'sk-...own',
+              token: 'hash-own',
+              key_alias: 'test-key',
+              created_at: '2024-01-01T00:00:00Z',
+              spend: 0,
+              user_id: uid,
+            } as VirtualKey,
+          ]),
+      }),
+    });
+    try {
+      const { status, body } = await req(h.baseUrl, 'POST', '/keys/hash-own/update', {
+        authRef: 'user:default/alice',
+        body: { max_budget: null },
+      });
+      assert.strictEqual(status, 400);
+      assert.match(body.error || '', /null.*not allowed|cannot be null/i);
+      assert.strictEqual(h.client.calls.updateKey.length, 0);
+    } finally {
+      await new Promise<void>(r => h.server.close(() => r()));
+    }
+  });
+
+  test('PR-3: budget over ceiling rejected with 400', async () => {
+    const h = await startHarness({
+      config: {
+        'litellm.userIdDomain': 'example.com',
+        'litellm.keys.maxBudget': 500,
+      },
+      client: mockClient({
+        listKeys: (uid?: string) =>
+          Promise.resolve([
+            {
+              key: 'sk-...own',
+              token: 'hash-own',
+              key_alias: 'test-key',
+              created_at: '2024-01-01T00:00:00Z',
+              spend: 0,
+              user_id: uid,
+            } as VirtualKey,
+          ]),
+      }),
+    });
+    try {
+      const { status, body } = await req(h.baseUrl, 'POST', '/keys/hash-own/update', {
+        authRef: 'user:default/alice',
+        body: { max_budget: 1000 },
+      });
+      assert.strictEqual(status, 400);
+      assert.match(body.error || body.details?.[0]?.message || '', /not exceed|exceed.*500/i);
+      assert.strictEqual(h.client.calls.updateKey.length, 0);
+    } finally {
+      await new Promise<void>(r => h.server.close(() => r()));
+    }
+  });
+
+  test('PR-3: successful update with multiple fields', async () => {
+    const h = await startHarness({
+      config: {
+        'litellm.userIdDomain': 'example.com',
+        'litellm.keys.maxBudget': 500,
+      },
+      client: mockClient({
+        userInfo: (uid?: string) => ({
+          user_id: uid ?? 'alice@example.com',
+          teams: [],
+          models: ['gpt-4o', 'claude-3-sonnet'],
+        }),
+        listKeys: (uid?: string) =>
+          Promise.resolve([
+            {
+              key: 'sk-...own',
+              token: 'hash-own',
+              key_alias: 'old-alias',
+              created_at: '2024-01-01T00:00:00Z',
+              spend: 10,
+              max_budget: 100,
+              tpm_limit: 1000,
+              rpm_limit: 100,
+              user_id: uid,
+            } as VirtualKey,
+          ]),
+      }),
+    });
+    try {
+      const { status, body } = await req(h.baseUrl, 'POST', '/keys/hash-own/update', {
+        authRef: 'user:default/alice',
+        body: {
+          key_alias: 'new-alias',
+          max_budget: 200,
+          tpm_limit: 2000,
+        },
+      });
+      assert.strictEqual(status, 200, `Expected 200 but got ${status}. Response: ${JSON.stringify(body)}`);
+      assert.strictEqual(h.client.calls.updateKey.length, 1);
+      const payload = h.client.calls.updateKey[0];
+      assert.strictEqual(payload.key, 'hash-own');
+      assert.strictEqual(payload.key_alias, 'new-alias');
+      assert.strictEqual(payload.max_budget, 200);
+      assert.strictEqual(payload.tpm_limit, 2000);
+      assert.strictEqual(payload.rpm_limit, undefined);
+    } finally {
+      await new Promise<void>(r => h.server.close(() => r()));
+    }
+  });
 });
 
 describe('router /keys (list)', () => {

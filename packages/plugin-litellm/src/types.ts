@@ -168,8 +168,6 @@ export interface UpdateKeyRequest {
   max_budget?: number | null;
   tpm_limit?: number;
   rpm_limit?: number;
-  team_id?: string;
-  duration?: string;
 }
 
 export interface GenerateKeyResponse {
