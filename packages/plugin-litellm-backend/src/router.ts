@@ -76,7 +76,8 @@ import {
 import { readOpencodeConfig } from './opencode';
 import { sendError } from './errors';
 import type { RouterContext } from './routes/context';
-import { createRequireUser } from './routes/middleware/withUser';
+import { createRequireUser, getProvisionedUser } from './routes/middleware/withUser';
+import { respondTeamList } from './http/respondTeam';
 
 export { ProvisioningError };
 
@@ -492,19 +493,7 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
   router.get('/user/info', async (_req: Request, res: Response) => {
     try {
       const tokenEntityRef = res.locals.tokenEntityRef as string;
-      const userId = res.locals.userId as string;
-
-      const userInfo = await getOrProvisionUser(
-        client,
-        tokenEntityRef,
-        userId,
-        provisioningEnabled,
-        provisioningDefaults,
-        roleConfigs,
-        catalogClient,
-        auth,
-        logger,
-      );
+      const userInfo = await getProvisionedUser(ctx, res);
       const canViewAudit =
         auditGroup && tokenEntityRef
           ? await isUserMemberOfGroup(
@@ -527,20 +516,9 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
 
   router.get('/keys', async (_req: Request, res: Response) => {
     try {
-      const tokenEntityRef = res.locals.tokenEntityRef as string;
       const userId = res.locals.userId as string;
 
-      await getOrProvisionUser(
-        client,
-        tokenEntityRef,
-        userId,
-        provisioningEnabled,
-        provisioningDefaults,
-        roleConfigs,
-        catalogClient,
-        auth,
-        logger,
-      );
+      await getProvisionedUser(ctx, res);
 
       const keys: VirtualKey[] = await client.listKeys(userId);
       res.json(keys);
@@ -1209,20 +1187,7 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
 
   router.get('/teams', requireUser, async (_req: Request, res: Response) => {
     try {
-      const tokenEntityRef = res.locals.tokenEntityRef as string;
-      const userId = res.locals.userId as string;
-
-      const userInfo = await getOrProvisionUser(
-        client,
-        tokenEntityRef,
-        userId,
-        provisioningEnabled,
-        provisioningDefaults,
-        roleConfigs,
-        catalogClient,
-        auth,
-        logger,
-      );
+      const userInfo = await getProvisionedUser(ctx, res);
 
       if (!userInfo?.teams?.length) {
         res.json([]);
@@ -1230,7 +1195,7 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
       }
 
       const teams = await Promise.all(
-        userInfo.teams.map(teamId =>
+        userInfo.teams.map((teamId: string) =>
           withTeamFetchRetry(() => client.getTeamInfo(teamId)).catch(err => {
             logger.warn(`Failed to fetch team ${teamId} after retries: ${err.message}`);
             return null;
@@ -1240,11 +1205,7 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
       const list = teams.filter(Boolean) as TeamInfo[];
       // Member surface: strip dollar amounts when the operator hides them
       // from members. Managers who need the numbers use /teams/managed.
-      res.json(
-        teamBudgetVisibility.hideTeamBudgetForMembers
-          ? list.map(redactTeamBudget)
-          : list,
-      );
+      respondTeamList(res, list, ctx, 'member');
     } catch (error: any) {
       if (error instanceof ProvisioningError) {
         res.status(error.status).json(error.body);
