@@ -954,7 +954,7 @@ describe('router key-mutation routes — ownership guard (rec #18 regression)', 
 
   test('200 on reset_spend of own key with allowOwnerResetSpend=true', async () => {
     const h = await startHarness({
-      config: { 'litellm.userIdDomain': 'example.com', 'litellm.keyActions.allowOwnerResetSpend': true },
+      config: { 'litellm.userIdDomain': 'example.com', 'litellm.keys.allowOwnerResetSpend': true },
       client: clientWithTwoUsers(),
     });
     try {
@@ -1199,7 +1199,7 @@ describe('router key-mutation routes — ownership guard (rec #18 regression)', 
 
   test('PR-4: owner reset-spend with allowOwnerResetSpend=true and permission ALLOW → 200', async () => {
     const h = await startHarness({
-      config: { 'litellm.userIdDomain': 'example.com', 'litellm.keyActions.allowOwnerResetSpend': true },
+      config: { 'litellm.userIdDomain': 'example.com', 'litellm.keys.allowOwnerResetSpend': true },
       client: clientWithTwoUsers(),
       permissions: mockPermissions(),
     });
@@ -1217,7 +1217,7 @@ describe('router key-mutation routes — ownership guard (rec #18 regression)', 
 
   test('PR-4: owner reset-spend with flag true but permission DENY → 403', async () => {
     const h = await startHarness({
-      config: { 'litellm.userIdDomain': 'example.com', 'litellm.keyActions.allowOwnerResetSpend': true },
+      config: { 'litellm.userIdDomain': 'example.com', 'litellm.keys.allowOwnerResetSpend': true },
       client: clientWithTwoUsers(),
       permissions: mockPermissions({
         authorize: async () => [{ result: AuthorizeResult.DENY }],

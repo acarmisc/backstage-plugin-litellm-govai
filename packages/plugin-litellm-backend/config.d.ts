@@ -166,6 +166,17 @@ export interface Config {
        * @visibility backend
        */
       allowedDurations?: string[];
+
+      /**
+       * When true, key owners can reset their key's spend counter via the
+       * "Reset Spend" button in the frontend, subject to the
+       * litellm.key.resetSpend permission. When false (the default), reset
+       * is only available to administrators, even if the permission is ALLOW.
+       * Fail-closed: enforced before the permission check.
+       * @default false
+       * @visibility backend
+       */
+      allowOwnerResetSpend?: boolean;
     };
 
     /**
@@ -187,22 +198,6 @@ export interface Config {
        * @default true
        */
       teamRequired?: boolean;
-    };
-
-    /**
-     * Controls for key ownership and governance.
-     */
-    keyActions?: {
-      /**
-       * When true, key owners can reset their key's spend counter via the
-       * "Reset Spend" button in the frontend, subject to the
-       * litellm.key.resetSpend permission. When false (the default), reset
-       * is only available to administrators, even if the permission is ALLOW.
-       * Fail-closed: enforced before the permission check.
-       * @default false
-       * @visibility backend
-       */
-      allowOwnerResetSpend?: boolean;
     };
 
     /**
