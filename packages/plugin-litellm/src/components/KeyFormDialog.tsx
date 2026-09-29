@@ -181,13 +181,15 @@ security add-generic-password -s litellm-api-key -a "$USER" -w '<paste key>'
 #    Linux (secret-tool):
 secret-tool store --label="LiteLLM" service litellm-api-key
 
-# 2. Add to ~/.claude/settings.json:
-#   { "apiKeyHelper": "CLAUDE_KEYCHAIN" }
-#    (Claude Code will auto-detect and use: 'security find-generic-password -s litellm-api-key -w' on macOS
-#     or 'secret-tool lookup service litellm-api-key' on Linux)
+# 2. Add to ~/.claude/settings.json (apiKeyHelper is a shell command whose
+#    stdout is the key):
+#    macOS:
+#      { "apiKeyHelper": "security find-generic-password -s litellm-api-key -w" }
+#    Linux:
+#      { "apiKeyHelper": "secret-tool lookup service litellm-api-key" }
 
-# 3. Optional: set refresh interval (default 1h):
-#   { "apiKeyHelper": "CLAUDE_KEYCHAIN", "apiKeyHelperRefreshMs": 3600000 }`,
+# 3. Optional: refresh interval in ms (default 1h):
+export CLAUDE_CODE_API_KEY_HELPER_TTL_MS=3600000`,
   };
 }
 
@@ -220,7 +222,7 @@ type SnippetTab = 'curl' | 'openai' | 'opencode' | 'pi' | 'claude-code';
 const SNIPPET_FILE_HINTS: Partial<Record<SnippetTab, string>> = {
   opencode: 'Add to ~/.config/opencode/opencode.json',
   pi: 'Add to ~/.pi/agent/models.json',
-  'claude-code': 'Store key in system keychain, add "apiKeyHelper": "CLAUDE_KEYCHAIN" to ~/.claude/settings.json',
+  'claude-code': 'Store the key in your OS keychain and point apiKeyHelper at it in ~/.claude/settings.json',
 };
 
 const SnippetTabs: React.FC<SnippetTabsProps> = ({ snippets, model, onCopy }) => {

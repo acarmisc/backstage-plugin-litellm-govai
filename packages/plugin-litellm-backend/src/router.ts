@@ -654,7 +654,7 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
   <div class="container">
     <h1>Connect to OpenCode</h1>
     <p>This will create or rotate your OpenCode API key${teamDisplay}.</p>
-    <form method="POST" action="/opencode/connect">
+    <form method="POST">
       <input type="hidden" name="redirect_uri" value="${escapeHtml(redirectUri)}">
       ${teamId ? `<input type="hidden" name="team" value="${escapeHtml(teamId)}">` : ''}
       <button type="submit">Connect</button>
