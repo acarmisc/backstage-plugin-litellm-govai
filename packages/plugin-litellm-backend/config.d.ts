@@ -180,6 +180,21 @@ export interface Config {
     };
 
     /**
+     * Caching configuration for backend data fetches.
+     */
+    cache?: {
+      /**
+       * Time-to-live for cached getUserInfo results, in seconds.
+       * When 0, caching is disabled.
+       * Cached results are never stale within this window; mutations
+       * invalidate the cache immediately to ensure consistency.
+       * @default 10
+       * @visibility backend
+       */
+      userInfoTtlSeconds?: number;
+    };
+
+    /**
      * Controls for the "Generate New Key" form in the frontend.
      */
     keyGeneration?: {
