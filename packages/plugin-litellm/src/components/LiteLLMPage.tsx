@@ -65,6 +65,10 @@ export const LiteLLMPage: React.FC = () => {
     const t = searchParams.get('tab');
     return isPageTab(t) ? t : 'overview';
   });
+  const [filter, setFilter] = useState<'expired' | 'expiring' | undefined>(() => {
+    const f = searchParams.get('filter');
+    return f === 'expired' || f === 'expiring' ? f : undefined;
+  });
 
   // `?generate=1` (e.g. from a homepage budget card's "Generate New Key"
   // CTA) opens the generate-key dialog on arrival. The param is cleared once honoured so a
@@ -102,6 +106,37 @@ export const LiteLLMPage: React.FC = () => {
     },
     [setSearchParams],
   );
+
+  // Navigate to keys tab with a filter applied
+  const navigateToFilter = useCallback(
+    (f: 'expired' | 'expiring') => {
+      setActiveTab('keys');
+      setFilter(f);
+      setSearchParams(
+        prev => {
+          const next = new URLSearchParams(prev);
+          next.set('tab', 'keys');
+          next.set('filter', f);
+          return next;
+        },
+        { replace: true },
+      );
+    },
+    [setSearchParams],
+  );
+
+  // Clear filter when explicitly requested
+  const clearFilter = useCallback(() => {
+    setFilter(undefined);
+    setSearchParams(
+      prev => {
+        const next = new URLSearchParams(prev);
+        next.delete('filter');
+        return next;
+      },
+      { replace: true },
+    );
+  }, [setSearchParams]);
 
   const [manageTeam, setManageTeam] = useState<{ mode: 'create' | 'edit'; team?: TeamInfo } | null>(null);
   /** Which key is open in the shared key form dialog; null = create mode. */
@@ -407,6 +442,7 @@ export const LiteLLMPage: React.FC = () => {
         loading={userLoading || teamsLoading}
         keysError={keysError}
         onGenerateKeyClick={() => setGenerateDialogOpen(true)}
+        onNavigateToFilter={navigateToFilter}
         tabs={pageTabs}
       />
 
@@ -498,6 +534,8 @@ export const LiteLLMPage: React.FC = () => {
             onUnblockKey={handleUnblockKey}
             onDeleteKey={handleDeleteKey}
             onPruneExpiredKeys={handlePruneExpiredKeys}
+            filter={filter}
+            onClearFilter={clearFilter}
           />
         );
       })()}

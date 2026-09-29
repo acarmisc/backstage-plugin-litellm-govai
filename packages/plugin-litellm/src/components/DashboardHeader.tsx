@@ -4,6 +4,7 @@ import Typography from '@mui/material/Typography';
 import Skeleton from '@mui/material/Skeleton';
 import Paper from '@mui/material/Paper';
 import Divider from '@mui/material/Divider';
+import ButtonBase from '@mui/material/ButtonBase';
 import { alpha } from '@mui/material/styles';
 import { UserInfo, TeamInfo, VirtualKey } from '../types';
 import { expiryStatus } from '../api';
@@ -17,6 +18,7 @@ interface DashboardHeaderProps {
   loading: boolean;
   keysError?: Error;
   onGenerateKeyClick: () => void;
+  onNavigateToFilter?: (filter: 'expired' | 'expiring') => void;
   /** Page tab bar, rendered flush with the bottom edge of the header card. */
   tabs?: React.ReactNode;
 }
@@ -29,12 +31,20 @@ function initials(name: string): string {
   return local.slice(0, 2).toUpperCase();
 }
 
-const CountStat: React.FC<{ value: number | null; label: string; tone: Tone }> = ({ value, label, tone }) => {
+const CountStat: React.FC<{
+  value: number | null;
+  label: string;
+  tone: Tone;
+  clickable?: boolean;
+  onClick?: () => void;
+}> = ({ value, label, tone, clickable, onClick }) => {
   // Zero counts stay grey: only a real expiry deserves a colour.
   // Null indicates a fetch error and displays as "–" without a coloured dot.
   const active = value !== null && value > 0;
   const display = value === null ? '–' : value;
-  return (
+  const isClickable = clickable && active && onClick;
+
+  const content = (
     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
       <Box
         sx={theme => ({
@@ -51,19 +61,41 @@ const CountStat: React.FC<{ value: number | null; label: string; tone: Tone }> =
       />
       <Typography
         component="span"
-        sx={{ fontSize: 15, fontWeight: 700, lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}
+        sx={{
+          fontSize: 15,
+          fontWeight: 700,
+          lineHeight: 1,
+          fontVariantNumeric: 'tabular-nums',
+          ...(isClickable && { cursor: 'pointer', textDecoration: 'underline' }),
+        }}
       >
         {display}
       </Typography>
       <Typography
         component="span"
         color="text.secondary"
-        sx={{ fontSize: 11, fontWeight: 600, letterSpacing: '0.07em', textTransform: 'uppercase' }}
+        sx={{
+          fontSize: 11,
+          fontWeight: 600,
+          letterSpacing: '0.07em',
+          textTransform: 'uppercase',
+          ...(isClickable && { cursor: 'pointer' }),
+        }}
       >
         {label}
       </Typography>
     </Box>
   );
+
+  if (isClickable) {
+    return (
+      <ButtonBase onClick={onClick} sx={{ borderRadius: 0.5, px: 0.5, py: 0.25 }}>
+        {content}
+      </ButtonBase>
+    );
+  }
+
+  return content;
 };
 
 export const DashboardHeader: React.FC<DashboardHeaderProps> = ({
@@ -73,6 +105,7 @@ export const DashboardHeader: React.FC<DashboardHeaderProps> = ({
   loading,
   keysError,
   onGenerateKeyClick,
+  onNavigateToFilter,
   tabs,
 }) => {
   const counts = useMemo(() => {
@@ -162,9 +195,21 @@ export const DashboardHeader: React.FC<DashboardHeaderProps> = ({
       >
         <CountStat value={counts.total} label="keys" tone="accent" />
         <Divider orientation="vertical" flexItem sx={{ my: 0.25 }} />
-        <CountStat value={counts.expired} label="expired" tone="danger" />
+        <CountStat
+          value={counts.expired}
+          label="expired"
+          tone="danger"
+          clickable
+          onClick={() => onNavigateToFilter?.('expired')}
+        />
         <Divider orientation="vertical" flexItem sx={{ my: 0.25 }} />
-        <CountStat value={counts.expiringSoon} label="expiring soon" tone="warning" />
+        <CountStat
+          value={counts.expiringSoon}
+          label="expiring soon"
+          tone="warning"
+          clickable
+          onClick={() => onNavigateToFilter?.('expiring')}
+        />
       </Box>
 
       {tabs && (
