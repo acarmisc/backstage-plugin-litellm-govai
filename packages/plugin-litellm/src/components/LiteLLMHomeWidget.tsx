@@ -6,7 +6,7 @@ import FormControl from '@mui/material/FormControl';
 import Select from '@mui/material/Select';
 import MenuItem from '@mui/material/MenuItem';
 import Skeleton from '@mui/material/Skeleton';
-import { AreaChart, Area, ResponsiveContainer } from 'recharts';
+import { AreaChart, Area, XAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { useApi } from '@backstage/core-plugin-api';
 import { useRouteRef } from '@backstage/frontend-plugin-api';
 import { Link } from '@backstage/core-components';
@@ -192,16 +192,18 @@ export const LiteLLMHomeWidget: React.FC<LiteLLMHomeWidgetProps> = ({
               >
                 <ResponsiveContainer width="100%" height="100%">
                   <AreaChart data={dailyData} margin={{ top: 4, right: 0, bottom: 0, left: 0 }}>
+                    <XAxis dataKey="date" hide />
+                    <Tooltip content={<ChartTooltip valueFormatter={fmtUsd} />} />
                     <Area
                       type="monotone"
                       dataKey="spend"
+                      name="Spend"
                       stroke={SERIES.spend}
                       fill={SERIES.spend}
                       fillOpacity={0.3}
                       dot={false}
                       isAnimationActive={false}
                     />
-                    <ChartTooltip valueFormatter={fmtUsd} />
                   </AreaChart>
                 </ResponsiveContainer>
               </Box>
