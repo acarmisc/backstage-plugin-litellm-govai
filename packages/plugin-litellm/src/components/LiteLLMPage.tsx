@@ -1,17 +1,19 @@
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import Box from '@mui/material/Box';
-import Snackbar from '@mui/material/Snackbar';
 import Alert from '@mui/material/Alert';
 import Button from '@mui/material/Button';
 import CircularProgress from '@mui/material/CircularProgress';
 import Typography from '@mui/material/Typography';
-import Paper from '@mui/material/Paper';
 import Tabs from '@mui/material/Tabs';
 import Tab from '@mui/material/Tab';
 import Grid from '@mui/material/Grid';
+import Accordion from '@mui/material/Accordion';
+import AccordionSummary from '@mui/material/AccordionSummary';
+import AccordionDetails from '@mui/material/AccordionDetails';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import { useSearchParams } from 'react-router-dom';
 import { useAsync, useAsyncRetry } from 'react-use';
-import { useApi } from '@backstage/core-plugin-api';
+import { useApi, alertApiRef } from '@backstage/core-plugin-api';
 import { usePermission } from '@backstage/plugin-permission-react';
 import { DashboardHeader } from './DashboardHeader';
 import { KeysTable } from './KeysTable';
@@ -31,6 +33,13 @@ import {
   litellmTeamMcpManagePermission,
 } from '../permissions';
 import { DateRange, GenerateKeyRequest, GenerateKeyResponse, UpdateKeyRequest, UsageMetrics, CreateTeamRequest, UpdateTeamRequest, TeamInfo, VirtualKey } from '../types';
+import { toastFor } from '../feedback';
+import {
+  getUnprovisionedTitle,
+  getUnprovisionedMessage,
+  getAdminDetailsTitle,
+  getAdminDetailsMessage,
+} from '../unprovisionedCopy';
 
 const PERIOD_LS_KEY = 'litellm_usage_period';
 type DatePreset = 'today' | '24h' | '7d' | '30d';
@@ -54,6 +63,7 @@ function initDateRange(): DateRange {
 
 export const LiteLLMPage: React.FC = () => {
   const api = useApi(liteLlmApiRef);
+  const alertApi = useApi(alertApiRef);
 
   const [dateRange, setDateRange] = useState<DateRange>(initDateRange);
   const [currentPreset, setCurrentPreset] = useState<DatePreset>(() => {
@@ -63,6 +73,10 @@ export const LiteLLMPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<PageTab>(() => {
     const t = searchParams.get('tab');
     return isPageTab(t) ? t : 'overview';
+  });
+  const [filter, setFilter] = useState<'expired' | 'expiring' | undefined>(() => {
+    const f = searchParams.get('filter');
+    return f === 'expired' || f === 'expiring' ? f : undefined;
   });
 
   // `?generate=1` (e.g. from a homepage budget card's "Generate New Key"
@@ -102,7 +116,37 @@ export const LiteLLMPage: React.FC = () => {
     [setSearchParams],
   );
 
-  const [snackbar, setSnackbar] = useState<{ message: string; severity: 'success' | 'warning' | 'error' } | null>(null);
+  // Navigate to keys tab with a filter applied
+  const navigateToFilter = useCallback(
+    (f: 'expired' | 'expiring') => {
+      setActiveTab('keys');
+      setFilter(f);
+      setSearchParams(
+        prev => {
+          const next = new URLSearchParams(prev);
+          next.set('tab', 'keys');
+          next.set('filter', f);
+          return next;
+        },
+        { replace: true },
+      );
+    },
+    [setSearchParams],
+  );
+
+  // Clear filter when explicitly requested
+  const clearFilter = useCallback(() => {
+    setFilter(undefined);
+    setSearchParams(
+      prev => {
+        const next = new URLSearchParams(prev);
+        next.delete('filter');
+        return next;
+      },
+      { replace: true },
+    );
+  }, [setSearchParams]);
+
   const [manageTeam, setManageTeam] = useState<{ mode: 'create' | 'edit'; team?: TeamInfo } | null>(null);
   /** Which key is open in the shared key form dialog; null = create mode. */
   const [keyToEdit, setKeyToEdit] = useState<VirtualKey | null>(null);
@@ -229,103 +273,114 @@ export const LiteLLMPage: React.FC = () => {
     async (request: GenerateKeyRequest): Promise<GenerateKeyResponse> => {
       try {
         const response = await api.generateKey(request);
-        setSnackbar({ message: 'Key generated successfully', severity: 'success' });
+        const alert = toastFor('generateSuccess');
+        if (alert) alertApi.post(alert);
         refreshKeys();
         return response;
       } catch (e: any) {
-        setSnackbar({ message: `Failed to generate key: ${e.message}`, severity: 'error' });
+        // The dialog renders this error inline; don't toast it as well.
         throw e;
       }
     },
-    [api, refreshKeys],
+    [api, refreshKeys, alertApi],
   );
 
   const handleUpdateKey = useCallback(
     async (keyId: string, request: UpdateKeyRequest) => {
       try {
         await api.updateKey(keyId, request);
-        setSnackbar({ message: 'Key updated successfully', severity: 'success' });
+        const alert = toastFor('updateSuccess');
+        if (alert) alertApi.post(alert);
         refreshKeys();
       } catch (e: any) {
-        setSnackbar({ message: `Failed to update key: ${e.message}`, severity: 'error' });
+        // The dialog renders this error inline; don't toast it as well.
         throw e;
       }
     },
-    [api, refreshKeys],
+    [api, refreshKeys, alertApi],
   );
 
   const handleBlockKey = useCallback(
     async (keyId: string) => {
       try {
         await api.blockKey(keyId);
-        setSnackbar({ message: 'Key blocked — requests will be rejected until unblocked', severity: 'warning' });
+        const alert = toastFor('blockSuccess');
+        if (alert) alertApi.post(alert);
         refreshKeys();
       } catch (e: any) {
-        setSnackbar({ message: `Failed to block key: ${e.message}`, severity: 'error' });
+        const alert = toastFor('blockError', e.message);
+        if (alert) alertApi.post(alert);
       }
     },
-    [api, refreshKeys],
+    [api, refreshKeys, alertApi],
   );
 
   const handleUnblockKey = useCallback(
     async (keyId: string) => {
       try {
         await api.unblockKey(keyId);
-        setSnackbar({ message: 'Key unblocked', severity: 'success' });
+        const alert = toastFor('unblockSuccess');
+        if (alert) alertApi.post(alert);
         refreshKeys();
       } catch (e: any) {
-        setSnackbar({ message: `Failed to unblock key: ${e.message}`, severity: 'error' });
+        const alert = toastFor('unblockError', e.message);
+        if (alert) alertApi.post(alert);
       }
     },
-    [api, refreshKeys],
+    [api, refreshKeys, alertApi],
   );
 
   const handleResetKeySpend = useCallback(
     async (keyId: string) => {
       try {
         await api.resetKeySpend(keyId);
-        setSnackbar({ message: 'Spend counter reset to $0', severity: 'success' });
+        const alert = toastFor('resetSpendSuccess');
+        if (alert) alertApi.post(alert);
         refreshKeys();
       } catch (e: any) {
-        setSnackbar({ message: `Failed to reset spend: ${e.message}`, severity: 'error' });
+        const alert = toastFor('resetSpendError', e.message);
+        if (alert) alertApi.post(alert);
       }
     },
-    [api, refreshKeys],
+    [api, refreshKeys, alertApi],
   );
 
   const handleDeleteKey = useCallback(
     async (keyId: string) => {
       try {
         await api.deleteKey(keyId);
-        setSnackbar({ message: 'Key revoked successfully', severity: 'success' });
+        const alert = toastFor('deleteSuccess');
+        if (alert) alertApi.post(alert);
         refreshKeys();
       } catch (e: any) {
         if (e.body?.success && (e.body?.message?.includes('already deleted') || e.body?.message?.includes('never existed'))) {
-          setSnackbar({ message: 'Key was already deleted', severity: 'warning' });
+          const alert = toastFor('deleteAlreadyDeleted');
+          if (alert) alertApi.post(alert);
           refreshKeys();
           return;
         }
-        setSnackbar({ message: `Failed to revoke key: ${e.message}`, severity: 'error' });
+        const alert = toastFor('deleteError', e.message);
+        if (alert) alertApi.post(alert);
       }
     },
-    [api, refreshKeys],
+    [api, refreshKeys, alertApi],
   );
 
   const handlePruneExpiredKeys = useCallback(
     async () => {
       try {
         const result = await api.pruneExpiredKeys();
-        const msg = `Pruned ${result.pruned} expired key${result.pruned !== 1 ? 's' : ''}`;
-        const severity: 'success' | 'warning' = result.failed > 0 ? 'warning' : 'success';
-        const detail = result.failed > 0 ? ` (${result.failed} failed to delete)` : '';
-        setSnackbar({ message: msg + detail, severity });
+        const kind = result.failed > 0 ? 'prunePartial' : 'pruneSuccess';
+        const alert = toastFor(kind);
+        if (alert) alertApi.post(alert);
         refreshKeys();
       } catch (e: any) {
-        setSnackbar({ message: `Failed to prune expired keys: ${e.message}`, severity: 'error' });
+        const alert = toastFor('pruneError', e.message);
+        if (alert) alertApi.post(alert);
       }
       return { pruned: 0, failed: 0 };
     },
-    [api, refreshKeys],
+    [api, refreshKeys, alertApi],
   ) as () => Promise<{ pruned: number; failed: number }>;
 
   const isInitialLoading = userLoading && !userInfo;
@@ -340,25 +395,40 @@ export const LiteLLMPage: React.FC = () => {
 
   // User exists in Backstage but has no LiteLLM account
   if (userError || !userInfo) {
-    const isProvisioningEnabled = (userError as any)?.body?.provisioning === true;
     const hint = (userError as any)?.body?.hint;
     return (
-      <Box p={3}>
-        <Paper sx={{ p: 3 }}>
-          <Typography variant="h6" gutterBottom>Account not provisioned</Typography>
-          <Typography color="text.secondary" paragraph>
-            Your Backstage account is not linked to a LiteLLM user.
+      <Box sx={{ p: 3, display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <Box
+          sx={{
+            maxWidth: 600,
+            mx: 'auto',
+            py: 6,
+            textAlign: 'center',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: 2,
+          }}
+        >
+          <Typography variant="h5" sx={{ fontWeight: 600 }}>
+            {getUnprovisionedTitle()}
           </Typography>
-          {hint ? (
-            <Typography variant="body2" color="text.secondary">{hint}</Typography>
-          ) : (
-            <Typography variant="body2" color="text.secondary">
-              {isProvisioningEnabled
-                ? 'Auto-provisioning is enabled but failed. Check the backend logs.'
-                : 'Set litellm.provisioning.enabled: true in app-config.yaml to enable auto-provisioning, or ask your administrator to create the account manually.'}
-            </Typography>
-          )}
-        </Paper>
+          <Typography color="text.secondary">
+            {hint || getUnprovisionedMessage(liteLlmConfig?.supportContact)}
+          </Typography>
+          <Accordion sx={{ width: '100%', maxWidth: 500, mt: 2 }}>
+            <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+              <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                {getAdminDetailsTitle()}
+              </Typography>
+            </AccordionSummary>
+            <AccordionDetails>
+              <Typography variant="caption" color="text.secondary">
+                {getAdminDetailsMessage()}
+              </Typography>
+            </AccordionDetails>
+          </Accordion>
+        </Box>
       </Box>
     );
   }
@@ -394,29 +464,76 @@ export const LiteLLMPage: React.FC = () => {
         loading={userLoading || teamsLoading}
         keysError={keysError}
         onGenerateKeyClick={() => setGenerateDialogOpen(true)}
+        onNavigateToFilter={navigateToFilter}
         tabs={pageTabs}
       />
 
-      {activeTab === 'overview' && (
-        <Grid container spacing={2} alignItems="flex-start">
-          <Grid item xs={12} lg={8}>
-            <UsageStats
-              usage={usage ?? null}
-              usageError={usageError}
-              onRetryUsage={refreshUsage}
-              models={allModels ?? []}
-              dateRange={dateRange}
-              currentPreset={currentPreset}
-              onDateRangeChange={handleDateRangeChange}
-              loading={usageLoading}
-              userInfo={userInfo}
-            />
+      {activeTab === 'overview' && (() => {
+        // Show onboarding when keys have loaded without error and list is empty
+        if (!keysLoading && !keysError && keys?.length === 0) {
+          return (
+            <Box sx={{ maxWidth: 600, mx: 'auto', py: 4 }}>
+              <Box
+                sx={{
+                  textAlign: 'center',
+                  py: 6,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  gap: 3,
+                }}
+              >
+                <Typography variant="h5" sx={{ fontWeight: 600 }}>
+                  Create your first API key
+                </Typography>
+                <Box
+                  component="ol"
+                  sx={{
+                    textAlign: 'left',
+                    pl: 3,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 1,
+                    '& li': { color: 'text.secondary' },
+                  }}
+                >
+                  <li>Generate a key</li>
+                  <li>Copy the endpoint</li>
+                  <li>Make a call</li>
+                </Box>
+                <Button
+                  variant="contained"
+                  color="primary"
+                  onClick={() => setGenerateDialogOpen(true)}
+                >
+                  Generate API Key
+                </Button>
+              </Box>
+            </Box>
+          );
+        }
+
+        return (
+          <Grid container spacing={2} alignItems="flex-start">
+            <Grid item xs={12} lg={8}>
+              <UsageStats
+                usage={usage ?? null}
+                usageError={usageError}
+                onRetryUsage={refreshUsage}
+                models={allModels ?? []}
+                dateRange={dateRange}
+                currentPreset={currentPreset}
+                onDateRangeChange={handleDateRangeChange}
+                loading={usageLoading}
+                userInfo={userInfo}
+              />
+            </Grid>
+            <Grid item xs={12} lg={4}>
+              <LiteLLMBudgetWidget compact collapsible userInfo={userInfo ?? null} teams={teams} keys={keys ?? []} />
+            </Grid>
           </Grid>
-          <Grid item xs={12} lg={4}>
-            <LiteLLMBudgetWidget compact collapsible userInfo={userInfo ?? null} teams={teams} keys={keys ?? []} />
-          </Grid>
-        </Grid>
-      )}
+        );
+      })()}
 
       {activeTab === 'keys' && (() => {
         if (keysError) {
@@ -439,6 +556,8 @@ export const LiteLLMPage: React.FC = () => {
             onUnblockKey={handleUnblockKey}
             onDeleteKey={handleDeleteKey}
             onPruneExpiredKeys={handlePruneExpiredKeys}
+            filter={filter}
+            onClearFilter={clearFilter}
           />
         );
       })()}
@@ -526,13 +645,19 @@ export const LiteLLMPage: React.FC = () => {
         allModels={allModels ?? []}
         config={liteLlmConfig}
         onSubmit={async payload => {
-          if (manageTeam?.mode === 'edit' && manageTeam.team) {
-            await api.updateTeam(manageTeam.team.team_id, payload as UpdateTeamRequest);
-          } else {
-            await api.createTeam(payload as CreateTeamRequest);
+          try {
+            if (manageTeam?.mode === 'edit' && manageTeam.team) {
+              await api.updateTeam(manageTeam.team.team_id, payload as UpdateTeamRequest);
+            } else {
+              await api.createTeam(payload as CreateTeamRequest);
+            }
+            const alert = toastFor('teamSaveSuccess');
+            if (alert) alertApi.post(alert);
+            refreshTeams();
+          } catch (e: any) {
+            const alert = toastFor('teamSaveError', e.message);
+            if (alert) alertApi.post(alert);
           }
-          setSnackbar({ message: 'Team saved', severity: 'success' });
-          refreshTeams();
         }}
         canManageMembers={teamMgmtEnabled && canManageMembers}
         onAddMember={async (userEntityRef, maxBudgetInTeam) => {
@@ -559,13 +684,19 @@ export const LiteLLMPage: React.FC = () => {
         vectorStores={vectorStores ?? []}
         onSaveKnowledgeBases={async vectorStoreIds => {
           if (!manageTeam?.team) return;
-          const updated = await api.setTeamKnowledgeBases(
-            manageTeam.team.team_id,
-            vectorStoreIds,
-          );
-          setManageTeam(s => (s && s.team ? { ...s, team: updated } : s));
-          setSnackbar({ message: 'Knowledge bases updated', severity: 'success' });
-          refreshTeams();
+          try {
+            const updated = await api.setTeamKnowledgeBases(
+              manageTeam.team.team_id,
+              vectorStoreIds,
+            );
+            setManageTeam(s => (s && s.team ? { ...s, team: updated } : s));
+            const alert = toastFor('knowledgeBaseSuccess');
+            if (alert) alertApi.post(alert);
+            refreshTeams();
+          } catch (e: any) {
+            const alert = toastFor('teamSaveError', e.message);
+            if (alert) alertApi.post(alert);
+          }
         }}
         canManageMcpServers={
           teamMgmtEnabled && objectPermsEnabled && canManageMcpServers
@@ -573,28 +704,22 @@ export const LiteLLMPage: React.FC = () => {
         mcpServers={mcpServers ?? []}
         onSaveMcpServers={async mcpServerIds => {
           if (!manageTeam?.team) return;
-          const updated = await api.setTeamMcpServers(
-            manageTeam.team.team_id,
-            mcpServerIds,
-          );
-          setManageTeam(s => (s && s.team ? { ...s, team: updated } : s));
-          setSnackbar({ message: 'MCP servers updated', severity: 'success' });
-          refreshTeams();
+          try {
+            const updated = await api.setTeamMcpServers(
+              manageTeam.team.team_id,
+              mcpServerIds,
+            );
+            setManageTeam(s => (s && s.team ? { ...s, team: updated } : s));
+            const alert = toastFor('mcpServerSuccess');
+            if (alert) alertApi.post(alert);
+            refreshTeams();
+          } catch (e: any) {
+            const alert = toastFor('teamSaveError', e.message);
+            if (alert) alertApi.post(alert);
+          }
         }}
       />
 
-      <Snackbar
-        open={!!snackbar}
-        autoHideDuration={5000}
-        onClose={() => setSnackbar(null)}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
-      >
-        {snackbar ? (
-          <Alert severity={snackbar.severity} onClose={() => setSnackbar(null)}>
-            {snackbar.message}
-          </Alert>
-        ) : undefined}
-      </Snackbar>
     </Box>
   );
 };

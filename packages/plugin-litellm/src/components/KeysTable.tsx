@@ -19,8 +19,9 @@ import CircularProgress from '@mui/material/CircularProgress';
 import Skeleton from '@mui/material/Skeleton';
 import InputAdornment from '@mui/material/InputAdornment';
 import Tooltip from '@mui/material/Tooltip';
+import Chip from '@mui/material/Chip';
 import { alpha } from '@mui/material/styles';
-import { ContentCopy, Delete, Edit, Autorenew, Search, Lock, LockOpen, Check } from '@mui/icons-material';
+import { ContentCopy, Delete, Edit, Autorenew, Search, Lock, LockOpen, Check, Close } from '@mui/icons-material';
 import { usePermission } from '@backstage/plugin-permission-react';
 import {
   litellmKeyManagePermission,
@@ -29,6 +30,7 @@ import {
 import { useCopyToClipboard } from '../hooks';
 import { expiryStatus } from '../api';
 import { keyDisplayLabel, keyLast4, pruneCopy } from '../keyLabels';
+import { filterKeysByStatus, type KeyFilterType } from '../keyFilter';
 import { GenerateKeyButton } from './GenerateKeyButton';
 import {
   VirtualKey,
@@ -55,6 +57,8 @@ interface KeysTableProps {
   onUnblockKey: (keyId: string) => Promise<void>;
   onDeleteKey: (keyId: string) => Promise<void>;
   onPruneExpiredKeys: () => Promise<{ pruned: number }>;
+  filter?: KeyFilterType;
+  onClearFilter?: () => void;
 }
 
 const shortKeyId = (token: string): string => {
@@ -167,6 +171,8 @@ export const KeysTable: React.FC<KeysTableProps> = ({
   onUnblockKey,
   onDeleteKey,
   onPruneExpiredKeys,
+  filter,
+  onClearFilter,
 }) => {
   // Permission checks
   const managePermission = usePermission({ permission: litellmKeyManagePermission });
@@ -203,9 +209,12 @@ export const KeysTable: React.FC<KeysTableProps> = ({
 
   const filteredKeys = useMemo(() => {
     let result = keys;
+    // Apply status filter (expired/expiring)
+    result = filterKeysByStatus(result, filter);
+    // Apply text filter
     if (filterText.trim()) {
       const q = filterText.toLowerCase();
-      result = keys.filter(k =>
+      result = result.filter(k =>
         (k.key_alias ?? '').toLowerCase().includes(q) ||
         k.models?.some(m => m.toLowerCase().includes(q)),
       );
@@ -214,7 +223,7 @@ export const KeysTable: React.FC<KeysTableProps> = ({
       const comparison = compareKeys(a, b, sortKey);
       return sortDirection === 'asc' ? comparison : -comparison;
     });
-  }, [keys, filterText, sortKey, sortDirection]);
+  }, [keys, filterText, sortKey, sortDirection, filter]);
 
   const handleOpenEdit = (k: VirtualKey) => {
     onEditKey(k);
@@ -498,6 +507,17 @@ export const KeysTable: React.FC<KeysTableProps> = ({
           </>
         }
       >
+        {filter && (
+          <Box sx={{ px: 2, py: 1, borderBottom: theme => `1px solid ${theme.palette.divider}` }}>
+            <Chip
+              size="small"
+              label={`Showing: ${filter === 'expired' ? 'expired' : 'expiring'} keys`}
+              onDelete={onClearFilter}
+              deleteIcon={<Close />}
+              variant="outlined"
+            />
+          </Box>
+        )}
         <TableContainer>
           <Table size="small" sx={dataTableSx}>
             <TableHead>

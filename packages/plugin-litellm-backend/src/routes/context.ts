@@ -29,6 +29,7 @@ export interface RouterContext {
   // Config-derived values
   baseUrl: string;
   publicBaseUrl: string | null;
+  supportContact: string | undefined;
   userIdDomain: string | undefined;
   provisioningEnabled: boolean;
   provisioningDefaults: ProvisioningDefaults;
