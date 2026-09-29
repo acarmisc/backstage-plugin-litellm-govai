@@ -1,4 +1,4 @@
-import '../testing/setupDom';
+import { fakeAlertApi } from '../testing/setupDom';
 import { describe, test, afterEach } from 'node:test';
 import assert from 'node:assert';
 import React from 'react';
@@ -6,6 +6,7 @@ import { render, cleanup, screen, waitFor, fireEvent } from '@testing-library/re
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { TestApiProvider, mockApis } from '@backstage/test-utils';
+import { alertApiRef } from '@backstage/core-plugin-api';
 import { permissionApiRef } from '@backstage/plugin-permission-react';
 import { KeyFormDialog } from './KeyFormDialog';
 import { ModelInfo, TeamInfo, GenerateKeyResponse, LiteLlmConfig } from '../types';
@@ -75,7 +76,8 @@ describe('KeyFormDialog', () => {
       <MemoryRouter>
         <TestApiProvider
           apis={[
-            [permissionApiRef, mockApis.permission()],
+            [alertApiRef, fakeAlertApi],
+          [permissionApiRef, mockApis.permission()],
           ]}
         >
           <KeyFormDialog {...defaultProps} />

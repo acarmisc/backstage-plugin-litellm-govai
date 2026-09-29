@@ -1,10 +1,11 @@
-import '../testing/setupDom';
+import { fakeAlertApi } from '../testing/setupDom';
 import { describe, test, afterEach } from 'node:test';
 import assert from 'node:assert';
 import React from 'react';
 import { render, cleanup, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { TestApiProvider, mockApis } from '@backstage/test-utils';
+import { alertApiRef } from '@backstage/core-plugin-api';
 import { permissionApiRef } from '@backstage/plugin-permission-react';
 import { LiteLLMBudgetWidget } from './LiteLLMBudgetWidget';
 import { liteLlmApiRef } from '../api';
@@ -77,7 +78,8 @@ describe('LiteLLMBudgetWidget', () => {
       <MemoryRouter>
         <TestApiProvider
           apis={[
-            [permissionApiRef, mockApis.permission()],
+            [alertApiRef, fakeAlertApi],
+          [permissionApiRef, mockApis.permission()],
             [liteLlmApiRef, fakeApi],
           ]}
         >
