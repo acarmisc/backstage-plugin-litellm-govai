@@ -259,6 +259,20 @@ export class LiteLLMClient {
     });
   }
 
+  /**
+   * Regenerates (rotates) a key by its hash, returning a new plaintext key.
+   * The LiteLLM version determines the endpoint: use POST /key/{key}/regenerate.
+   */
+  async regenerateKey(keyHash: string): Promise<GenerateKeyResponse> {
+    return this.request<GenerateKeyResponse>(
+      `/key/${encodeURIComponent(keyHash)}/regenerate`,
+      {
+        method: 'POST',
+        body: JSON.stringify({}),
+      },
+    );
+  }
+
   async deleteKeys(request: DeleteKeyRequest): Promise<{ success: boolean }> {
     return this.request<{ success: boolean }>('/key/delete', {
       method: 'POST',
