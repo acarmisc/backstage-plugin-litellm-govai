@@ -1,4 +1,4 @@
-import { createApiRef, FetchApi } from '@backstage/core-plugin-api';
+import { createApiRef, type FetchApi, type DiscoveryApi } from '@backstage/frontend-plugin-api';
 import {
   UserInfo,
   VirtualKey,
@@ -75,11 +75,21 @@ export function expiryStatus(expiresAt?: string): ExpiryStatus | null {
 
 export class LiteLlmApi implements LiteLlmApiInterface {
   private fetchApi: FetchApi;
-  private basePath: string;
+  private base: string | DiscoveryApi;
 
-  constructor(fetchApi: FetchApi, basePath: string = '/api/litellm') {
+  /**
+   * @param base A DiscoveryApi (the plugin base URL is resolved per request via
+   * `discoveryApi.getBaseUrl('litellm')`) or a fixed base URL/path string.
+   */
+  constructor(fetchApi: FetchApi, base: string | DiscoveryApi = '/api/litellm') {
     this.fetchApi = fetchApi;
-    this.basePath = basePath;
+    this.base = base;
+  }
+
+  private async basePath(): Promise<string> {
+    return typeof this.base === 'string'
+      ? this.base
+      : this.base.getBaseUrl('litellm');
   }
 
   private async throwIfNotOk(response: Response): Promise<void> {
@@ -95,7 +105,7 @@ export class LiteLlmApi implements LiteLlmApiInterface {
   }
 
   private async get<T>(path: string, params?: Record<string, string>): Promise<T> {
-    const url = new URL(`${this.basePath}${path}`, window.location.origin);
+    const url = new URL(`${await this.basePath()}${path}`, window.location.origin);
     if (params) {
       Object.entries(params).forEach(([key, value]) => url.searchParams.append(key, value));
     }
@@ -105,7 +115,7 @@ export class LiteLlmApi implements LiteLlmApiInterface {
   }
 
   private async post<T>(path: string, body: unknown): Promise<T> {
-    const response = await this.fetchApi.fetch(`${this.basePath}${path}`, {
+    const response = await this.fetchApi.fetch(`${await this.basePath()}${path}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
@@ -115,7 +125,7 @@ export class LiteLlmApi implements LiteLlmApiInterface {
   }
 
   private async del<T>(path: string): Promise<T> {
-    const response = await this.fetchApi.fetch(`${this.basePath}${path}`, {
+    const response = await this.fetchApi.fetch(`${await this.basePath()}${path}`, {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
     });
@@ -124,7 +134,7 @@ export class LiteLlmApi implements LiteLlmApiInterface {
   }
 
   private async patch<T>(path: string, body: unknown): Promise<T> {
-    const response = await this.fetchApi.fetch(`${this.basePath}${path}`, {
+    const response = await this.fetchApi.fetch(`${await this.basePath()}${path}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
@@ -134,7 +144,7 @@ export class LiteLlmApi implements LiteLlmApiInterface {
   }
 
   private async put<T>(path: string, body: unknown): Promise<T> {
-    const response = await this.fetchApi.fetch(`${this.basePath}${path}`, {
+    const response = await this.fetchApi.fetch(`${await this.basePath()}${path}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
