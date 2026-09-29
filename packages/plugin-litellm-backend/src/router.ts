@@ -4,7 +4,6 @@ import { AuthService, DiscoveryService, PermissionsService } from '@backstage/ba
 import { AuthorizeResult, BasicPermission } from '@backstage/plugin-permission-common';
 import { CatalogClient } from '@backstage/catalog-client';
 import { LiteLLMClient, LiteLLMUpstreamError } from './client';
-import { openApiSpec } from './openapi';
 import {
   VirtualKey,
   ModelInfo,
@@ -21,7 +20,6 @@ import {
   getOrProvisionUser,
   readProvisioningDefaults,
   readRoleConfigs,
-  applyRoleOverrides,
   isUserMemberOfGroup,
   ProvisioningError,
 } from './provisioning';
@@ -78,6 +76,7 @@ import { sendError } from './errors';
 import type { RouterContext } from './routes/context';
 import { createRequireUser, getProvisionedUser } from './routes/middleware/withUser';
 import { respondTeamList } from './http/respondTeam';
+import { registerConfigRoutes } from './routes/config';
 
 export { ProvisioningError };
 
@@ -403,92 +402,8 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
   const requireUser = createRequireUser(ctx);
   router.use(['/user/info', '/keys', '/usage'], requireUser);
 
-  router.get('/health', (_req: Request, res: Response) => {
-    res.json({ status: 'ok', provisioning: provisioningEnabled });
-  });
-
-  // Exposes the public LiteLLM proxy URL so the frontend can build
-  // ready-to-paste curl / OpenAI-SDK snippets for freshly generated keys.
-  router.get('/config', (_req: Request, res: Response) => {
-    res.json({
-      baseUrl: publicBaseUrl,
-      keyGeneration: { allowUnlimitedBudget, teamRequired },
-      keyActions: { allowOwnerResetSpend },
-      opencode: { enabled: opencodeCfg.enabled },
-      teamManagement: {
-        enabled: teamMgmtEnabled,
-        maxBudgetCeiling: teamAdminCfg.maxBudgetCeiling,
-        allowUnlimitedBudget: teamAdminCfg.allowUnlimitedBudget,
-        objectPermissionsEnabled: objectPermsEnabled,
-      },
-      display: {
-        hideTeamBudgetForMembers:
-          teamBudgetVisibility.hideTeamBudgetForMembers,
-        hideTeamBudgetForManagers:
-          teamBudgetVisibility.hideTeamBudgetForManagers,
-      },
-    });
-  });
-
-  // Self-hosted OpenAPI 3.1 contract — lets integrators read a spec instead
-  // of router.ts. No swagger-ui dependency; serve the JSON and point external
-  // renderers (Stoplight, Swagger UI hosted elsewhere) at this endpoint.
-  router.get('/openapi.json', (_req: Request, res: Response) => {
-    res.json(openApiSpec);
-  });
-
-  // Provisioning dry-run: resolves which role a Backstage group maps to and
-  // echoes the effective defaults, collapsing the config → deploy → test loop
-  // into one request. Admin-gated by the audit group (same RBAC as /audit).
-  router.get('/provisioning/preview', async (req: Request, res: Response) => {
-    if (!auditGroup) {
-      res.status(403).json({ error: 'Preview is not configured (litellm.audit.group not set)' });
-      return;
-    }
-    const tokenEntityRef = await resolveUserId(req, auth);
-    if (!tokenEntityRef) {
-      res.status(401).json({ error: 'Authentication required' });
-      return;
-    }
-    const allowed = await isUserMemberOfGroup(
-      tokenEntityRef,
-      auditGroup,
-      catalogClient,
-      auth,
-      logger,
-    );
-    if (!allowed) {
-      res.status(403).json({ error: 'Access denied: not a member of the audit group' });
-      return;
-    }
-    const group = (req.query.group as string | undefined)?.trim();
-    if (!group) {
-      res.status(400).json({ error: 'group query parameter is required (e.g. group=group:default/ai-platform)' });
-      return;
-    }
-    if (!roleConfigs.length) {
-      res.json({
-        group,
-        matched_role: null,
-        effective_defaults: provisioningDefaults,
-        note: 'No litellm.provisioning.roles configured — every group receives the base defaults.',
-      });
-      return;
-    }
-    try {
-      const matched = roleConfigs.find(rc => rc.group === group);
-      const effective = matched
-        ? applyRoleOverrides(provisioningDefaults, matched)
-        : provisioningDefaults;
-      res.json({
-        group,
-        matched_role: matched?.group ?? null,
-        effective_defaults: effective,
-      });
-    } catch (error: any) {
-      sendError(res, error, logger, 'resolve provisioning preview');
-    }
-  });
+  // Register config routes (/health, /config, /openapi.json, /provisioning/preview)
+  registerConfigRoutes(router, ctx);
 
   router.get('/user/info', async (_req: Request, res: Response) => {
     try {
