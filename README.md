@@ -555,6 +555,8 @@ relations, not token claims.)
   and is best avoided — block a team instead.
 - Team / member / access changes appear in the **Audit Log** tab under the
   `Team`, `Team member`, and `Team access (KB / MCP)` table filters.
+- `metadata.owning_group` on teams is trusted by the authorization system and
+  is editable by LiteLLM admins; guard access to the LiteLLM admin interface accordingly.
 
 ## Hiding team budgets (`litellm.display`)
 

@@ -54,6 +54,7 @@ function silentLogger(): any {
     info: () => {},
     error: () => {},
     warn: () => {},
+    debug: () => {},
   };
 }
 

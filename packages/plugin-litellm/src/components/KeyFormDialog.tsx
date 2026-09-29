@@ -116,7 +116,10 @@ interface Snippets {
   publicEndpoint: string;
 }
 
-function buildSnippets(baseUrl: string, key: string, model: string): Snippets {
+function buildSnippets(baseUrl: string | null, key: string, model: string): Snippets {
+  if (!baseUrl) {
+    throw new Error('baseUrl not configured');
+  }
   const base = trimSlash(baseUrl);
   const apiBase = `${base}/v1`;
   return {
@@ -408,7 +411,9 @@ export const KeyFormDialog: React.FC<KeyFormDialogProps> = ({
       setNewKeySnippets(null);
       try {
         const config = await onGetConfig();
-        setNewKeySnippets(buildSnippets(config.baseUrl, response.key, model));
+        if (config.baseUrl) {
+          setNewKeySnippets(buildSnippets(config.baseUrl, response.key, model));
+        }
       } catch {
         // Snippets are a nice-to-have; the raw key is still shown.
       }
@@ -618,6 +623,17 @@ export const KeyFormDialog: React.FC<KeyFormDialogProps> = ({
                 <ContentCopy />
               </IconButton>
             </Box>
+
+            {newKeyValue && !newKeySnippets && (
+              <Box mt={2}>
+                <Typography variant="caption" color="text.secondary" display="block" gutterBottom>
+                  Public endpoint
+                </Typography>
+                <Typography variant="body2" color="text.secondary">
+                  Endpoint not configured
+                </Typography>
+              </Box>
+            )}
 
             {newKeySnippets && (
               <Box mt={2}>

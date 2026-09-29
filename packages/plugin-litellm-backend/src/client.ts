@@ -41,14 +41,15 @@ export function normalizeRequestTags(
  * status and the structured `param` (e.g. `key_alias`) from the upstream
  * body so the router can surface a 400 instead of collapsing everything
  * into a 500. The message is the upstream `error.message` when present,
- * otherwise the raw body text.
+ * otherwise a generic status+statusText format (never embeds raw bodies).
  */
 export class LiteLLMUpstreamError extends Error {
   status: number;
   param?: string;
 
   constructor(status: number, statusText: string, body: string) {
-    let message = `LiteLLM API error: ${status} ${statusText} - ${body}`;
+    // Default message is generic status + text; only use JSON message if present.
+    let message = `LiteLLM API error: ${status} ${statusText}`;
     let param: string | undefined;
     try {
       const parsed = JSON.parse(body);
@@ -58,7 +59,8 @@ export class LiteLLMUpstreamError extends Error {
         param = inner.param;
       }
     } catch {
-      // not JSON — keep the raw body in the message
+      // Not JSON — keep the generic message (no raw body embedded).
+      // Log the raw body at debug level if needed by the caller.
     }
     super(message);
     this.status = status;

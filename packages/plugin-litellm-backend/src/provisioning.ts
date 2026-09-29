@@ -231,7 +231,7 @@ export async function provisionUser(
     },
   };
 
-  logger.info(
+  logger.debug(
     `Provisioning new LiteLLM user for Backstage identity: ${userId}${profile.email ? ` (email=${profile.email})` : ''}`,
   );
   try {
