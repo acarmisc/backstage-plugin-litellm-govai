@@ -129,6 +129,23 @@ export const openApiSpec: OpenApiSpec = {
         },
       },
     },
+    '/keys/prune-expired': {
+      post: {
+        tags: ['Keys'],
+        summary: 'Revoke all expired keys for the caller',
+        responses: {
+          '200': { description: 'Pruning result', content: { 'application/json': { schema: { type: 'object', properties: {
+            pruned: { type: 'number', description: 'Count of successfully deleted keys' },
+            failed: { type: 'number', description: 'Count of failures' },
+            failures: { type: 'array', items: { type: 'object', properties: {
+              keyId: { type: 'string' },
+              error: { type: 'string' },
+            } }, description: 'Details of failed deletions (optional)' },
+          } } } } },
+          '403': { description: 'Missing litellmKeyRevokePermission' },
+        },
+      },
+    },
     '/keys/{keyId}': {
       delete: {
         tags: ['Keys'],

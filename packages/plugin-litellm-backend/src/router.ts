@@ -25,6 +25,7 @@ import { readOpencodeConfig } from './opencode';
 import { sendError } from './errors';
 import type { RouterContext } from './routes/context';
 import { createRequireUser } from './routes/middleware/withUser';
+import { withUserInfoCache } from './services/userInfoCache';
 import { registerConfigRoutes } from './routes/config';
 import { registerKeysRoutes } from './routes/keys';
 import { registerOpencodeRoutes } from './routes/opencode';
@@ -60,7 +61,14 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
   // snippets in the frontend. Only exposed if explicitly configured.
   // When unset, returned as null to the FE.
   const publicBaseUrl = config.getOptionalString('litellm.publicBaseUrl') ?? null;
-  const client = options.client ?? new LiteLLMClient({ baseUrl, masterKey });
+  const baseClient = options.client ?? new LiteLLMClient({ baseUrl, masterKey });
+
+  // Wrap client with userInfoCache. TTL is configurable (default 10s, 0 disables).
+  const userInfoCacheTtlSeconds = config.getOptionalNumber('litellm.cache.userInfoTtlSeconds') ?? 10;
+  const client = userInfoCacheTtlSeconds > 0
+    ? withUserInfoCache(baseClient, { ttlMs: userInfoCacheTtlSeconds * 1000 })
+    : baseClient;
+
   const { enabled: provisioningEnabled, defaults: provisioningDefaults } =
     readProvisioningDefaults(config);
   const roleConfigs = readRoleConfigs(config);

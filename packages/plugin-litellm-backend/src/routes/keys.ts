@@ -93,6 +93,75 @@ export function registerKeysRoutes(router: Router, ctx: RouterContext): void {
     }
   });
 
+  router.post('/keys/prune-expired', async (_req: Request, res: Response) => {
+    try {
+      // Permission check
+      if (!(await assertPermission(_req, litellmKeyRevokePermission))) {
+        sendPermissionDenied(res, litellmKeyRevokePermission);
+        return;
+      }
+
+      const userId = res.locals.userId as string;
+
+      // Ensure the user is provisioned
+      await getProvisionedUser(ctx, res);
+
+      // Load the caller's keys
+      const keys: VirtualKey[] = await client.listKeys(userId);
+
+      // Identify expired keys (expires_at in the past)
+      const now = Date.now();
+      const expiredKeys = keys.filter(k => {
+        if (!k.expires_at) return false;
+        return new Date(k.expires_at).getTime() < now;
+      });
+
+      if (expiredKeys.length === 0) {
+        res.json({ pruned: 0, failed: 0 });
+        return;
+      }
+
+      // Delete expired keys, tracking failures
+      let pruned = 0;
+      let failed = 0;
+      const failures: Array<{ keyId: string; error: string }> = [];
+
+      for (const key of expiredKeys) {
+        try {
+          const keyId = key.token ?? key.key;
+          await client.deleteKeys({ keys: [keyId] });
+          pruned++;
+          logger.info('key.prune-expired', { userId, keyId });
+        } catch (err: unknown) {
+          failed++;
+          const keyId = key.token ?? key.key;
+          let errorMsg = 'Unknown error';
+          if (err instanceof Error) {
+            errorMsg = err.message.substring(0, 200); // Sanitize: cap at 200 chars
+          }
+          failures.push({ keyId, error: errorMsg });
+          logger.warn('key.prune-expired failed', {
+            userId,
+            keyId,
+            error: errorMsg,
+          });
+        }
+      }
+
+      const response: any = { pruned, failed };
+      if (failures.length > 0) {
+        response.failures = failures;
+      }
+      res.json(response);
+    } catch (error: unknown) {
+      if (error instanceof ProvisioningError) {
+        res.status(error.status).json(error.body);
+        return;
+      }
+      sendError(res, error, logger, 'prune expired keys');
+    }
+  });
+
   router.post('/keys/generate', async (req: Request, res: Response) => {
     try {
       // ── Parse & validate input with strict schema ────────────────────────
