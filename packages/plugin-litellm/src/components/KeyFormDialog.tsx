@@ -17,16 +17,22 @@ import Alert from '@mui/material/Alert';
 import Accordion from '@mui/material/Accordion';
 import AccordionSummary from '@mui/material/AccordionSummary';
 import AccordionDetails from '@mui/material/AccordionDetails';
-import Tabs from '@mui/material/Tabs';
-import Tab from '@mui/material/Tab';
 import Tooltip from '@mui/material/Tooltip';
 import InputAdornment from '@mui/material/InputAdornment';
 import Chip from '@mui/material/Chip';
 import { ContentCopy, Code, ExpandMore, Check } from '@mui/icons-material';
 import { usePermission } from '@backstage/plugin-permission-react';
-import { VirtualKey, ModelInfo, TeamInfo, GenerateKeyRequest, GenerateKeyResponse, UpdateKeyRequest, LiteLlmConfig } from '../types';
+import {
+  VirtualKey,
+  ModelInfo,
+  TeamInfo,
+  GenerateKeyRequest,
+  GenerateKeyResponse,
+  UpdateKeyRequest,
+  LiteLlmConfig,
+} from '../types';
 import { DEFAULT_KEY_DURATIONS, litellmKeyResetSpendPermission, formatDurationLabel } from '@acarmisc/backstage-plugin-litellm-common';
-import { estimateTokensFromBudget, fmtInt } from '../format';
+import { estimateTokensFromBudget } from '../format';
 import { useCopyToClipboard } from '../hooks';
 import { validateKeyForm, firstInvalidField, expiryPreview, priciestInputPrice } from '../keyFormValidation';
 
@@ -44,6 +50,16 @@ import { validateKeyForm, firstInvalidField, expiryPreview, priciestInputPrice }
  * unlimited toggle and the team-scoped model filtering behave exactly as they
  * do at creation time.
  */
+import {
+  createForm,
+  editForm,
+  isModelAllowedByTeam,
+  aliasHelperText,
+  teamHelperText,
+  budgetHelperText,
+} from './keyFormHelpers';
+import { buildSnippets, SnippetTabs, type Snippets } from './KeySnippets';
+
 export type KeyFormDialogMode = 'create' | 'edit';
 
 export interface KeyFormDialogProps {
@@ -67,229 +83,6 @@ export interface KeyFormDialogProps {
   onResetKeySpend?: (keyId: string) => Promise<void>;
   onGetConfig: () => Promise<LiteLlmConfig>;
 }
-
-const generateDefaultAlias = (username?: string): string => {
-  const base = (username || 'user')
-    .split('@')[0]
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '') || 'user';
-  const hash = Math.random().toString(36).slice(2, 8);
-  return `${base}-${hash}`;
-};
-
-const createForm = (username?: string): GenerateKeyRequest => ({
-  alias: generateDefaultAlias(username),
-  models: [],
-  duration: '30d',
-  max_budget: 100,
-  tpm_limit: undefined,
-  rpm_limit: undefined,
-  team_id: undefined,
-  key_type: 'llm_api',
-});
-
-const editForm = (k: VirtualKey): UpdateKeyRequest => ({
-  key_alias: k.key_alias ?? '',
-  models: k.models ?? [],
-  max_budget: k.max_budget,
-  tpm_limit: k.tpm_limit,
-  rpm_limit: k.rpm_limit,
-});
-
-function trimSlash(url: string): string {
-  return url.replace(/\/+$/, '');
-}
-
-// LiteLLM sentinel: a team's `models` list is `["all-proxy-models"]` when the
-// team isn't restricted to specific models. A team's `models` entries can
-// also be access-group names (see litellm model_info.access_groups) rather
-// than literal model_name values. Treating either case as a literal
-// model_name allowlist matches nothing, which previously made the whole
-// "Models" field disappear for such teams.
-const ALL_PROXY_MODELS = 'all-proxy-models';
-
-function isModelAllowedByTeam(model: ModelInfo, teamModels?: string[]): boolean {
-  if (!teamModels || teamModels.length === 0) return true;
-  if (teamModels.includes(ALL_PROXY_MODELS)) return true;
-  if (teamModels.includes(model.model_name)) return true;
-  return !!model.access_groups?.some(group => teamModels.includes(group));
-}
-
-interface Snippets {
-  curl: string;
-  openai: string;
-  opencode: string;
-  pi: string;
-  claudeCode: string;
-  publicEndpoint: string;
-}
-
-function buildSnippets(baseUrl: string | null, key: string, model: string): Snippets {
-  if (!baseUrl) {
-    throw new Error('baseUrl not configured');
-  }
-  const base = trimSlash(baseUrl);
-  const apiBase = `${base}/v1`;
-  return {
-    publicEndpoint: apiBase,
-    curl: `curl ${apiBase}/chat/completions \\
-  -H "Authorization: Bearer ${key}" \\
-  -H "Content-Type: application/json" \\
-  -d '{
-    "model": "${model}",
-    "messages": [{ "role": "user", "content": "Hello!" }]
-  }'`,
-    openai: `from openai import OpenAI
-
-client = OpenAI(
-  api_key="${key}",
-  base_url="${apiBase}",
-)
-
-response = client.chat.completions.create(
-  model="${model}",
-  messages=[{ "role": "user", "content": "Hello!" }],
-)
-print(response.choices[0].message.content)`,
-    opencode: `{
-  "$schema": "https://opencode.ai/config.json",
-  "provider": {
-    "litellm": {
-      "npm": "@ai-sdk/openai-compatible",
-      "name": "LiteLLM",
-      "options": {
-        "baseURL": "${apiBase}",
-        "apiKey": "${key}"
-      },
-      "models": {
-        "${model}": {}
-      }
-    }
-  }
-}`,
-    pi: `{
-  "litellm": {
-    "baseUrl": "${apiBase}",
-    "apiKey": "${key}",
-    "api": "openai-completions",
-    "models": [
-      { "id": "${model}", "name": "${model}" }
-    ]
-  }
-}`,
-    claudeCode: `# Option 1 — Static key (store in environment or .env)
-export ANTHROPIC_AUTH_TOKEN="${key}"
-export ANTHROPIC_BASE_URL="${base}"
-claude --model ${model}
-
-# Option 2 — Read from OS keychain (macOS or Linux)
-# 1. Store this key in your system keychain:
-#    macOS:
-security add-generic-password -s litellm-api-key -a "$USER" -w '<paste key>'
-#    Linux (secret-tool):
-secret-tool store --label="LiteLLM" service litellm-api-key
-
-# 2. Add to ~/.claude/settings.json (apiKeyHelper is a shell command whose
-#    stdout is the key):
-#    macOS:
-#      { "apiKeyHelper": "security find-generic-password -s litellm-api-key -w" }
-#    Linux:
-#      { "apiKeyHelper": "secret-tool lookup service litellm-api-key" }
-
-# 3. Optional: refresh interval in ms (default 1h):
-export CLAUDE_CODE_API_KEY_HELPER_TTL_MS=3600000`,
-  };
-}
-
-function aliasHelperText(aliasError: boolean, aliasDuplicate: boolean): string | undefined {
-  if (aliasError) return 'Alias is required';
-  if (aliasDuplicate) return 'This alias is already used by one of your keys — LiteLLM requires aliases to be unique across all keys';
-  return undefined;
-}
-
-function teamHelperText(teamError: boolean, teamRequired: boolean): string {
-  if (teamError) return 'Team is required';
-  if (teamRequired) return 'Bind this key to a team for scoped access';
-  return 'Optional: bind this key to a specific team for scoped access';
-}
-
-function budgetHelperText(budgetInvalid: boolean, budgetEstimate: number | null, unlimited: boolean): string | undefined {
-  if (budgetInvalid && !unlimited) return 'Enter a positive budget or tick "Unlimited"';
-  if (budgetEstimate !== null) return `≈ ${fmtInt(budgetEstimate)} tokens at the priciest selected model`;
-  return 'Lifetime cap for this key. It never resets';
-}
-
-interface SnippetTabsProps {
-  snippets: Snippets;
-  model: string;
-  copyState: { copy: (text: string) => Promise<boolean>; copied: boolean };
-}
-
-type SnippetTab = 'curl' | 'openai' | 'opencode' | 'pi' | 'claude-code';
-
-const SNIPPET_FILE_HINTS: Partial<Record<SnippetTab, string>> = {
-  opencode: 'Add to ~/.config/opencode/opencode.json',
-  pi: 'Add to ~/.pi/agent/models.json',
-  'claude-code': 'Store the key in your OS keychain and point apiKeyHelper at it in ~/.claude/settings.json',
-};
-
-const SnippetTabs: React.FC<SnippetTabsProps> = ({ snippets, model, copyState }) => {
-  const [tab, setTab] = useState<SnippetTab>('curl');
-  const snippetKey = tab === 'claude-code' ? 'claudeCode' : tab;
-  const code = snippets[snippetKey as keyof Snippets];
-  const fileHint = SNIPPET_FILE_HINTS[tab];
-  return (
-    <Box>
-      <Tabs value={tab} onChange={(_, v) => setTab(v as SnippetTab)} sx={{ mb: 1 }} variant="scrollable">
-        <Tab label="curl" value="curl" />
-        <Tab label="OpenAI SDK" value="openai" />
-        <Tab label="opencode" value="opencode" />
-        <Tab label="pi" value="pi" />
-        <Tab label="Claude Code" value="claude-code" />
-      </Tabs>
-      {fileHint && (
-        <Typography variant="caption" color="text.secondary" display="block" mb={0.5}>
-          {fileHint}
-        </Typography>
-      )}
-      <Box
-        position="relative"
-        p={1.5}
-        sx={{ backgroundColor: 'action.hover', border: '1px solid', borderColor: 'divider', borderRadius: 1 }}
-      >
-        <Tooltip title={copyState.copied ? 'Copied' : 'Copy snippet'} placement="top">
-          <IconButton
-            size="small"
-            onClick={() => copyState.copy(code)}
-            aria-label="Copy snippet"
-            sx={{ position: 'absolute', top: 4, right: 4 }}
-          >
-            {copyState.copied ? <Check fontSize="small" /> : <ContentCopy fontSize="small" />}
-          </IconButton>
-        </Tooltip>
-        <Typography
-          component="pre"
-          sx={{
-            fontFamily: 'monospace',
-            fontSize: 12,
-            whiteSpace: 'pre-wrap',
-            wordBreak: 'break-all',
-            mb: 0,
-            pr: 4,
-          }}
-        >
-          {code}
-        </Typography>
-        {model && (
-          <Typography variant="caption" color="text.secondary" display="block" mt={1}>
-            Using model “{model}” — swap it for any model you have access to.
-          </Typography>
-        )}
-      </Box>
-    </Box>
-  );
-};
 
 export const KeyFormDialog: React.FC<KeyFormDialogProps> = ({
   open,
