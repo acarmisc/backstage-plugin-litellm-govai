@@ -51,6 +51,8 @@ export {
   litellmKeyCreatePermission,
   litellmKeyRevokePermission,
   litellmKeyManagePermission,
+  litellmKeyResetSpendPermission,
+  litellmKeyUnblockPermission,
   litellmAuditReadPermission,
   litellmTeamCreatePermission,
   litellmTeamManagePermission,
@@ -58,4 +60,4 @@ export {
   litellmTeamKnowledgebaseManagePermission,
   litellmTeamMcpManagePermission,
   litellmTeamDeletePermission,
-} from './permissions';
+} from '@acarmisc/backstage-plugin-litellm-common';

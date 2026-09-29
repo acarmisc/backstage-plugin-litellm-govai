@@ -1,0 +1,44 @@
+{
+  "name": "@acarmisc/backstage-plugin-litellm-common",
+  "version": "0.1.0",
+  "description": "Shared types, permissions, and schemas for the LiteLLM Backstage plugin",
+  "backstage": {
+    "role": "common-library",
+    "pluginId": "litellm"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/acarmisc/backstage-plugin-litellm-govai"
+  },
+  "homepage": "https://github.com/acarmisc/backstage-plugin-litellm-govai#readme",
+  "license": "Apache-2.0",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.cjs.js"
+    }
+  },
+  "main": "dist/index.cjs.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "node build.js && tsc -p tsconfig.json",
+    "test": "tsc -p tsconfig.test.json && node --test dist-test/**/*.test.js dist-test/*.test.js",
+    "prepack": "npm run build",
+    "postpack": ""
+  },
+  "dependencies": {
+    "@backstage/plugin-permission-common": "^0.9.10",
+    "zod": "^3.22.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "esbuild": "^0.28.0",
+    "typescript": "^5.9.3"
+  }
+}

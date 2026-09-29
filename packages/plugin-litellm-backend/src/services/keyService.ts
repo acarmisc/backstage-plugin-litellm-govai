@@ -22,7 +22,7 @@ import {
 import {
   type KeyValidationConfig,
   type GenerateKeyInput,
-} from '../validation/keySchemas';
+} from '@acarmisc/backstage-plugin-litellm-common';
 
 /** Unified identity for key creation — resolved from either Backstage or JWT claims. */
 export interface KeyCreateUser {

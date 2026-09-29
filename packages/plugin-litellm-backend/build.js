@@ -1,6 +1,7 @@
 const esbuild = require('esbuild');
 
 const external = [
+  '@acarmisc/backstage-plugin-litellm-common',
   '@backstage/backend-plugin-api',
   '@backstage/catalog-client',
   '@backstage/catalog-model',
