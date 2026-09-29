@@ -81,7 +81,7 @@ export function registerTeamUsageRoutes(router: Router, ctx: RouterContext): voi
         hide = teamBudgetVisibility.hideTeamBudgetForManagers;
       }
       res.json(hide ? redactTeamUsage(usage) : usage);
-    } catch (error: any) {
+    } catch (error: unknown) {
       if (error instanceof ProvisioningError) {
         res.status(error.status).json(error.body);
         return;

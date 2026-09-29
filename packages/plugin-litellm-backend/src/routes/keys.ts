@@ -67,7 +67,7 @@ export function registerKeysRoutes(router: Router, ctx: RouterContext): void {
             )
           : false;
       res.json({ ...userInfo, can_view_audit: canViewAudit });
-    } catch (error: any) {
+    } catch (error: unknown) {
       if (error instanceof ProvisioningError) {
         res.status(error.status).json(error.body);
         return;
@@ -84,7 +84,7 @@ export function registerKeysRoutes(router: Router, ctx: RouterContext): void {
 
       const keys: VirtualKey[] = await client.listKeys(userId);
       res.json(keys);
-    } catch (error: any) {
+    } catch (error: unknown) {
       if (error instanceof ProvisioningError) {
         res.status(error.status).json(error.body);
         return;
@@ -140,7 +140,7 @@ export function registerKeysRoutes(router: Router, ctx: RouterContext): void {
         keyCreateCtx,
       );
       res.json(result);
-    } catch (error: any) {
+    } catch (error: unknown) {
       if (error instanceof KeyServiceError) {
         res.status(error.status).json(error.body);
         return;
@@ -156,7 +156,7 @@ export function registerKeysRoutes(router: Router, ctx: RouterContext): void {
       // of the opaque passthrough so it's actionable from the LiteLLM side.
       const teamId = (req.body as any)?.team_id;
       if (
-        typeof error.message === 'string' &&
+        error instanceof Error &&
         error.message.includes('Invalid duration format') &&
         teamId
       ) {
@@ -195,10 +195,18 @@ export function registerKeysRoutes(router: Router, ctx: RouterContext): void {
       let input: UpdateKeyInput;
       try {
         input = updateKeyInputSchema.parse(req.body);
-      } catch (error: any) {
+      } catch (error: unknown) {
+        const errorMessage =
+          error && typeof error === 'object' && 'errors' in error
+            ? (error as any).errors?.[0]?.message || 'Invalid request'
+            : 'Invalid request';
+        const details =
+          error && typeof error === 'object' && 'errors' in error
+            ? (error as any).errors
+            : undefined;
         res.status(400).json({
-          error: error.errors?.[0]?.message || 'Invalid request',
-          details: error.errors,
+          error: errorMessage,
+          ...(details && { details }),
         });
         return;
       }
@@ -270,7 +278,7 @@ export function registerKeysRoutes(router: Router, ctx: RouterContext): void {
       const result = await client.updateKey(upstreamRequest);
       logger.info('key.update', { userId: tokenEntityRef ?? 'unknown', keyId });
       res.json(result);
-    } catch (error: any) {
+    } catch (error: unknown) {
       if (sendOwnershipError(error, res)) return;
       sendError(res, error, logger, 'update key');
     }
@@ -293,7 +301,7 @@ export function registerKeysRoutes(router: Router, ctx: RouterContext): void {
       await client.deleteKeys({ keys: [keyId] });
       logger.info('key.delete', { userId: tokenEntityRef ?? 'unknown', keyId });
       res.json({ success: true });
-    } catch (error: any) {
+    } catch (error: unknown) {
       if (sendOwnershipError(error, res)) return;
       sendError(res, error, logger, 'delete key');
     }
@@ -326,7 +334,7 @@ export function registerKeysRoutes(router: Router, ctx: RouterContext): void {
 
       logger.info('key.block', { userId: tokenEntityRef ?? 'unknown', keyId });
       res.json({ success: true });
-    } catch (error: any) {
+    } catch (error: unknown) {
       if (sendOwnershipError(error, res)) return;
       sendError(res, error, logger, 'block key');
     }
@@ -366,7 +374,7 @@ export function registerKeysRoutes(router: Router, ctx: RouterContext): void {
 
       logger.info('key.unblock', { userId: tokenEntityRef ?? 'unknown', keyId });
       res.json({ success: true });
-    } catch (error: any) {
+    } catch (error: unknown) {
       if (sendOwnershipError(error, res)) return;
       sendError(res, error, logger, 'unblock key');
     }
@@ -394,7 +402,7 @@ export function registerKeysRoutes(router: Router, ctx: RouterContext): void {
       await client.resetKeySpend(keyId);
       logger.info('key.reset_spend', { userId: tokenEntityRef ?? 'unknown', keyId });
       res.json({ success: true });
-    } catch (error: any) {
+    } catch (error: unknown) {
       if (sendOwnershipError(error, res)) return;
       sendError(res, error, logger, 'reset key spend');
     }
@@ -440,7 +448,7 @@ export function registerKeysRoutes(router: Router, ctx: RouterContext): void {
         changed_by,
       });
       res.json(result);
-    } catch (error: any) {
+    } catch (error: unknown) {
       sendError(res, error, logger, 'fetch audit logs');
     }
   });
@@ -449,7 +457,7 @@ export function registerKeysRoutes(router: Router, ctx: RouterContext): void {
     try {
       const models: ModelInfo[] = await client.listModels();
       res.json(models);
-    } catch (error: any) {
+    } catch (error: unknown) {
       sendError(res, error, logger, 'list models');
     }
   });
@@ -482,7 +490,7 @@ export function registerKeysRoutes(router: Router, ctx: RouterContext): void {
         userId,
       );
       res.json(usage);
-    } catch (error: any) {
+    } catch (error: unknown) {
       if (error instanceof ProvisioningError) {
         res.status(error.status).json(error.body);
         return;

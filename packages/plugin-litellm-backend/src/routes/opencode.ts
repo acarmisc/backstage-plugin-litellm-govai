@@ -173,7 +173,7 @@ export function registerOpencodeRoutes(router: Router, ctx: RouterContext): void
         res.set('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'");
         res.set('Content-Type', 'text/html; charset=utf-8');
         res.status(200).send(html);
-      } catch (error: any) {
+      } catch (error: unknown) {
         if (error instanceof ProvisioningError) {
           res.status(error.status).json(error.body);
           return;
@@ -252,7 +252,7 @@ export function registerOpencodeRoutes(router: Router, ctx: RouterContext): void
           rotated,
         });
         res.redirect(302, url.href);
-      } catch (error: any) {
+      } catch (error: unknown) {
         if (error instanceof ProvisioningError) {
           res.status(error.status).json(error.body);
           return;

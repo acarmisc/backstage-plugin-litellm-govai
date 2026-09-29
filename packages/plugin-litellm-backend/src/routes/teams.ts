@@ -55,7 +55,7 @@ export function registerTeamsRoutes(router: Router, ctx: RouterContext): void {
       // Member surface: strip dollar amounts when the operator hides them
       // from members. Managers who need the numbers use /teams/managed.
       respondTeamList(res, list, ctx, 'member');
-    } catch (error: any) {
+    } catch (error: unknown) {
       if (error instanceof ProvisioningError) {
         res.status(error.status).json(error.body);
         return;

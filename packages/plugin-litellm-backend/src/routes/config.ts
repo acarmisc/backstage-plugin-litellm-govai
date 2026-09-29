@@ -91,7 +91,7 @@ export function registerConfigRoutes(router: Router, ctx: RouterContext): void {
         matched_role: matched?.group ?? null,
         effective_defaults: effective,
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       sendError(res, error, ctx.logger, 'resolve provisioning preview');
     }
   });

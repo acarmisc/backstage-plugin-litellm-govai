@@ -96,7 +96,7 @@ export function registerBridgeRoutes(router: Router, ctx: RouterContext, bridgeO
           userIdDomain,
         );
         res.json(keys);
-      } catch (error: any) {
+      } catch (error: unknown) {
         handleBridgeError(error, res);
       }
     });
@@ -146,7 +146,7 @@ export function registerBridgeRoutes(router: Router, ctx: RouterContext, bridgeO
           keyCreateCtx,
         );
         res.json(result);
-      } catch (error: any) {
+      } catch (error: unknown) {
         handleBridgeError(error, res);
       }
     });
@@ -156,7 +156,7 @@ export function registerBridgeRoutes(router: Router, ctx: RouterContext, bridgeO
         await requireClaims(req); // authenticate only
         const models = await client.listModels();
         res.json(models);
-      } catch (error: any) {
+      } catch (error: unknown) {
         handleBridgeError(error, res);
       }
     });
