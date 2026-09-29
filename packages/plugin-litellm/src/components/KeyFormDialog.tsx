@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import Dialog from '@mui/material/Dialog';
@@ -20,10 +20,12 @@ import AccordionDetails from '@mui/material/AccordionDetails';
 import Tabs from '@mui/material/Tabs';
 import Tab from '@mui/material/Tab';
 import Tooltip from '@mui/material/Tooltip';
+import InputAdornment from '@mui/material/InputAdornment';
 import { ContentCopy, Code, ExpandMore, Check } from '@mui/icons-material';
 import { VirtualKey, ModelInfo, TeamInfo, GenerateKeyRequest, GenerateKeyResponse, UpdateKeyRequest, LiteLlmConfig } from '../types';
 import { estimateTokensFromBudget, fmtInt } from '../format';
 import { useCopyToClipboard } from '../hooks';
+import { validateKeyForm, firstInvalidField, expiryPreview, priciestInputPrice } from '../keyFormValidation';
 
 /**
  * Single form dialog for both key creation (`mode="create"`) and key editing
@@ -211,8 +213,8 @@ function teamHelperText(teamError: boolean, teamRequired: boolean): string {
 
 function budgetHelperText(budgetInvalid: boolean, budgetEstimate: number | null, unlimited: boolean): string | undefined {
   if (budgetInvalid && !unlimited) return 'Enter a positive budget or tick "Unlimited"';
-  if (budgetEstimate !== null) return `≈ ${fmtInt(budgetEstimate)} tokens at the selected model's rate`;
-  return undefined;
+  if (budgetEstimate !== null) return `≈ ${fmtInt(budgetEstimate)} tokens at the priciest selected model`;
+  return 'Lifetime cap for this key. It never resets';
 }
 
 interface SnippetTabsProps {
@@ -318,6 +320,13 @@ export const KeyFormDialog: React.FC<KeyFormDialogProps> = ({
   const [config, setConfig] = useState<LiteLlmConfig | null>(null);
   const [secretCopied, setSecretCopied] = useState(false);
   const [closeWithoutCopyConfirm, setCloseWithoutCopyConfirm] = useState(false);
+  const [touched, setTouched] = useState<Record<string, boolean>>({});
+  const [submitAttempted, setSubmitAttempted] = useState(false);
+
+  // Refs for focusing first invalid field
+  const teamInputRef = useRef<HTMLInputElement>(null);
+  const aliasInputRef = useRef<HTMLInputElement>(null);
+  const budgetInputRef = useRef<HTMLInputElement>(null);
 
   // Clipboard hook for all copy operations
   const clipboardSecret = useCopyToClipboard();
@@ -348,6 +357,8 @@ export const KeyFormDialog: React.FC<KeyFormDialogProps> = ({
       setResetSpendConfirm(false);
       setSecretCopied(false);
       setCloseWithoutCopyConfirm(false);
+      setTouched({});
+      setSubmitAttempted(false);
       // Fetch config to check key action capabilities
       onGetConfig().then(setConfig).catch(() => setConfig(null));
     }
@@ -375,42 +386,68 @@ export const KeyFormDialog: React.FC<KeyFormDialogProps> = ({
 
   const selectedTeam = teams.find(t => t.team_id === (isCreate ? generateForm.team_id : undefined)) ?? null;
 
+  // In edit mode, filter models by the key's team_id (fixed after creation).
+  // In create mode, filter by the currently selected team.
+  const teamIdForModels = isCreate ? generateForm.team_id : keyToEdit?.team_id;
+  const teamForModels = teams.find(t => t.team_id === teamIdForModels) ?? null;
+
   // Once a team is selected, only offer models that team is actually allowed
   // to use — `models` here is already scoped to what the user can access.
   // Applies on edit too, so a key can no longer drift out of its team's
   // allowlist via /key/update.
   const availableModels = useMemo(() => {
-    return models.filter(m => isModelAllowedByTeam(m, selectedTeam?.models));
-  }, [models, selectedTeam]);
+    return models.filter(m => isModelAllowedByTeam(m, teamForModels?.models));
+  }, [models, teamForModels]);
 
   const selectedModels = availableModels.filter(m => (formData.models || []).includes(m.model_name));
 
-  // ── Inline form validation (shared by create + edit) ─────────────────────
-  const aliasError = !currentAlias.trim();
-  const teamError = isCreate && teamRequired && !generateForm.team_id;
-  const budgetInvalid =
-    !unlimitedBudget &&
-    (formData.max_budget === undefined ||
-      formData.max_budget === null ||
-      formData.max_budget <= 0);
-  const canSubmit = !aliasError && !teamError && !budgetInvalid && !submitting;
+  // ── Validation using the validation module ────────────────────────────────
+  const validationErrors = validateKeyForm(formData, {
+    teamRequired,
+    unlimitedBudget,
+    isCreate,
+  });
+
+  // Show errors only if the field was touched or submit was attempted
+  const showError = (field: string) => touched[field] || submitAttempted;
+  const aliasError = showError('alias') && !!validationErrors.alias;
+  const teamError = showError('team') && !!validationErrors.team;
+  const budgetInvalid = showError('budget') && !!validationErrors.budget;
 
   // Issue #35: warn (don't block) when the alias already matches one of the
   // user's loaded keys — LiteLLM enforces globally-unique aliases.
   const aliasDuplicate = !!currentAlias && keys.some(k => k.key_alias === currentAlias && k !== keyToEdit);
 
-  // ── Budget estimate at the selected model's input rate ───────────────────
+  // ── Budget estimate at the priciest selected model's input rate ──────────
   const budgetEstimate = useMemo(() => {
     if (unlimitedBudget || budgetInvalid) return null;
-    const inputCosts = selectedModels
-      .map(m => m.input_cost_per_token)
-      .filter((c): c is number => typeof c === 'number' && c > 0);
-    if (inputCosts.length === 0) return null;
-    const pricePerToken = Math.max(...inputCosts);
+    const pricePerToken = priciestInputPrice(selectedModels);
+    if (pricePerToken === null) return null;
     return estimateTokensFromBudget(formData.max_budget ?? 0, pricePerToken);
   }, [formData.max_budget, selectedModels, unlimitedBudget, budgetInvalid]);
 
   const handleGenerate = async () => {
+    // Validate before submitting
+    const errors = validateKeyForm(generateForm, {
+      teamRequired,
+      unlimitedBudget,
+      isCreate: true,
+    });
+
+    if (Object.keys(errors).length > 0) {
+      setSubmitAttempted(true);
+      // Focus first invalid field
+      const firstInvalid = firstInvalidField(errors, true);
+      if (firstInvalid === 'team' && teamInputRef.current) {
+        teamInputRef.current.focus();
+      } else if (firstInvalid === 'alias' && aliasInputRef.current) {
+        aliasInputRef.current.focus();
+      } else if (firstInvalid === 'budget' && budgetInputRef.current) {
+        budgetInputRef.current.focus();
+      }
+      return;
+    }
+
     setSubmitting(true);
     setGenerateError(null);
     try {
@@ -445,6 +482,26 @@ export const KeyFormDialog: React.FC<KeyFormDialogProps> = ({
 
   const handleUpdate = async () => {
     if (!keyToEdit) return;
+
+    // Validate before submitting
+    const errors = validateKeyForm(editFormState, {
+      teamRequired,
+      unlimitedBudget,
+      isCreate: false,
+    });
+
+    if (Object.keys(errors).length > 0) {
+      setSubmitAttempted(true);
+      // Focus first invalid field
+      const firstInvalid = firstInvalidField(errors, false);
+      if (firstInvalid === 'alias' && aliasInputRef.current) {
+        aliasInputRef.current.focus();
+      } else if (firstInvalid === 'budget' && budgetInputRef.current) {
+        budgetInputRef.current.focus();
+      }
+      return;
+    }
+
     setSubmitting(true);
     setEditError(null);
     try {
@@ -549,9 +606,11 @@ export const KeyFormDialog: React.FC<KeyFormDialogProps> = ({
             setFormData({ team_id: team?.team_id, models: restrictedModels });
           }}
           disabled={!isCreate}
+          onBlur={() => setTouched(prev => ({ ...prev, team: true }))}
           renderInput={params => (
             <TextField
               {...params}
+              inputRef={teamInputRef}
               label="Team"
               error={teamError}
               helperText={
@@ -756,35 +815,8 @@ export const KeyFormDialog: React.FC<KeyFormDialogProps> = ({
                 {editError}
               </Alert>
             )}
-            <TextField
-              label="Alias"
-              value={currentAlias}
-              onChange={(e) => {
-                setAliasField(e.target.value);
-                setGenerateError(null);
-                setEditError(null);
-              }}
-              error={aliasError}
-              color={aliasDuplicate ? 'warning' : undefined}
-              helperText={aliasHelperText(aliasError, aliasDuplicate)}
-              required
-              fullWidth
-            />
-            {!isCreate ? null : (
-              <TextField
-                select
-                label="Duration"
-                value={generateForm.duration || '30d'}
-                onChange={(e) => setFormData({ duration: e.target.value })}
-                fullWidth
-              >
-                <MenuItem value="1d">1 Day</MenuItem>
-                <MenuItem value="7d">7 Days</MenuItem>
-                <MenuItem value="30d">30 Days</MenuItem>
-                <MenuItem value="90d">90 Days</MenuItem>
-              </TextField>
-            )}
 
+            {/* Field order: Team → Models → Budget → Duration → Alias → Advanced */}
             {renderTeamField()}
 
             {(availableModels.length > 0 || modelsError) && (
@@ -813,7 +845,7 @@ export const KeyFormDialog: React.FC<KeyFormDialogProps> = ({
                         {...params}
                         label="Models"
                         helperText={
-                          selectedTeam
+                          teamForModels
                             ? 'Leave empty to allow all models available to this team'
                             : 'Leave empty to allow all models'
                         }
@@ -849,18 +881,66 @@ export const KeyFormDialog: React.FC<KeyFormDialogProps> = ({
               />
             )}
             <TextField
-              label="Max Budget (USD)"
+              inputRef={budgetInputRef}
+              label="Max Budget"
               type="number"
               value={unlimitedBudget ? '' : formData.max_budget ?? ''}
-              onChange={(e) =>
-                setFormData({ max_budget: e.target.value ? Number(e.target.value) : undefined })
-              }
+              onChange={(e) => {
+                setFormData({ max_budget: e.target.value ? Number(e.target.value) : undefined });
+                setGenerateError(null);
+                setEditError(null);
+              }}
+              onBlur={() => setTouched(prev => ({ ...prev, budget: true }))}
               error={budgetInvalid}
               helperText={budgetHelperText(budgetInvalid, budgetEstimate, unlimitedBudget)}
               disabled={unlimitedBudget}
               required
               fullWidth
+              InputProps={{
+                startAdornment: <InputAdornment position="start">$</InputAdornment>,
+              }}
+              inputProps={{ min: 0, step: 0.01 }}
             />
+
+            {!isCreate ? null : (
+              <>
+                <TextField
+                  select
+                  label="Duration"
+                  value={generateForm.duration || '30d'}
+                  onChange={(e) => setFormData({ duration: e.target.value })}
+                  fullWidth
+                >
+                  <MenuItem value="1d">1 Day</MenuItem>
+                  <MenuItem value="7d">7 Days</MenuItem>
+                  <MenuItem value="30d">30 Days</MenuItem>
+                  <MenuItem value="90d">90 Days</MenuItem>
+                </TextField>
+                {generateForm.duration && (
+                  <Typography variant="caption" color="text.secondary">
+                    {expiryPreview(generateForm.duration)}
+                  </Typography>
+                )}
+              </>
+            )}
+
+            <TextField
+              inputRef={aliasInputRef}
+              label="Alias"
+              value={currentAlias}
+              onChange={(e) => {
+                setAliasField(e.target.value);
+                setGenerateError(null);
+                setEditError(null);
+              }}
+              onBlur={() => setTouched(prev => ({ ...prev, alias: true }))}
+              error={aliasError}
+              color={aliasDuplicate ? 'warning' : undefined}
+              helperText={aliasHelperText(aliasError, aliasDuplicate)}
+              required
+              fullWidth
+            />
+
             <Accordion disableGutters elevation={0} sx={{ border: '1px solid', borderColor: 'divider', '&:before': { display: 'none' } }}>
               <AccordionSummary expandIcon={<ExpandMore />}>
                 <Typography variant="body2" fontWeight={600}>Advanced</Typography>
@@ -904,7 +984,7 @@ export const KeyFormDialog: React.FC<KeyFormDialogProps> = ({
               onClick={isCreate ? handleGenerate : handleUpdate}
               variant="contained"
               color="primary"
-              disabled={!canSubmit}
+              disabled={submitting}
             >
               {submitting ? <CircularProgress size={24} /> : submitLabel}
             </Button>
