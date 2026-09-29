@@ -28,6 +28,7 @@ import {
 } from '@acarmisc/backstage-plugin-litellm-common';
 import { useCopyToClipboard } from '../hooks';
 import { expiryStatus } from '../api';
+import { keyDisplayLabel, keyLast4, pruneCopy } from '../keyLabels';
 import { GenerateKeyButton } from './GenerateKeyButton';
 import {
   VirtualKey,
@@ -173,11 +174,12 @@ export const KeysTable: React.FC<KeysTableProps> = ({
   const canManageKeys = !managePermission.loading && managePermission.allowed;
   const canRevokeKeys = !revokePermission.loading && revokePermission.allowed;
 
-  // Block/unblock
-  const [blockingKeyId, setBlockingKeyId] = useState<string | null>(null);
+  // Block confirmation
+  const [blockConfirmKey, setBlockConfirmKey] = useState<VirtualKey | null>(null);
+  const [blockSubmitting, setBlockSubmitting] = useState(false);
 
   // Delete confirmation
-  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [deleteConfirmKey, setDeleteConfirmKey] = useState<VirtualKey | null>(null);
   const [deleteSubmitting, setDeleteSubmitting] = useState(false);
 
   // Reset spend moved into the shared KeyFormDialog (edit mode)
@@ -218,28 +220,47 @@ export const KeysTable: React.FC<KeysTableProps> = ({
     onEditKey(k);
   };
 
-  const handleToggleBlock = async (key: VirtualKey) => {
+  const performUnblock = async (key: VirtualKey) => {
     const keyId = key.token ?? key.key;
-    setBlockingKeyId(keyId);
+    setBlockSubmitting(true);
     try {
-      if (key.blocked) {
-        await onUnblockKey(keyId);
-      } else {
-        await onBlockKey(keyId);
-      }
+      await onUnblockKey(keyId);
     } finally {
-      setBlockingKeyId(null);
+      setBlockSubmitting(false);
+    }
+  };
+
+  const performBlock = async (key: VirtualKey) => {
+    if (!blockConfirmKey) return;
+    const keyId = key.token ?? key.key;
+    setBlockSubmitting(true);
+    try {
+      await onBlockKey(keyId);
+    } finally {
+      setBlockSubmitting(false);
+      setBlockConfirmKey(null);
+    }
+  };
+
+  const handleToggleBlock = (key: VirtualKey) => {
+    if (key.blocked) {
+      // Unblock is safe (one-click) — no confirmation
+      performUnblock(key);
+    } else {
+      // Block requires confirmation
+      setBlockConfirmKey(key);
     }
   };
 
   const handleConfirmDelete = async () => {
-    if (!deleteConfirmId) return;
+    if (!deleteConfirmKey) return;
     setDeleteSubmitting(true);
     try {
-      await onDeleteKey(deleteConfirmId);
+      const keyId = deleteConfirmKey.token ?? deleteConfirmKey.key;
+      await onDeleteKey(keyId);
     } finally {
       setDeleteSubmitting(false);
-      setDeleteConfirmId(null);
+      setDeleteConfirmKey(null);
     }
   };
 
@@ -304,7 +325,6 @@ export const KeysTable: React.FC<KeysTableProps> = ({
     }
     return filteredKeys.map((key) => {
       const keyId = key.token ?? key.key;
-      const isBlocking = blockingKeyId === keyId;
       const keyModels = key.models ?? [];
       return (
         <TableRow
@@ -404,15 +424,18 @@ export const KeysTable: React.FC<KeysTableProps> = ({
               <IconButton
                 size="small"
                 onClick={() => handleToggleBlock(key)}
-                disabled={isBlocking || !canManageKeys}
-                title={!canManageKeys ? 'No permission to block keys' : (key.blocked ? 'Unblock key' : 'Block key — suspends without revoking')}
+                disabled={blockSubmitting || !canManageKeys}
+                title={(() => {
+                  if (!canManageKeys) return 'No permission to block keys';
+                  return key.blocked ? 'Unblock key' : 'Block key — suspends without revoking';
+                })()}
                 sx={quietIconButtonSx('warning')}
               >
-                {keyBlockIcon(isBlocking, key.blocked)}
+                {keyBlockIcon(blockSubmitting, key.blocked)}
               </IconButton>
               <IconButton
                 size="small"
-                onClick={() => setDeleteConfirmId(keyId)}
+                onClick={() => setDeleteConfirmKey(key)}
                 disabled={!canRevokeKeys}
                 title={canRevokeKeys ? 'Revoke key' : 'No permission to revoke keys'}
                 sx={quietIconButtonSx('danger')}
@@ -472,7 +495,6 @@ export const KeysTable: React.FC<KeysTableProps> = ({
                 Prune expired ({expiredKeys.length})
               </Button>
             )}
-            <GenerateKeyButton onClick={onGenerateKeyClick} />
           </>
         }
       >
@@ -509,16 +531,54 @@ export const KeysTable: React.FC<KeysTableProps> = ({
         </TableContainer>
       </SectionCard>
 
+      {/* Block confirmation dialog */}
+      <Dialog
+        open={!!blockConfirmKey}
+        onClose={() => !blockSubmitting && setBlockConfirmKey(null)}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle>Block key?</DialogTitle>
+        <DialogContent>
+          <Typography>
+            Block <strong>{keyDisplayLabel(blockConfirmKey ?? ({} as VirtualKey))}</strong>? Integrations using it will fail immediately.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button
+            onClick={() => setBlockConfirmKey(null)}
+            disabled={blockSubmitting}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={() => blockConfirmKey && performBlock(blockConfirmKey)}
+            variant="contained"
+            color="warning"
+            disabled={blockSubmitting}
+          >
+            {blockSubmitting ? <CircularProgress size={20} /> : 'Block'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
       {/* Delete confirmation dialog */}
-      <Dialog open={!!deleteConfirmId} onClose={() => setDeleteConfirmId(null)} maxWidth="xs" fullWidth>
-        <DialogTitle>Revoke Key?</DialogTitle>
+      <Dialog
+        open={!!deleteConfirmKey}
+        onClose={() => !deleteSubmitting && setDeleteConfirmKey(null)}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle>
+          Revoke <strong>{deleteConfirmKey ? keyDisplayLabel(deleteConfirmKey) : ''}</strong>{deleteConfirmKey && keyLast4(deleteConfirmKey) ? ` (sk-…${keyLast4(deleteConfirmKey)})` : ''}?
+        </DialogTitle>
         <DialogContent>
           <Typography>
             This will permanently revoke the key. Any integrations using it will stop working immediately.
           </Typography>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setDeleteConfirmId(null)} disabled={deleteSubmitting}>
+          <Button onClick={() => setDeleteConfirmKey(null)} disabled={deleteSubmitting}>
             Cancel
           </Button>
           <Button
@@ -533,12 +593,16 @@ export const KeysTable: React.FC<KeysTableProps> = ({
       </Dialog>
 
       {/* Prune expired keys confirmation dialog */}
-      <Dialog open={pruneConfirmCount !== null} onClose={() => setPruneConfirmCount(null)} maxWidth="xs" fullWidth>
+      <Dialog
+        open={pruneConfirmCount !== null}
+        onClose={() => !pruneSubmitting && setPruneConfirmCount(null)}
+        maxWidth="xs"
+        fullWidth
+      >
         <DialogTitle>Prune Expired Keys?</DialogTitle>
         <DialogContent>
           <Typography>
-            This will permanently delete {pruneConfirmCount} expired key{pruneConfirmCount !== 1 ? 's' : ''} from LiteLLM.
-            Any integrations using them will stop working immediately.
+            {pruneConfirmCount !== null && pruneCopy(pruneConfirmCount)}
           </Typography>
         </DialogContent>
         <DialogActions>
