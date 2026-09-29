@@ -112,7 +112,7 @@ export interface LiteLLMBudgetGaugesProps {
 
 /** One-word level names, and the note shown when the level has no cap. */
 const LEVEL: Record<BudgetGauge['kind'], { name: string; none: string }> = {
-  key: { name: 'Key', none: 'No key budget' },
+  key: { name: 'Key', none: 'No cap (unlimited)' },
   user: { name: 'User', none: 'No personal budget' },
   team: { name: 'Team', none: 'No team budget' },
 };
