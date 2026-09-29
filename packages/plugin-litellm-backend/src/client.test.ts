@@ -415,4 +415,20 @@ describe('LiteLLMClient team CRUD methods', () => {
     assert.strictEqual(rows.length, 1);
     assert.deepStrictEqual(rows[0].request_tags, []);
   });
+
+  test('regenerateKey POSTs to /key/{key}/regenerate and returns plaintext key', async () => {
+    const keyHash = 'sk-old-hash';
+    const newKey = 'sk-new-rotated-key';
+    stubFetch({ key: newKey });
+
+    const client = new LiteLLMClient(mockConfig);
+    const result = await client.regenerateKey(keyHash);
+
+    assert.strictEqual(fetchCalls.length, 1);
+    assert.ok(
+      fetchCalls[0].url.includes(`/key/${encodeURIComponent(keyHash)}/regenerate`),
+    );
+    assert.strictEqual(fetchCalls[0].init.method, 'POST');
+    assert.deepStrictEqual(result, { key: newKey });
+  });
 });

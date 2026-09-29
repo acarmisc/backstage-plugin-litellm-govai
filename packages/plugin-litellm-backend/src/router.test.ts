@@ -74,6 +74,7 @@ function mockClient(overrides: {
   userInfo?: any;
   listKeys?: (uid?: string) => Promise<VirtualKey[]>;
   generateKey?: (r: any) => Promise<any>;
+  regenerateKey?: (k: string) => Promise<any>;
   updateKey?: (r: any) => Promise<any>;
   deleteKeys?: (r: any) => Promise<any>;
   blockKey?: (k: string) => Promise<any>;
@@ -97,6 +98,7 @@ function mockClient(overrides: {
     getUserInfo: [],
     listKeys: [],
     generateKey: [],
+    regenerateKey: [],
     updateKey: [],
     deleteKeys: [],
     blockKey: [],
@@ -137,6 +139,12 @@ function mockClient(overrides: {
       return overrides.generateKey
         ? overrides.generateKey(r)
         : Promise.resolve({ key: 'sk-new', key_alias: r.alias });
+    },
+    regenerateKey: (k: string) => {
+      calls.regenerateKey.push(k);
+      return overrides.regenerateKey
+        ? overrides.regenerateKey(k)
+        : Promise.resolve({ key: 'sk-regenerated' });
     },
     updateKey: (r: any) => {
       calls.updateKey.push(r);
@@ -397,6 +405,41 @@ function reqNoRedirect(
       });
     });
     r.on('error', reject);
+    r.end();
+  });
+}
+
+/**
+ * POST form-urlencoded data without following redirects.
+ */
+function reqPostForm(
+  baseUrl: string,
+  path: string,
+  formData: Record<string, string>,
+  opts: { authRef?: string } = {},
+): Promise<{ status: number; location?: string; body: any }> {
+  return new Promise((resolve, reject) => {
+    const bodyStr = new URLSearchParams(formData).toString();
+    const headers: Record<string, string> = {
+      'content-type': 'application/x-www-form-urlencoded',
+      'content-length': String(Buffer.byteLength(bodyStr)),
+    };
+    if (opts.authRef !== undefined) headers.authorization = `Bearer ${opts.authRef}`;
+    const r = http.request(`${baseUrl}${path}`, { method: 'POST', headers }, res => {
+      let data = '';
+      res.on('data', (c) => (data += c));
+      res.on('end', () => {
+        let parsed: any;
+        try { parsed = data ? JSON.parse(data) : {}; } catch { parsed = data; }
+        resolve({
+          status: res.statusCode ?? 0,
+          location: res.headers.location,
+          body: parsed,
+        });
+      });
+    });
+    r.on('error', reject);
+    r.write(bodyStr);
     r.end();
   });
 }
@@ -3472,10 +3515,26 @@ describe('router /opencode/connect — enabled', () => {
     assert.strictEqual(status, 400);
   });
 
-  test('mints a personal key and 302s back with key material', async () => {
-    const { status, location } = await reqNoRedirect(h.baseUrl, CONNECT, {
+  test('GET returns HTML 200 with a form (no state change)', async () => {
+    const { status, body } = await reqNoRedirect(h.baseUrl, CONNECT, {
       authRef: 'user:default/alice',
     });
+    assert.strictEqual(status, 200);
+    assert.match(body, /Connect to OpenCode/);
+    assert.match(body, /form.*method="POST"/);
+    assert.match(body, /name="redirect_uri"/);
+    // No key generated yet.
+    assert.strictEqual(h.client.calls.generateKey.length, 0);
+    assert.strictEqual(h.client.calls.regenerateKey.length, 0);
+  });
+
+  test('POST mints a personal key and 302s back with key material', async () => {
+    const { status, location } = await reqPostForm(
+      h.baseUrl,
+      '/opencode/connect',
+      { redirect_uri: 'http://localhost:1456/callback' },
+      { authRef: 'user:default/alice' },
+    );
     assert.strictEqual(status, 302);
     const url = new URL(location!);
     assert.strictEqual(url.origin, 'http://localhost:1456');
@@ -3491,10 +3550,11 @@ describe('router /opencode/connect — enabled', () => {
     assert.strictEqual(gen.metadata.created_via, 'opencode-connect');
   });
 
-  test('binds the key to a user team and echoes it back', async () => {
-    const { status, location } = await reqNoRedirect(
+  test('POST binds the key to a user team and echoes it back', async () => {
+    const { status, location } = await reqPostForm(
       h.baseUrl,
-      `${CONNECT}&team=finance`,
+      '/opencode/connect',
+      { redirect_uri: 'http://localhost:1456/callback', team: 'finance' },
       { authRef: 'user:default/alice' },
     );
     assert.strictEqual(status, 302);
@@ -3506,16 +3566,17 @@ describe('router /opencode/connect — enabled', () => {
   });
 
   test('403 when the team is not one of the user teams', async () => {
-    const { status, body } = await reqNoRedirect(
+    const { status, body } = await reqPostForm(
       h.baseUrl,
-      `${CONNECT}&team=secret-team`,
+      '/opencode/connect',
+      { redirect_uri: 'http://localhost:1456/callback', team: 'secret-team' },
       { authRef: 'user:default/alice' },
     );
     assert.strictEqual(status, 403);
     assert.match(body.error, /not one of your teams/);
   });
 
-  test('reuses an existing healthy key for the same slot instead of generating', async () => {
+  test('POST rotates an existing healthy key via regenerateKey', async () => {
     const h2 = await startHarness({
       config: {
         'litellm.opencode.enabled': true,
@@ -3537,21 +3598,25 @@ describe('router /opencode/connect — enabled', () => {
       }),
     });
     try {
-      const { status, location } = await reqNoRedirect(
+      const { status, location } = await reqPostForm(
         h2.baseUrl,
-        CONNECT,
+        '/opencode/connect',
+        { redirect_uri: 'http://localhost:1456/callback' },
         { authRef: 'user:default/alice' },
       );
       assert.strictEqual(status, 302);
       const url = new URL(location!);
-      assert.strictEqual(url.searchParams.get('key'), 'sk-existing');
+      assert.strictEqual(url.searchParams.get('key'), 'sk-regenerated');
+      // Should call regenerateKey, not generateKey.
       assert.strictEqual(h2.client.calls.generateKey.length, 0);
+      assert.strictEqual(h2.client.calls.regenerateKey.length, 1);
+      assert.strictEqual(h2.client.calls.regenerateKey[0], 'sk-existing');
     } finally {
       await new Promise<void>(r => h2.server.close(() => r()));
     }
   });
 
-  test('generates fresh when the existing slot key is blocked', async () => {
+  test('POST generates fresh when the existing slot key is blocked', async () => {
     const h2 = await startHarness({
       config: { 'litellm.opencode.enabled': true },
       client: mockClient({
@@ -3571,14 +3636,16 @@ describe('router /opencode/connect — enabled', () => {
       }),
     });
     try {
-      const { status, location } = await reqNoRedirect(
+      const { status, location } = await reqPostForm(
         h2.baseUrl,
-        CONNECT,
+        '/opencode/connect',
+        { redirect_uri: 'http://localhost:1456/callback' },
         { authRef: 'user:default/alice' },
       );
       assert.strictEqual(status, 302);
       assert.strictEqual(new URL(location!).searchParams.get('key'), 'sk-new');
       assert.strictEqual(h2.client.calls.generateKey.length, 1);
+      assert.strictEqual(h2.client.calls.regenerateKey.length, 0);
     } finally {
       await new Promise<void>(r => h2.server.close(() => r()));
     }
@@ -3602,6 +3669,17 @@ describe('router /opencode/connect — enabled', () => {
     } finally {
       await new Promise<void>(r => h2.server.close(() => r()));
     }
+  });
+
+  test('GET HTML escapes team param to prevent XSS', async () => {
+    const { status, body } = await reqNoRedirect(
+      h.baseUrl,
+      '/opencode/connect?redirect_uri=http://localhost:1456/callback&team="><script>alert(1)</script>',
+      { authRef: 'user:default/alice' },
+    );
+    // Validation should reject because the team is not in userInfo.teams,
+    // but if it somehow got through, the output should be escaped.
+    assert.strictEqual(status, 403);
   });
 
   test('/config exposes opencode.enabled for the frontend', async () => {

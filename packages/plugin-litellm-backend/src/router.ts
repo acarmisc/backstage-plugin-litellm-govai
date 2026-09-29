@@ -227,6 +227,8 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
   // req.body. Backstage's httpRouter does not apply a body parser at the
   // plugin-router level, so each plugin must attach its own.
   router.use(express.json());
+  // URL-encoded form parser for POST /opencode/connect (confirmation form).
+  router.use(express.urlencoded({ extended: false }));
 
   // User-scoped routes act on the caller's own LiteLLM identity. That identity
   // comes ONLY from a verified Backstage user principal — never from the query
@@ -544,8 +546,11 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
   // that package's README):
   //
   //   GET /opencode/connect?team=<id>&redirect_uri=http://localhost:<port>/callback
-  //     → (SSO-authenticated) generate/reuse a virtual key bound to the
-  //       user and optional team → 302 {redirect_uri}?key=<api-key>
+  //     → (SSO-authenticated) returns an HTML confirmation form (no state change)
+  //
+  //   POST /opencode/connect with form data (team, redirect_uri)
+  //     → validates all conditions, rotates or generates a key
+  //     → 302 redirect to {redirect_uri}?key=<plaintext-key>
   //
   // Mounted only when litellm.opencode.enabled is true. Key creation is
   // gated by the same litellmKeyCreatePermission as POST /keys/generate.
@@ -554,84 +559,157 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
       `OpenCode connect endpoint enabled — duration=${opencodeCfg.keyDuration}, maxBudget=$${opencodeCfg.maxBudget}`,
     );
 
+    // Helper to validate auth, permissions, redirect_uri, and team membership.
+    // Reused by both GET and POST.
+    // Returns null if validation fails (response already sent).
+    // Returns an object with validated values if all checks pass.
+    // Note: after successful validation, redirectUri is guaranteed to be a valid string.
+    const validateOpenCodeRequest = async (
+      req: Request,
+      res: Response,
+    ): Promise<
+      | { tokenEntityRef: string; userId: string; userInfo: any; teamId: string | undefined; redirectUri: string }
+      | null
+    > => {
+      const tokenEntityRef = await resolveUserId(req, auth);
+      if (!tokenEntityRef) {
+        res.status(401).json({ error: 'Authentication required' });
+        return null;
+      }
+
+      // For GET, redirectUri is in query; for POST, it's in body.
+      const redirectUriParam = (req.query.redirect_uri || req.body.redirect_uri) as string | undefined;
+      if (!isValidRedirectUri(redirectUriParam)) {
+        res.status(400).json({
+          error: 'Invalid redirect_uri — expected http://localhost:<port>/callback',
+        });
+        return null;
+      }
+      // After isValidRedirectUri check, we know redirectUriParam is a valid string (! to tell TS).
+      const redirectUri = redirectUriParam!;
+
+      if (!(await assertPermission(req, litellmKeyCreatePermission))) {
+        sendPermissionDenied(res, litellmKeyCreatePermission);
+        return null;
+      }
+
+      const userId = toLiteLLMUserId(tokenEntityRef, userIdDomain);
+      const userInfo = await getOrProvisionUser(
+        client,
+        tokenEntityRef,
+        userId,
+        provisioningEnabled,
+        provisioningDefaults,
+        roleConfigs,
+        catalogClient,
+        auth,
+        logger,
+      );
+
+      // Optional team binding: must be one of the user's own teams.
+      const teamId = (req.query.team || req.body.team) as string | undefined;
+      if (teamId) {
+        const userTeams = userInfo?.teams ?? [];
+        if (!userTeams.includes(teamId)) {
+          res.status(403).json({
+            error: 'Access denied: team is not one of your teams',
+            team: teamId,
+          });
+          return null;
+        }
+      } else if (opencodeCfg.requireTeam) {
+        res.status(400).json({ error: 'A team is required for this connection' });
+        return null;
+      }
+
+      return { tokenEntityRef, userId, userInfo, teamId, redirectUri };
+    };
+
     router.get('/opencode/connect', async (req: Request, res: Response) => {
       try {
-        // The request comes from the browser (user session), so SSO
-        // auth applies exactly like for any other UI route.
-        const tokenEntityRef = await resolveUserId(req, auth);
-        if (!tokenEntityRef) {
-          res.status(401).json({ error: 'Authentication required' });
+        const validation = await validateOpenCodeRequest(req, res);
+        if (!validation) return;
+
+        const { teamId, redirectUri } = validation;
+
+        // GET returns an HTML form without changing state (no key mint/rotate yet).
+        // The form allows the user to review the connection and submit to POST.
+        const teamDisplay = teamId ? ` for team ${escapeHtml(teamId)}` : '';
+        const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>OpenCode Connect</title>
+  <style>
+    body { font-family: system-ui, -apple-system, sans-serif; margin: 0; padding: 2rem; background: #f5f5f5; }
+    .container { max-width: 400px; margin: 0 auto; background: white; border-radius: 8px; padding: 2rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+    h1 { margin-top: 0; color: #333; font-size: 1.5rem; }
+    p { color: #666; line-height: 1.5; }
+    button { background: #0066cc; color: white; border: none; padding: 0.75rem 1.5rem; border-radius: 4px; cursor: pointer; font-size: 1rem; }
+    button:hover { background: #0052a3; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Connect to OpenCode</h1>
+    <p>This will create or rotate your OpenCode API key${teamDisplay}.</p>
+    <form method="POST">
+      <input type="hidden" name="redirect_uri" value="${escapeHtml(redirectUri)}">
+      ${teamId ? `<input type="hidden" name="team" value="${escapeHtml(teamId)}">` : ''}
+      <button type="submit">Connect</button>
+    </form>
+  </div>
+</body>
+</html>`;
+
+        res.set('Cache-Control', 'no-store');
+        res.set('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'");
+        res.set('Content-Type', 'text/html; charset=utf-8');
+        res.status(200).send(html);
+      } catch (error: any) {
+        if (error instanceof ProvisioningError) {
+          res.status(error.status).json(error.body);
           return;
         }
+        sendError(res, error, logger, 'OpenCode connect GET');
+      }
+    });
 
-        const redirectUri = req.query.redirect_uri as string | undefined;
-        if (!isValidRedirectUri(redirectUri)) {
-          res.status(400).json({
-            error: 'Invalid redirect_uri — expected http://localhost:<port>/callback',
-          });
-          return;
-        }
+    router.post('/opencode/connect', async (req: Request, res: Response) => {
+      try {
+        const validation = await validateOpenCodeRequest(req, res);
+        if (!validation) return;
 
-        if (!(await assertPermission(req, litellmKeyCreatePermission))) {
-          sendPermissionDenied(res, litellmKeyCreatePermission);
-          return;
-        }
-
-        const userId = toLiteLLMUserId(tokenEntityRef, userIdDomain);
-        const userInfo = await getOrProvisionUser(
-          client,
-          tokenEntityRef,
-          userId,
-          provisioningEnabled,
-          provisioningDefaults,
-          roleConfigs,
-          catalogClient,
-          auth,
-          logger,
-        );
-
-        // Optional team binding: must be one of the user's own teams so
-        // the connect flow can never mint a key billed to someone else.
-        const teamId = req.query.team as string | undefined;
-        if (teamId) {
-          const userTeams = userInfo?.teams ?? [];
-          if (!userTeams.includes(teamId)) {
-            res.status(403).json({
-              error: 'Access denied: team is not one of your teams',
-              team: teamId,
-            });
-            return;
-          }
-        } else if (opencodeCfg.requireTeam) {
-          res.status(400).json({ error: 'A team is required for this connection' });
-          return;
-        }
+        const { tokenEntityRef, userId, teamId, redirectUri } = validation;
 
         // Alias is stable per user+team so re-connecting rotates the same
-        // logical key slot instead of accumulating duplicates. LiteLLM
-        // rejects duplicate aliases, so on conflict we look up the existing
-        // key and reuse it (the user gets a working connection either way).
-        const alias = teamId
-          ? `opencode-${userId}-${teamId}`
-          : `opencode-${userId}`;
+        // logical key slot. Check if an existing key exists for this slot.
+        const alias = teamId ? `opencode-${userId}-${teamId}` : `opencode-${userId}`;
         const existing = await client
           .listKeys(userId)
           .catch(() => [] as VirtualKey[]);
 
-        // Reuse a healthy existing key for this slot rather than failing
-        // on the alias collision LiteLLM would raise. Blocked keys are
-        // skipped so a blocked slot can be recovered by re-connecting.
+        // Find a healthy existing key (not blocked).
         const reusable = existing.find(
-          k =>
-            k.key_alias === alias &&
-            !k.blocked &&
-            k.user_id === userId,
+          k => k.key_alias === alias && !k.blocked && k.user_id === userId,
         );
 
         let key: string;
+        let rotated = false;
+
         if (reusable?.token ?? reusable?.key) {
-          key = reusable.token ?? reusable.key!;
+          // Rotate the existing key by regenerating it.
+          const keyHashOrId = reusable.token ?? reusable.key!;
+          const result = await client.regenerateKey(keyHashOrId);
+          if (!result.key) {
+            res.status(502).json({ error: 'LiteLLM returned no key material on regenerate' });
+            return;
+          }
+          key = result.key;
+          rotated = true;
         } else {
+          // Generate a new key.
           const profile = await resolveUserProfile(
             tokenEntityRef,
             catalogClient,
@@ -659,14 +737,14 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
           key = result.key;
         }
 
-        const url = new URL(redirectUri!);
+        const url = new URL(redirectUri);
         url.searchParams.set('key', key);
         if (teamId) url.searchParams.set('team', teamId);
         logger.info({
           action: 'opencode.connect',
           userId,
           team: teamId ?? null,
-          reused: Boolean(reusable?.token ?? reusable?.key),
+          rotated,
         });
         res.redirect(302, url.href);
       } catch (error: any) {
@@ -674,9 +752,24 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
           res.status(error.status).json(error.body);
           return;
         }
-        sendError(res, error, logger, 'OpenCode connect');
+        sendError(res, error, logger, 'OpenCode connect POST');
       }
     });
+  }
+
+  /**
+   * Escape HTML special characters in strings to prevent XSS.
+   * Used when interpolating team IDs and redirect URIs into the confirmation form.
+   */
+  function escapeHtml(text: string): string {
+    const map: Record<string, string> = {
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#39;',
+    };
+    return text.replace(/[&<>"']/g, c => map[c]);
   }
 
   router.post('/keys/:keyId/update', async (req: Request, res: Response) => {
