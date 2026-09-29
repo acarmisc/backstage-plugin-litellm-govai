@@ -188,3 +188,14 @@ describe('modelsWithUsage', () => {
     assert.deepStrictEqual(result, ['gpt-4', 'gpt-3.5-turbo']);
   });
 });
+
+describe('modelsWithUsage (models missing from the accessible list)', () => {
+  test('appends used models that are no longer listed', () => {
+    const b = { total_spend: 1, prompt_tokens: 1, completion_tokens: 1, total_tokens: 2, api_requests: 1, successful_requests: 1, failed_requests: 0 };
+    const result = modelsWithUsage(
+      { usage_by_model: { 'gpt-4': b, 'retired-model': b } },
+      [{ model_name: 'gpt-4' }, { model_name: 'other' }] as any,
+    );
+    assert.deepStrictEqual(result, ['gpt-4', 'retired-model']);
+  });
+});

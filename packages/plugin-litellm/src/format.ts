@@ -84,8 +84,14 @@ export const modelsWithUsage = (
   if (!usage?.usage_by_model) {
     return models.map(m => m.model_name);
   }
-  const modelsInUsage = new Set(Object.keys(usage.usage_by_model));
-  return models
-    .map(m => m.model_name)
-    .filter(name => modelsInUsage.has(name));
+  const usedNames = Object.keys(usage.usage_by_model);
+  const modelsInUsage = new Set(usedNames);
+  const known = models.map(m => m.model_name);
+  // Keep the accessible-models order, then append models that appear in usage
+  // but are no longer listed (e.g. removed from the proxy since) so they can
+  // still be filtered on.
+  return [
+    ...known.filter(name => modelsInUsage.has(name)),
+    ...usedNames.filter(name => !known.includes(name)),
+  ];
 };
