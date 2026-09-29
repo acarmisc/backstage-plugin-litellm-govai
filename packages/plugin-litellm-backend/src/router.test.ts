@@ -489,28 +489,33 @@ describe('router /keys/generate', () => {
   let h: Harness;
   before(async () => {
     h = await startHarness({
-      config: { 'litellm.userIdDomain': 'example.com' },
+      config: {
+        'litellm.userIdDomain': 'example.com',
+        'litellm.keyGeneration.teamRequired': false,
+        'litellm.keyGeneration.allowUnlimitedBudget': true,
+      },
       client: mockClient({}),
     });
   });
   after(async () => { await new Promise<void>(r => h.server.close(() => r())); });
 
-  test('400 when alias is missing', async () => {
+  test('400 when alias is empty string', async () => {
     const { status, body } = await req(h.baseUrl, 'POST', '/keys/generate', {
       authRef: 'user:default/alice',
       body: { alias: '', max_budget: 100 },
     });
     assert.strictEqual(status, 400);
-    assert.match(body.error, /Missing required fields/);
-    assert.match(body.hint, /alias/);
+    assert.match(body.error, /Invalid request body/);
+    assert.match(body.details, /alias/);
   });
 
-  test('400 when max_budget is non-positive', async () => {
-    const { status } = await req(h.baseUrl, 'POST', '/keys/generate', {
+  test('400 when max_budget is negative', async () => {
+    const { status, body } = await req(h.baseUrl, 'POST', '/keys/generate', {
       authRef: 'user:default/alice',
       body: { alias: 'test', max_budget: -5 },
     });
     assert.strictEqual(status, 400);
+    assert.match(body.error, /Invalid request body/);
   });
 
   test('accepts null max_budget (unlimited)', async () => {
@@ -536,7 +541,10 @@ describe('router /keys/generate', () => {
 
   test('preserves upstream 400 + param for a duplicate alias', async () => {
     const h2 = await startHarness({
-      config: { 'litellm.userIdDomain': 'example.com' },
+      config: {
+        'litellm.userIdDomain': 'example.com',
+        'litellm.keyGeneration.teamRequired': false,
+      },
       client: mockClient({
         generateKey: () =>
           Promise.reject(
@@ -563,7 +571,10 @@ describe('router /keys/generate', () => {
 
   test('preserves a non-400 upstream status and omits param when absent', async () => {
     const h2 = await startHarness({
-      config: { 'litellm.userIdDomain': 'example.com' },
+      config: {
+        'litellm.userIdDomain': 'example.com',
+        'litellm.keyGeneration.teamRequired': false,
+      },
       client: mockClient({
         generateKey: () =>
           Promise.reject(
@@ -593,8 +604,15 @@ describe('router /keys/generate — team duration override failure', () => {
   let h: Harness;
   before(async () => {
     h = await startHarness({
-      config: { 'litellm.userIdDomain': 'example.com' },
+      config: {
+        'litellm.userIdDomain': 'example.com',
+        'litellm.keyGeneration.teamRequired': false,
+      },
       client: mockClient({
+        userInfo: {
+          user_id: 'alice@example.com',
+          teams: ['team-123'],
+        },
         generateKey: () => {
           const err: any = new Error(
             'LiteLLM API error: 500 Internal Server Error - {"error":{"message":"Invalid duration format","type":"internal_server_error","param":"None","code":"500"}}',
@@ -624,6 +642,149 @@ describe('router /keys/generate — team duration override failure', () => {
     });
     assert.strictEqual(status, 500);
     assert.match(body.error, /Invalid duration format/);
+  });
+});
+
+describe('router /keys/generate — PR-2 validation', () => {
+  let h: Harness;
+  before(async () => {
+    h = await startHarness({
+      config: {
+        'litellm.userIdDomain': 'example.com',
+        'litellm.keys.maxBudget': 50,
+        'litellm.keys.maxTpm': 10000,
+        'litellm.keys.maxRpm': 500,
+        'litellm.keys.allowedDurations': ['1d', '7d'],
+        'litellm.keyGeneration.allowUnlimitedBudget': false,
+        'litellm.keyGeneration.teamRequired': true,
+      },
+      client: mockClient({
+        userInfo: {
+          user_id: 'alice@example.com',
+          teams: ['team-1', 'team-2'],
+          models: ['gpt-4', 'claude-3'],
+        },
+        getTeamInfo: (id: string) => {
+          if (id === 'team-1') {
+            return Promise.resolve({
+              team_id: 'team-1',
+              spend: 0,
+              models: ['gpt-4', 'gpt-3.5'],
+            });
+          }
+          return Promise.reject(new Error('Team not found'));
+        },
+      }),
+    });
+  });
+  after(async () => { await new Promise<void>(r => h.server.close(() => r())); });
+
+  test('400 when unknown field is sent', async () => {
+    const { status, body } = await req(h.baseUrl, 'POST', '/keys/generate', {
+      authRef: 'user:default/alice',
+      body: { alias: 'test', max_budget: 20, team_id: 'team-1', unknown_field: 'value' },
+    });
+    assert.strictEqual(status, 400);
+    assert.match(body.error, /Invalid request body/);
+  });
+
+  test('400 when max_budget is null with allowUnlimitedBudget=false', async () => {
+    const { status, body } = await req(h.baseUrl, 'POST', '/keys/generate', {
+      authRef: 'user:default/alice',
+      body: { alias: 'test', max_budget: null, team_id: 'team-1' },
+    });
+    assert.strictEqual(status, 400);
+    assert.match(body.error, /max_budget is required/);
+  });
+
+  test('400 when team_id is missing with teamRequired=true', async () => {
+    const { status, body } = await req(h.baseUrl, 'POST', '/keys/generate', {
+      authRef: 'user:default/alice',
+      body: { alias: 'test', max_budget: 20 },
+    });
+    assert.strictEqual(status, 400);
+    assert.match(body.error, /team_id is required/);
+  });
+
+  test('403 when team_id is not in user\'s teams', async () => {
+    const { status, body } = await req(h.baseUrl, 'POST', '/keys/generate', {
+      authRef: 'user:default/alice',
+      body: { alias: 'test', max_budget: 20, team_id: 'team-foreign' },
+    });
+    assert.strictEqual(status, 403);
+    assert.match(body.error, /not one of your teams/);
+    assert.strictEqual(body.team_id, 'team-foreign');
+  });
+
+  test('400 when model is not allowed for the team', async () => {
+    const { status, body } = await req(h.baseUrl, 'POST', '/keys/generate', {
+      authRef: 'user:default/alice',
+      body: { alias: 'test', max_budget: 20, team_id: 'team-1', models: ['claude-3'] },
+    });
+    assert.strictEqual(status, 400);
+    assert.match(body.error, /not allowed/);
+    assert(body.disallowed_models.includes('claude-3'));
+  });
+
+  test('400 when duration is not in allowedDurations', async () => {
+    const { status, body } = await req(h.baseUrl, 'POST', '/keys/generate', {
+      authRef: 'user:default/alice',
+      body: { alias: 'test', max_budget: 20, team_id: 'team-1', duration: '30d' },
+    });
+    assert.strictEqual(status, 400);
+    assert.match(body.error, /Invalid request body/);
+    assert.match(body.details, /duration/);
+  });
+
+  test('400 when max_budget exceeds configured ceiling', async () => {
+    const { status, body } = await req(h.baseUrl, 'POST', '/keys/generate', {
+      authRef: 'user:default/alice',
+      body: { alias: 'test', max_budget: 100, team_id: 'team-1' },
+    });
+    assert.strictEqual(status, 400);
+    assert.match(body.error, /Invalid request body/);
+  });
+
+  test('400 when tpm_limit exceeds configured ceiling', async () => {
+    const { status, body } = await req(h.baseUrl, 'POST', '/keys/generate', {
+      authRef: 'user:default/alice',
+      body: { alias: 'test', max_budget: 20, team_id: 'team-1', tpm_limit: 20000 },
+    });
+    assert.strictEqual(status, 400);
+    assert.match(body.error, /Invalid request body/);
+  });
+
+  test('happy path sends only validated fields upstream (no spread)', async () => {
+    const { status, body } = await req(h.baseUrl, 'POST', '/keys/generate', {
+      authRef: 'user:default/alice',
+      body: {
+        alias: 'happy-key',
+        max_budget: 20,
+        team_id: 'team-1',
+        models: ['gpt-4'],
+        duration: '7d',
+        tpm_limit: 5000,
+        metadata: { custom: 'value' },
+      },
+    });
+    assert.strictEqual(status, 200);
+    assert.strictEqual(body.key, 'sk-new');
+
+    // Verify upstream call contains only validated fields
+    const last = h.client.calls.generateKey[h.client.calls.generateKey.length - 1];
+    assert.strictEqual(last.alias, 'happy-key');
+    assert.strictEqual(last.max_budget, 20);
+    assert.strictEqual(last.team_id, 'team-1');
+    assert.deepStrictEqual(last.models, ['gpt-4']);
+    assert.strictEqual(last.duration, '7d');
+    assert.strictEqual(last.tpm_limit, 5000);
+    assert.strictEqual(last.user_id, 'alice@example.com');
+    // Metadata should have server-owned keys overriding client values
+    assert.strictEqual(last.metadata.custom, 'value');
+    assert.strictEqual(last.metadata.created_via, 'backstage');
+    // Ensure no extra fields leaked from body spread
+    assert.strictEqual(last.unknown_field, undefined);
+    assert.strictEqual(last.rpm_limit, undefined);
   });
 });
 

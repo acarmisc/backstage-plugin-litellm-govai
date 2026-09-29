@@ -48,6 +48,11 @@ import {
   litellmTeamDeletePermission,
 } from './permissions';
 import {
+  createGenerateKeyInputSchema,
+  type KeyValidationConfig,
+  type GenerateKeyInput,
+} from './validation/keySchemas';
+import {
   isTeamManagementEnabled,
   isObjectPermissionsEnabled,
   readTeamAdminConfig,
@@ -159,6 +164,18 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
   const auditGroup = config.getOptionalString('litellm.audit.group');
   const allowUnlimitedBudget = config.getOptionalBoolean('litellm.keyGeneration.allowUnlimitedBudget') ?? false;
   const teamRequired = config.getOptionalBoolean('litellm.keyGeneration.teamRequired') ?? true;
+  // Key validation ceilings (PR-2)
+  const keyMaxBudget = config.getOptionalNumber('litellm.keys.maxBudget') ?? 100;
+  const keyMaxTpm = config.getOptionalNumber('litellm.keys.maxTpm') ?? 100000;
+  const keyMaxRpm = config.getOptionalNumber('litellm.keys.maxRpm') ?? 1000;
+  const keyAllowedDurations = config.getOptionalStringArray('litellm.keys.allowedDurations') ?? ['1d', '7d', '30d', '90d'];
+  const keyValidationConfig: KeyValidationConfig = {
+    maxBudget: keyMaxBudget,
+    maxTpm: keyMaxTpm,
+    maxRpm: keyMaxRpm,
+    allowedDurations: keyAllowedDurations,
+  };
+  const generateKeyInputSchema = createGenerateKeyInputSchema(keyValidationConfig);
   const teamMgmtEnabled = isTeamManagementEnabled(config);
   const objectPermsEnabled = isObjectPermissionsEnabled(config);
   const teamAdminCfg = readTeamAdminConfig(config);
@@ -431,30 +448,21 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
 
   router.post('/keys/generate', async (req: Request, res: Response) => {
     try {
-      // Only alias is hard-required. max_budget is optional: a positive
-      // number caps spend, while null/undefined means "unlimited" (LiteLLM
-      // supports null). An empty models array is intentional — in LiteLLM
-      // `models: []` means "all models the user can access" which is the
-      // desired default. Forcing a selection up front is too restrictive for
-      // the common case.
-      const body = (req.body ?? {}) as GenerateKeyRequest;
-      const missing: string[] = [];
-      if (!body.alias?.trim()) missing.push('alias');
-      if (
-        body.max_budget !== null &&
-        body.max_budget !== undefined &&
-        (typeof body.max_budget !== 'number' || body.max_budget <= 0)
-      ) {
-        missing.push('max_budget (positive number, or null for unlimited)');
-      }
-      if (missing.length) {
+      // ── Parse & validate input with strict schema ────────────────────────
+      const parseResult = generateKeyInputSchema.safeParse(req.body);
+      if (!parseResult.success) {
+        const errorMessages = parseResult.error.errors
+          .map(e => `${e.path.join('.')}: ${e.message}`)
+          .join('; ');
         res.status(400).json({
-          error: 'Missing required fields',
-          hint: `Required: ${missing.join(', ')}`,
+          error: 'Invalid request body',
+          details: errorMessages,
         });
         return;
       }
+      const input: GenerateKeyInput = parseResult.data;
 
+      // ── Permission check ────────────────────────────────────────────────
       if (!(await assertPermission(req, litellmKeyCreatePermission))) {
         sendPermissionDenied(res, litellmKeyCreatePermission);
         return;
@@ -463,30 +471,87 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
       const tokenEntityRef = res.locals.tokenEntityRef as string;
       const resolvedUserId = res.locals.userId as string;
 
-      if (resolvedUserId) {
-        await getOrProvisionUser(
-          client,
-          tokenEntityRef,
-          resolvedUserId,
-          provisioningEnabled,
-          provisioningDefaults,
-          roleConfigs,
-          catalogClient,
-          auth,
-          logger,
-        );
+      // ── Ensure user is provisioned ──────────────────────────────────────
+      const userInfo = await getOrProvisionUser(
+        client,
+        tokenEntityRef,
+        resolvedUserId,
+        provisioningEnabled,
+        provisioningDefaults,
+        roleConfigs,
+        catalogClient,
+        auth,
+        logger,
+      );
+
+      // ── Enforce config flags ────────────────────────────────────────────
+      if (!allowUnlimitedBudget && (input.max_budget === null || input.max_budget === undefined)) {
+        res.status(400).json({
+          error: 'max_budget is required when unlimited budgets are not allowed',
+        });
+        return;
       }
 
-      // Stamp ownership into LiteLLM key metadata. LiteLLM's native
-      // `created_by` column is only populated when the caller authenticates
-      // via JWT/SSO; we always call with the master key, so that column
-      // stays null. Enriching `metadata` makes the owner identity visible
+      if (teamRequired && !input.team_id) {
+        res.status(400).json({
+          error: 'team_id is required',
+        });
+        return;
+      }
+
+      // ── Validate team membership ────────────────────────────────────────
+      if (input.team_id) {
+        const userTeams = userInfo?.teams ?? [];
+        if (!userTeams.includes(input.team_id)) {
+          res.status(403).json({
+            error: 'Access denied: team is not one of your teams',
+            team_id: input.team_id,
+          });
+          return;
+        }
+      }
+
+      // ── Validate models are subset of allowed ────────────────────────────
+      if (input.models && input.models.length > 0) {
+        // When team_id is set, use team's models; otherwise use user's models.
+        // Empty/missing allowedModels list means unrestricted.
+        let allowedModels: string[] = [];
+        if (input.team_id) {
+          // Fetch team info to get its allowed models
+          try {
+            const teamInfo = await client.getTeamInfo(input.team_id);
+            allowedModels = teamInfo?.models ?? [];
+          } catch {
+            // If team fetch fails, skip the check
+            allowedModels = [];
+          }
+        } else {
+          allowedModels = userInfo?.models ?? [];
+        }
+
+        // Only enforce if the allowedModels list is non-empty (non-empty = restricted)
+        if (allowedModels.length > 0) {
+          const disallowed = input.models.filter(m => !allowedModels.includes(m));
+          if (disallowed.length > 0) {
+            res.status(400).json({
+              error: 'One or more requested models are not allowed',
+              disallowed_models: disallowed,
+            });
+            return;
+          }
+        }
+      }
+
+      // ── Stamp ownership into LiteLLM key metadata ────────────────────────
+      // LiteLLM's native `created_by` column is only populated when the caller
+      // authenticates via JWT/SSO; we always call with the master key, so that
+      // column stays null. Enriching `metadata` makes the owner identity visible
       // in LiteLLM's UI and queryable via API.
       const profile = tokenEntityRef
         ? await resolveUserProfile(tokenEntityRef, catalogClient, auth, logger)
         : {};
-      const enrichedMetadata = {
-        ...(body.metadata ?? {}),
+      const clientMetadata = input.metadata ?? {};
+      const serverMetadata = {
         created_by_backstage_user: tokenEntityRef ?? 'unknown',
         ...(profile.email && { created_by_email: profile.email }),
         ...(profile.displayName && {
@@ -495,14 +560,42 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
         created_via: 'backstage',
         created_at_iso: new Date().toISOString(),
       };
-
-      const request: GenerateKeyRequest = {
-        ...body,
-        metadata: enrichedMetadata,
-        ...(resolvedUserId && { user_id: resolvedUserId }),
+      // Server-owned keys override client values
+      const enrichedMetadata = {
+        ...clientMetadata,
+        ...serverMetadata,
       };
-      const result: GenerateKeyResponse = await client.generateKey(request);
-      logger.info({ action: 'key.generate', userId: resolvedUserId ?? 'unknown', keyAlias: body.alias });
+
+      // ── Build upstream request EXPLICITLY from parsed fields ──────────────
+      // Never spread the raw body; only include fields we've explicitly validated.
+      const upstreamRequest: GenerateKeyRequest = {
+        alias: input.alias,
+        user_id: resolvedUserId,
+      };
+
+      if (input.models !== undefined) {
+        upstreamRequest.models = input.models;
+      }
+      if (input.duration !== undefined) {
+        upstreamRequest.duration = input.duration;
+      }
+      if (input.max_budget !== undefined) {
+        // max_budget from input can be null (unlimited) or a number
+        upstreamRequest.max_budget = input.max_budget ?? undefined;
+      }
+      if (input.tpm_limit !== undefined) {
+        upstreamRequest.tpm_limit = input.tpm_limit;
+      }
+      if (input.rpm_limit !== undefined) {
+        upstreamRequest.rpm_limit = input.rpm_limit;
+      }
+      if (input.team_id !== undefined) {
+        upstreamRequest.team_id = input.team_id;
+      }
+      upstreamRequest.metadata = enrichedMetadata;
+
+      const result: GenerateKeyResponse = await client.generateKey(upstreamRequest);
+      logger.info({ action: 'key.generate', userId: resolvedUserId ?? 'unknown', keyAlias: input.alias });
       res.json(result);
     } catch (error: any) {
       if (error instanceof ProvisioningError) {
@@ -514,10 +607,11 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
       // team_id is set, before parsing it. A malformed value there 500s with
       // this exact message regardless of what we sent — surface that instead
       // of the opaque passthrough so it's actionable from the LiteLLM side.
+      const teamId = (req.body as any)?.team_id;
       if (
         typeof error.message === 'string' &&
         error.message.includes('Invalid duration format') &&
-        req.body?.team_id
+        teamId
       ) {
         res.status(502).json({
           error:
@@ -526,7 +620,7 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
             '<number><unit> format (e.g. "30d") and overrides whatever duration ' +
             'is requested. Fix or clear it in LiteLLM under Teams → this team → ' +
             'Team Settings, then retry.',
-          teamId: req.body.team_id,
+          teamId,
         });
         return;
       }

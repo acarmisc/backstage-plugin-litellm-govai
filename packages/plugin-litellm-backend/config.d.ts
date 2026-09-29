@@ -128,6 +128,47 @@ export interface Config {
     };
 
     /**
+     * Governance ceilings for individual key creation.
+     * These are strict server-side limits; config flags (allowUnlimitedBudget,
+     * teamRequired) control what users are allowed to do, but these limits
+     * cap what they can specify.
+     */
+    keys?: {
+      /**
+       * Maximum USD budget a single key can have. Requests exceeding this
+       * are rejected with a 400 error.
+       * @default 100
+       * @visibility backend
+       */
+      maxBudget?: number;
+
+      /**
+       * Maximum tokens-per-minute a single key can request.
+       * Requests exceeding this are rejected with a 400 error.
+       * @default 100000
+       * @visibility backend
+       */
+      maxTpm?: number;
+
+      /**
+       * Maximum requests-per-minute a single key can request.
+       * Requests exceeding this are rejected with a 400 error.
+       * @default 1000
+       * @visibility backend
+       */
+      maxRpm?: number;
+
+      /**
+       * Allowed duration presets for keys (e.g. "1d", "7d", "30d", "90d").
+       * Requests with a duration not in this list are rejected with a 400 error.
+       * An empty array allows any duration matching the format /^\d+[smhdwy]$/.
+       * @default ["1d", "7d", "30d", "90d"]
+       * @visibility backend
+       */
+      allowedDurations?: string[];
+    };
+
+    /**
      * Controls for the "Generate New Key" form in the frontend.
      */
     keyGeneration?: {
