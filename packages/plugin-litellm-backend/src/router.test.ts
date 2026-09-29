@@ -259,6 +259,30 @@ function mockClient(overrides: {
   };
 }
 
+/**
+ * Mock CatalogClient. Takes a mapping of userEntityRef to groups they're
+ * members of. Returns entity relations with memberOf for each group.
+ */
+function mockCatalogClient(memberships: Record<string, { groups: string[] }>): any {
+  return {
+    getEntityByRef: async (ref: string) => {
+      const entry = memberships[ref];
+      if (!entry) {
+        return null;
+      }
+      return {
+        apiVersion: 'backstage.io/v1alpha1',
+        kind: 'User',
+        metadata: { name: ref },
+        relations: entry.groups.map(group => ({
+          type: 'memberOf',
+          targetRef: group,
+        })),
+      };
+    },
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Harness: mount the router on a real HTTP server and return a base URL +
 // the mock client so tests can both make requests and inspect upstream calls.
@@ -3085,7 +3109,10 @@ describe('team budget visibility', () => {
     };
     const h = await startHarness({
       config: { 'litellm.display.hideTeamBudgetForMembers': true },
-      client: mockClient({ getTeamUsage: async () => ({ ...spendy }) }),
+      client: mockClient({
+        userInfo: { user_id: 'alice', teams: ['t1'] },
+        getTeamUsage: async () => ({ ...spendy }),
+      }),
     });
     try {
       const { status, body } = await req(
@@ -3107,6 +3134,7 @@ describe('team budget visibility', () => {
   test('GET /teams/:id/usage keeps spend when no flag is set', async () => {
     const h = await startHarness({
       client: mockClient({
+        userInfo: { user_id: 'alice', teams: ['t1'] },
         getTeamUsage: async () => ({
           total_spend: 7.5, total_tokens: 50, prompt_tokens: 30,
           completion_tokens: 20, api_requests: 2, successful_requests: 2,
@@ -3121,6 +3149,105 @@ describe('team budget visibility', () => {
         { authRef: 'user:default/alice' },
       );
       assert.strictEqual(body.total_spend, 7.5);
+    } finally {
+      await close(h);
+    }
+  });
+
+  test('GET /teams/:id/usage returns 404 for non-members', async () => {
+    const client = mockClient({
+      userInfo: { user_id: 'alice', teams: ['other-team'] },
+      getTeamUsage: async () => ({
+        total_spend: 10, total_tokens: 100, prompt_tokens: 60,
+        completion_tokens: 40, api_requests: 5, successful_requests: 5,
+        failed_requests: 0, usage_by_model: {}, usage_by_key: {},
+        daily_usage: [], daily_by_model: [],
+      }),
+    });
+    const h = await startHarness({ client });
+    try {
+      const { status, body } = await req(
+        h.baseUrl, 'GET', '/teams/t1/usage?start_date=2026-01-01&end_date=2026-01-31',
+        { authRef: 'user:default/alice' },
+      );
+      assert.strictEqual(status, 404);
+      assert.strictEqual(body.error, 'Team not found');
+      // Verify getTeamUsage was not called
+      assert.deepStrictEqual(client.calls.getTeamUsage, []);
+    } finally {
+      await close(h);
+    }
+  });
+
+  test('GET /teams/:id/usage returns 200 for team members', async () => {
+    const client = mockClient({
+      userInfo: { user_id: 'alice', teams: ['t1', 't2'] },
+      getTeamUsage: async () => ({
+        total_spend: 10, total_tokens: 100, prompt_tokens: 60,
+        completion_tokens: 40, api_requests: 5, successful_requests: 5,
+        failed_requests: 0, usage_by_model: {}, usage_by_key: {},
+        daily_usage: [], daily_by_model: [],
+      }),
+    });
+    const h = await startHarness({ client });
+    try {
+      const { status, body } = await req(
+        h.baseUrl, 'GET', '/teams/t1/usage?start_date=2026-01-01&end_date=2026-01-31',
+        { authRef: 'user:default/alice' },
+      );
+      assert.strictEqual(status, 200);
+      assert.strictEqual(body.total_spend, 10);
+      // Verify getTeamUsage was called with the correct arguments
+      assert.deepStrictEqual(client.calls.getTeamUsage, [
+        { teamId: 't1', s: '2026-01-01', e: '2026-01-31' },
+      ]);
+    } finally {
+      await close(h);
+    }
+  });
+
+  test('GET /teams/:id/usage returns 401 for unauthenticated callers', async () => {
+    const h = await startHarness({
+      client: mockClient({}),
+    });
+    try {
+      const { status, body } = await req(
+        h.baseUrl, 'GET', '/teams/t1/usage?start_date=2026-01-01&end_date=2026-01-31',
+      );
+      assert.strictEqual(status, 401);
+      assert.strictEqual(body.error, 'A Backstage user credential is required');
+    } finally {
+      await close(h);
+    }
+  });
+
+  test('GET /teams/:id/usage returns 200 for team managers even if not members', async () => {
+    const client = mockClient({
+      userInfo: { user_id: 'alice', teams: [] },
+      getTeamUsage: async () => ({
+        total_spend: 50, total_tokens: 500, prompt_tokens: 300,
+        completion_tokens: 200, api_requests: 10, successful_requests: 9,
+        failed_requests: 1, usage_by_model: {}, usage_by_key: {},
+        daily_usage: [], daily_by_model: [],
+      }),
+    });
+    const catalogClient = mockCatalogClient({
+      'user:default/alice': { groups: ['group:default/team-admins'] },
+    });
+    const h = await startHarness({
+      config: { 'litellm.teamAdmin.group': 'group:default/team-admins' },
+      client,
+      catalogClient,
+    });
+    try {
+      const { status, body } = await req(
+        h.baseUrl, 'GET', '/teams/t1/usage?start_date=2026-01-01&end_date=2026-01-31',
+        { authRef: 'user:default/alice' },
+      );
+      assert.strictEqual(status, 200);
+      assert.strictEqual(body.total_spend, 50);
+      // Verify getTeamUsage was called
+      assert.strictEqual(client.calls.getTeamUsage.length, 1);
     } finally {
       await close(h);
     }
