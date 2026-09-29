@@ -2,15 +2,15 @@ export interface Config {
   litellm: {
     /**
      * Base URL of the LiteLLM proxy instance.
-     * @visibility backend
      */
     baseUrl: string;
 
     /**
      * Publicly reachable LiteLLM proxy URL. Used to build ready-to-paste
      * curl / OpenAI-SDK snippets in the frontend ("Key Generated" dialog).
-     * When omitted, the internal baseUrl is used instead.
-     * @visibility backend
+     * The value is served to the frontend via GET /config. When omitted the
+     * frontend shows "Endpoint not configured" — the internal baseUrl is
+     * never exposed.
      */
     publicBaseUrl?: string;
 
@@ -24,7 +24,6 @@ export interface Config {
      * Email domain appended to the Backstage user entity name to form the
      * LiteLLM user_id. When set, a user named "john.doe" maps to
      * "john.doe@<userIdDomain>" in LiteLLM. Omit to use the bare entity name.
-     * @visibility backend
      */
     userIdDomain?: string;
 
@@ -79,6 +78,12 @@ export interface Config {
         rpmLimit?: number;
 
         /**
+         * LiteLLM user role applied on /user/new (e.g. "internal_user").
+         * @default "internal_user"
+         */
+        userRole?: string;
+
+        /**
          * Arbitrary key-value metadata stored on the LiteLLM user record.
          * Useful for tracking source, cost centre, department, etc.
          */
@@ -102,16 +107,12 @@ export interface Config {
         teams?: string[];
         tpmLimit?: number;
         rpmLimit?: number;
+        /** LiteLLM user role for members of this group; falls back to defaults.userRole. */
+        userRole?: string;
         metadata?: Record<string, string>;
       }>;
     };
 
-    /**
-     * CLI bridge — exposes /api/litellm/bridge/* for CLI clients (Abby) that
-     * authenticate with a Keycloak access token (JWKS-verified). Lets them
-     * list/mint virtual keys without holding the master key. Disabled by
-     * default; enable explicitly when the CLI is in use.
-     */
     /**
      * Audit log access control. When set, the /audit tab in the plugin is
      * only visible to members of the specified Backstage group.
@@ -138,7 +139,6 @@ export interface Config {
        * Maximum USD budget a single key can have. Requests exceeding this
        * are rejected with a 400 error.
        * @default 100
-       * @visibility backend
        */
       maxBudget?: number;
 
@@ -146,7 +146,6 @@ export interface Config {
        * Maximum tokens-per-minute a single key can request.
        * Requests exceeding this are rejected with a 400 error.
        * @default 100000
-       * @visibility backend
        */
       maxTpm?: number;
 
@@ -154,7 +153,6 @@ export interface Config {
        * Maximum requests-per-minute a single key can request.
        * Requests exceeding this are rejected with a 400 error.
        * @default 1000
-       * @visibility backend
        */
       maxRpm?: number;
 
@@ -163,7 +161,6 @@ export interface Config {
        * Requests with a duration not in this list are rejected with a 400 error.
        * An empty array allows any duration matching the format /^\d+[smhdwy]$/.
        * @default ["1d", "7d", "30d", "90d"]
-       * @visibility backend
        */
       allowedDurations?: string[];
 
@@ -174,9 +171,44 @@ export interface Config {
        * is only available to administrators, even if the permission is ALLOW.
        * Fail-closed: enforced before the permission check.
        * @default false
-       * @visibility backend
        */
       allowOwnerResetSpend?: boolean;
+    };
+
+    /**
+     * OpenCode SSO-connect (GET/POST /opencode/connect). Lets the OpenCode
+     * portal-auth plugin obtain a personal LiteLLM key after a browser
+     * sign-in and confirmation. Disabled by default.
+     */
+    opencode?: {
+      /**
+       * When true the /opencode/connect routes are mounted.
+       * @default false
+       */
+      enabled?: boolean;
+
+      /**
+       * Duration of freshly generated keys, in LiteLLM format (e.g. "30d").
+       * @default "30d"
+       */
+      keyDuration?: string;
+
+      /**
+       * Max budget (USD) of keys created through the connect flow.
+       * @default 50
+       */
+      maxBudget?: number;
+
+      /**
+       * When true a team must be supplied and the user must belong to it.
+       * @default false
+       */
+      requireTeam?: boolean;
+
+      /**
+       * Extra metadata stamped on keys created through this flow.
+       */
+      metadata?: { [key: string]: string };
     };
 
     /**
@@ -189,7 +221,6 @@ export interface Config {
        * Cached results are never stale within this window; mutations
        * invalidate the cache immediately to ensure consistency.
        * @default 10
-       * @visibility backend
        */
       userInfoTtlSeconds?: number;
     };
@@ -228,7 +259,6 @@ export interface Config {
        * e.g. "group:default/litellm-team-admins".
        * The plugin ships a group template at catalog/litellm-team-admins.yaml.
        * When omitted the feature is disabled entirely.
-       * @visibility backend
        */
       group?: string;
 
@@ -236,7 +266,6 @@ export interface Config {
        * LiteLLM model names an admin may assign to a team.
        * Empty array => none assignable (fail-closed).
        * @default []
-       * @visibility backend
        */
       allowedModels?: string[];
 
@@ -245,21 +274,18 @@ export interface Config {
        * References access_groups defined in litellm.model_info configuration.
        * Empty array => none allowed.
        * @default []
-       * @visibility backend
        */
       allowedModelAccessGroups?: string[];
 
       /**
        * Hard USD ceiling for max_budget an admin may set on a team.
        * @default 1000
-       * @visibility backend
        */
       maxBudgetCeiling?: number;
 
       /**
        * Allow an admin to create a team with no budget cap.
        * @default false
-       * @visibility backend
        */
       allowUnlimitedBudget?: boolean;
 
@@ -267,7 +293,6 @@ export interface Config {
        * Vector-store ids/names an admin may attach as team knowledge bases.
        * Empty array => none allowed.
        * @default []
-       * @visibility backend
        */
       allowedVectorStores?: string[];
 
@@ -275,7 +300,6 @@ export interface Config {
        * MCP server ids/names an admin may attach to a team.
        * Empty array => none allowed.
        * @default []
-       * @visibility backend
        */
       allowedMcpServers?: string[];
 
@@ -284,14 +308,12 @@ export interface Config {
        * References access_groups defined in litellm.mcp_info configuration.
        * Empty array => none allowed.
        * @default []
-       * @visibility backend
        */
       allowedMcpAccessGroups?: string[];
 
       /**
        * Allow an admin to delete a team (vs. only block/deactivate).
        * @default false
-       * @visibility backend
        */
       allowTeamDelete?: boolean;
 
@@ -309,7 +331,6 @@ export interface Config {
          * When true, mount the knowledge-base and MCP management routes.
          * Still gated by the permission framework and the allowlists.
          * @default false
-         * @visibility backend
          */
         enabled?: boolean;
       };
@@ -329,7 +350,6 @@ export interface Config {
        * cards, TEAM section of the budget widget). Team managers still see
        * dollars unless hideTeamBudgetForManagers is also set.
        * @default false
-       * @visibility frontend
        */
       hideTeamBudgetForMembers?: boolean;
 
@@ -338,7 +358,6 @@ export interface Config {
        * team write responses, ManageTeamDialog budget field which becomes
        * write-only). Useful when budgets are finance-sensitive.
        * @default false
-       * @visibility frontend
        */
       hideTeamBudgetForManagers?: boolean;
     };
