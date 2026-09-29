@@ -2,7 +2,6 @@ import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import Box from '@mui/material/Box';
 import Alert from '@mui/material/Alert';
 import Button from '@mui/material/Button';
-import CircularProgress from '@mui/material/CircularProgress';
 import Typography from '@mui/material/Typography';
 import Tabs from '@mui/material/Tabs';
 import Tab from '@mui/material/Tab';
@@ -14,6 +13,7 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import { useSearchParams } from 'react-router-dom';
 import { useAsync, useAsyncRetry } from 'react-use';
 import { useApi, alertApiRef } from '@backstage/core-plugin-api';
+import { Content, Progress } from '@backstage/core-components';
 import { usePermission } from '@backstage/plugin-permission-react';
 import { DashboardHeader } from './DashboardHeader';
 import { KeysTable } from './KeysTable';
@@ -387,11 +387,7 @@ export const LiteLLMPage: React.FC = () => {
   const isInitialLoading = userLoading && !userInfo;
 
   if (isInitialLoading) {
-    return (
-      <Box display="flex" justifyContent="center" alignItems="center" minHeight="50vh">
-        <CircularProgress />
-      </Box>
-    );
+    return <Progress />;
   }
 
   // User exists in Backstage but has no LiteLLM account
@@ -457,19 +453,22 @@ export const LiteLLMPage: React.FC = () => {
   );
 
   return (
-    <Box sx={{ p: 3, display: 'flex', flexDirection: 'column', gap: 2 }}>
-      <DashboardHeader
-        userInfo={userInfo}
-        teams={teams ?? []}
-        keys={keys ?? []}
-        loading={userLoading || teamsLoading}
-        keysError={keysError}
-        onGenerateKeyClick={() => setGenerateDialogOpen(true)}
-        onNavigateToFilter={navigateToFilter}
-        tabs={pageTabs}
-      />
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+      <Box sx={{ px: 3, pt: 3 }}>
+        <DashboardHeader
+          userInfo={userInfo}
+          teams={teams ?? []}
+          keys={keys ?? []}
+          loading={userLoading || teamsLoading}
+          keysError={keysError}
+          onGenerateKeyClick={() => setGenerateDialogOpen(true)}
+          onNavigateToFilter={navigateToFilter}
+          tabs={pageTabs}
+        />
+      </Box>
 
-      {activeTab === 'overview' && (() => {
+      <Content>
+        {activeTab === 'overview' && (() => {
         // Show onboarding when keys have loaded without error and list is empty
         if (!keysLoading && !keysError && keys?.length === 0) {
           return (
@@ -616,6 +615,7 @@ export const LiteLLMPage: React.FC = () => {
       })()}
 
       {activeTab === 'audit' && userInfo.can_view_audit && <AuditLog api={api} />}
+      </Content>
 
       <KeyFormDialog
         open={keyFormOpen}

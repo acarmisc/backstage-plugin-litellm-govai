@@ -422,36 +422,51 @@ export const KeysTable: React.FC<KeysTableProps> = ({
           </TableCell>
           <TableCell align="right">
             <Box display="flex" justifyContent="flex-end" gap={0.25}>
-              <IconButton
-                size="small"
-                onClick={() => handleOpenEdit(key)}
-                disabled={!canManageKeys}
-                title={canManageKeys ? 'Edit key' : 'No permission to edit keys'}
-                sx={quietIconButtonSx('accent')}
-              >
-                <Edit fontSize="small" />
-              </IconButton>
-              <IconButton
-                size="small"
-                onClick={() => handleToggleBlock(key)}
-                disabled={blockSubmitting || !canManageKeys}
-                title={(() => {
-                  if (!canManageKeys) return 'No permission to block keys';
-                  return key.blocked ? 'Unblock key' : 'Block key — suspends without revoking';
-                })()}
-                sx={quietIconButtonSx('warning')}
-              >
-                {keyBlockIcon(blockSubmitting, key.blocked)}
-              </IconButton>
-              <IconButton
-                size="small"
-                onClick={() => setDeleteConfirmKey(key)}
-                disabled={!canRevokeKeys}
-                title={canRevokeKeys ? 'Revoke key' : 'No permission to revoke keys'}
-                sx={quietIconButtonSx('danger')}
-              >
-                <Delete fontSize="small" />
-              </IconButton>
+              <Tooltip title={canManageKeys ? 'Edit key' : 'No permission to edit keys'} placement="top">
+                <span>
+                  <IconButton
+                    size="small"
+                    onClick={() => handleOpenEdit(key)}
+                    disabled={!canManageKeys}
+                    aria-label={canManageKeys ? 'Edit key' : 'No permission to edit keys'}
+                    sx={quietIconButtonSx('accent')}
+                  >
+                    <Edit fontSize="small" />
+                  </IconButton>
+                </span>
+              </Tooltip>
+              <Tooltip title={(() => {
+                if (!canManageKeys) return 'No permission to block keys';
+                return key.blocked ? 'Unblock key' : 'Block key — suspends without revoking';
+              })()} placement="top">
+                <span>
+                  <IconButton
+                    size="small"
+                    onClick={() => handleToggleBlock(key)}
+                    disabled={blockSubmitting || !canManageKeys}
+                    aria-label={(() => {
+                      if (!canManageKeys) return 'No permission to block keys';
+                      return key.blocked ? 'Unblock key' : 'Block key — suspends without revoking';
+                    })()}
+                    sx={quietIconButtonSx('warning')}
+                  >
+                    {keyBlockIcon(blockSubmitting, key.blocked)}
+                  </IconButton>
+                </span>
+              </Tooltip>
+              <Tooltip title={canRevokeKeys ? 'Revoke key' : 'No permission to revoke keys'} placement="top">
+                <span>
+                  <IconButton
+                    size="small"
+                    onClick={() => setDeleteConfirmKey(key)}
+                    disabled={!canRevokeKeys}
+                    aria-label={canRevokeKeys ? 'Revoke key' : 'No permission to revoke keys'}
+                    sx={quietIconButtonSx('danger')}
+                  >
+                    <Delete fontSize="small" />
+                  </IconButton>
+                </span>
+              </Tooltip>
             </Box>
           </TableCell>
         </TableRow>
