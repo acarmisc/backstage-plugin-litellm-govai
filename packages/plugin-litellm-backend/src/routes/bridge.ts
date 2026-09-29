@@ -51,11 +51,13 @@ export function registerBridgeRoutes(router: Router, ctx: RouterContext, bridgeO
   }
 
   if (bridgeCfg.enabled && tokenVerifier) {
+    // Capture tokenVerifier in the closure to avoid non-null assertion
+    const verifier = tokenVerifier;
     const requireClaims = async (req: Request): Promise<BridgeClaims> => {
       const header = req.headers.authorization ?? '';
       const token = header.startsWith('Bearer ') ? header.slice(7) : '';
       if (!token) throw new BridgeAuthError('missing Bearer token');
-      return tokenVerifier!.verify(token);
+      return verifier.verify(token);
     };
 
     const handleBridgeError = (error: any, res: Response) => {

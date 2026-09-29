@@ -57,8 +57,9 @@ export function registerTeamUsageRoutes(router: Router, ctx: RouterContext): voi
             auth,
             logger,
           );
-        } catch (err: any) {
-          logger.warn(`Team-manager check failed: ${err.message}`);
+        } catch (err: unknown) {
+          const message = err instanceof Error ? err.message : String(err);
+          logger.warn(`Team-manager check failed: ${message}`);
         }
       }
 

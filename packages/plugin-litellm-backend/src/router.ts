@@ -139,8 +139,12 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
 
     // Helper functions - defined inline below this object
     authorizeKeyAction: async (req: Request, keyId: string) => {
-      const tokenEntityRef = req.res!.locals.tokenEntityRef as string;
-      const userId = req.res!.locals.userId as string;
+      // Express middleware should have populated req.res.locals with user info
+      if (!req.res || !req.res.locals.tokenEntityRef || !req.res.locals.userId) {
+        throw new NotAllowedError('User identity not found in request');
+      }
+      const tokenEntityRef = req.res.locals.tokenEntityRef as string;
+      const userId = req.res.locals.userId as string;
       const ownKeys = await client.listKeys(userId);
       const key = ownKeys.find(k => (k.token ?? k.key) === keyId);
       if (!key) {
@@ -216,13 +220,17 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
       | null
     > => {
       if (!ctx.requireTeamMgmt(res)) return null;
+      if (!teamAdminCfg.group) {
+        res.status(500).json({ error: 'Team management is misconfigured (group is missing)' });
+        return null;
+      }
 
       const check = await assertTeamAdmin({
         req,
         auth,
         permissions,
         catalogClient,
-        teamAdminGroup: teamAdminCfg.group!,
+        teamAdminGroup: teamAdminCfg.group,
         permission,
         logger,
       });
@@ -240,7 +248,7 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
       let existing;
       try {
         existing = await withTeamFetchRetry(() => client.getTeamInfo(teamId));
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (err instanceof LiteLLMUpstreamError && err.status === 404) {
           res.status(404).json({ error: 'Team not found' });
           return null;

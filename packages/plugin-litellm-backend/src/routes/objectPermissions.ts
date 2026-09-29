@@ -29,12 +29,16 @@ export function registerObjectPermissionsRoutes(router: Router, ctx: RouterConte
   // The vector stores a team admin is allowed to attach (allowlist ∩ proxy).
   router.get('/vector-stores', async (req: Request, res: Response) => {
     if (!requireObjectPerms(res)) return;
+    if (!teamAdminCfg.group) {
+      res.status(500).json({ error: 'Team management is misconfigured (group is missing)' });
+      return;
+    }
     const check = await assertTeamAdmin({
       req,
       auth,
       permissions,
       catalogClient,
-      teamAdminGroup: teamAdminCfg.group!,
+      teamAdminGroup: teamAdminCfg.group,
       permission: litellmTeamKnowledgebaseManagePermission,
       logger,
     });
@@ -46,7 +50,7 @@ export function registerObjectPermissionsRoutes(router: Router, ctx: RouterConte
     try {
       const all = await client.listVectorStores();
       res.json(all.filter(s => allowed.has(s.id) || (s.name && allowed.has(s.name))));
-    } catch (err: any) {
+    } catch (err: unknown) {
       sendTeamError(err, res);
     }
   });
@@ -115,7 +119,7 @@ export function registerObjectPermissionsRoutes(router: Router, ctx: RouterConte
             ? redactTeamBudget(updated as TeamInfo)
             : updated,
         );
-      } catch (err: any) {
+      } catch (err: unknown) {
         sendTeamError(err, res);
       }
     },
@@ -130,12 +134,16 @@ export function registerObjectPermissionsRoutes(router: Router, ctx: RouterConte
 
   router.get('/mcp-servers', async (req: Request, res: Response) => {
     if (!requireObjectPerms(res)) return;
+    if (!teamAdminCfg.group) {
+      res.status(500).json({ error: 'Team management is misconfigured (group is missing)' });
+      return;
+    }
     const check = await assertTeamAdmin({
       req,
       auth,
       permissions,
       catalogClient,
-      teamAdminGroup: teamAdminCfg.group!,
+      teamAdminGroup: teamAdminCfg.group,
       permission: litellmTeamMcpManagePermission,
       logger,
     });
@@ -147,7 +155,7 @@ export function registerObjectPermissionsRoutes(router: Router, ctx: RouterConte
     try {
       const all = await client.listMcpServers();
       res.json(all.filter(s => allowed.has(s.id) || (s.name && allowed.has(s.name))));
-    } catch (err: any) {
+    } catch (err: unknown) {
       sendTeamError(err, res);
     }
   });
@@ -218,7 +226,7 @@ export function registerObjectPermissionsRoutes(router: Router, ctx: RouterConte
             ? redactTeamBudget(updated as TeamInfo)
             : updated,
         );
-      } catch (err: any) {
+      } catch (err: unknown) {
         sendTeamError(err, res);
       }
     },

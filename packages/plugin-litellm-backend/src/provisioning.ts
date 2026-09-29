@@ -2,7 +2,7 @@ import { Config } from '@backstage/config';
 import { AuthService, BackstageCredentials, LoggerService } from '@backstage/backend-plugin-api';
 import { CatalogClient } from '@backstage/catalog-client';
 import { Request } from 'express';
-import { LiteLLMClient } from './client';
+import { LiteLLMClient, LiteLLMUpstreamError } from './client';
 import { UserInfo, ProvisioningDefaults, RoleConfig } from './types';
 
 /**
@@ -187,9 +187,10 @@ export async function resolveUserProfile(
       email: profile.email,
       displayName: profile.displayName,
     };
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
     logger.warn(
-      `Could not fetch catalog profile for ${userEntityRef}: ${err.message}`,
+      `Could not fetch catalog profile for ${userEntityRef}: ${message}`,
     );
     return {};
   }
@@ -249,16 +250,18 @@ export async function provisionUser(
           ...(profile.email && { user_email: profile.email }),
           ...(profile.displayName && { user_alias: profile.displayName }),
         });
-      } catch (updateErr: any) {
+      } catch (updateErr: unknown) {
+        const message = updateErr instanceof Error ? updateErr.message : String(updateErr);
         logger.warn(
-          `Defensive /user/update after provisioning ${userId} failed: ${updateErr.message}`,
+          `Defensive /user/update after provisioning ${userId} failed: ${message}`,
         );
       }
     }
     // Fetch the freshly-created user record to return consistent UserInfo shape
     return await client.getUserInfo(userId);
-  } catch (err: any) {
-    logger.error(`Failed to provision LiteLLM user ${userId}: ${err.message}`);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.error(`Failed to provision LiteLLM user ${userId}: ${message}`);
     throw err;
   }
 }
@@ -389,12 +392,15 @@ export async function getOrProvisionUser(
         );
       }
       return created;
-    } catch (err: any) {
+    } catch (err: unknown) {
       // The single-flight cache should prevent the parallel-409 race,
       // but keep the recovery path: if /user/new still 409s (e.g.
       // multi-replica deploys where the lock is per-process), treat
       // it as "user exists" and re-fetch.
-      if (err.status === 409 || /already exists/i.test(err.message ?? '')) {
+      if (
+        (err instanceof LiteLLMUpstreamError && err.status === 409) ||
+        (err instanceof Error && /already exists/i.test(err.message ?? ''))
+      ) {
         logger.info(
           `LiteLLM user ${userId} already exists during provisioning — re-fetching`,
         );
@@ -412,15 +418,16 @@ export async function getOrProvisionUser(
       // browser, otherwise Backstage's fetch middleware treats the
       // user's Backstage session as expired and forces a re-login.
       // Only safe client-semantic codes pass through.
-      const upstreamStatus = err.status;
-      const passThrough = [400, 404, 409, 422].includes(upstreamStatus)
+      const upstreamStatus = err instanceof LiteLLMUpstreamError ? err.status : undefined;
+      const passThrough = (upstreamStatus && [400, 404, 409, 422].includes(upstreamStatus))
         ? upstreamStatus
         : 502;
+      const errMessage = err instanceof Error ? err.message : String(err);
       throw new ProvisioningError(
         'LiteLLM auto-provisioning failed',
         `LiteLLM upstream ${
           upstreamStatus ?? 'error'
-        }: ${sanitizeUpstreamMessage(err.message)}`,
+        }: ${sanitizeUpstreamMessage(errMessage)}`,
         true,
         passThrough,
       );
@@ -456,8 +463,9 @@ export async function isUserMemberOfGroup(
       .filter(r => r.type === 'memberOf')
       .map(r => r.targetRef);
     return groups.includes(group);
-  } catch (err: any) {
-    logger.warn(`Could not check group membership for ${userEntityRef}: ${err.message}`);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.warn(`Could not check group membership for ${userEntityRef}: ${message}`);
     return false;
   }
 }
@@ -484,9 +492,10 @@ export async function resolveUserRole(
       .filter(r => r.type === 'memberOf')
       .map(r => r.targetRef);
     return roleConfigs.find(rc => groups.includes(rc.group));
-  } catch (err: any) {
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
     logger.warn(
-      `Could not resolve Backstage groups for ${userEntityRef}: ${err.message}`,
+      `Could not resolve Backstage groups for ${userEntityRef}: ${message}`,
     );
     return undefined;
   }
