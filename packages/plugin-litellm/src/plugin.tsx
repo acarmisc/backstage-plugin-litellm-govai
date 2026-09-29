@@ -5,6 +5,7 @@ import {
   ApiBlueprint,
   PageBlueprint,
   fetchApiRef,
+  discoveryApiRef,
 } from '@backstage/frontend-plugin-api';
 import { liteLlmApiRef, LiteLlmApi } from './api';
 
@@ -12,8 +13,8 @@ const liteLlmApi = ApiBlueprint.make({
   params: defineParams =>
     defineParams({
       api: liteLlmApiRef,
-      deps: { fetchApi: fetchApiRef },
-      factory: ({ fetchApi }) => new LiteLlmApi(fetchApi),
+      deps: { fetchApi: fetchApiRef, discoveryApi: discoveryApiRef },
+      factory: ({ fetchApi, discoveryApi }) => new LiteLlmApi(fetchApi, discoveryApi),
     }),
 });
 

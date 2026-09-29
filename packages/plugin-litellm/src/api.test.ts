@@ -371,3 +371,27 @@ describe('team knowledge bases', () => {
     });
   });
 });
+
+describe('base URL resolution', () => {
+  test('resolves the base URL from DiscoveryApi per request', async () => {
+    const { fetchApi, calls } = makeFetch(200, { user_id: 'alice' });
+    let asked = '';
+    const discoveryApi = {
+      getBaseUrl: async (pluginId: string) => {
+        asked = pluginId;
+        return 'https://backstage.example.com/api/litellm';
+      },
+    };
+    const api = new LiteLlmApi(fetchApi, discoveryApi);
+    await api.getUserInfo();
+    assert.strictEqual(asked, 'litellm');
+    assert.ok(calls[0].url.startsWith('https://backstage.example.com/api/litellm/user/info'), calls[0].url);
+  });
+
+  test('POST also goes through the discovered base URL', async () => {
+    const { fetchApi, calls } = makeFetch(200, {});
+    const api = new LiteLlmApi(fetchApi, { getBaseUrl: async () => 'https://b.example.com/api/litellm' });
+    await api.blockKey('k1');
+    assert.strictEqual(calls[0].url, 'https://b.example.com/api/litellm/keys/k1/block');
+  });
+});
