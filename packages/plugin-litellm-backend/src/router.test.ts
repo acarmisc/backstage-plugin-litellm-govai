@@ -1527,6 +1527,194 @@ describe('router /keys (list)', () => {
   });
 });
 
+describe('router POST /keys/prune-expired', () => {
+  test('prunes only expired keys', async () => {
+    const now = new Date();
+    const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+
+    const h = await startHarness({
+      config: { 'litellm.userIdDomain': 'example.com' },
+      client: mockClient({
+        listKeys: (uid?: string) =>
+          Promise.resolve([
+            {
+              key: 'sk-...1',
+              token: 'h1',
+              key_alias: 'expired',
+              user_id: uid,
+              created_at: '',
+              spend: 0,
+              expires_at: yesterday.toISOString(),
+            } as VirtualKey,
+            {
+              key: 'sk-...2',
+              token: 'h2',
+              key_alias: 'active',
+              user_id: uid,
+              created_at: '',
+              spend: 0,
+              expires_at: tomorrow.toISOString(),
+            } as VirtualKey,
+            {
+              key: 'sk-...3',
+              token: 'h3',
+              key_alias: 'noexpiry',
+              user_id: uid,
+              created_at: '',
+              spend: 0,
+              // No expires_at
+            } as VirtualKey,
+          ]),
+        deleteKeys: (r: any) => {
+          assert.deepStrictEqual(r.keys, ['h1'], 'should delete only expired key');
+          return Promise.resolve({ success: true });
+        },
+      }),
+    });
+    try {
+      const { status, body } = await req(h.baseUrl, 'POST', '/keys/prune-expired', {
+        authRef: 'user:default/alice',
+      });
+      assert.strictEqual(status, 200);
+      assert.strictEqual(body.pruned, 1);
+      assert.strictEqual(body.failed, 0);
+      assert(!body.failures, 'should not include failures when all succeed');
+    } finally {
+      await new Promise<void>(r => h.server.close(() => r()));
+    }
+  });
+
+  test('returns pruned and failed counts with failures array', async () => {
+    const now = new Date();
+    const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+
+    let deleteAttempt = 0;
+    const h = await startHarness({
+      config: { 'litellm.userIdDomain': 'example.com' },
+      client: mockClient({
+        listKeys: (uid?: string) =>
+          Promise.resolve([
+            {
+              key: 'sk-...1',
+              token: 'h1',
+              key_alias: 'expired1',
+              user_id: uid,
+              created_at: '',
+              spend: 0,
+              expires_at: yesterday.toISOString(),
+            } as VirtualKey,
+            {
+              key: 'sk-...2',
+              token: 'h2',
+              key_alias: 'expired2',
+              user_id: uid,
+              created_at: '',
+              spend: 0,
+              expires_at: yesterday.toISOString(),
+            } as VirtualKey,
+          ]),
+        deleteKeys: (r: any) => {
+          deleteAttempt++;
+          // Fail on first delete, succeed on second
+          if (deleteAttempt === 1) {
+            throw new Error('Failed to delete key');
+          }
+          return Promise.resolve({ success: true });
+        },
+      }),
+    });
+    try {
+      const { status, body } = await req(h.baseUrl, 'POST', '/keys/prune-expired', {
+        authRef: 'user:default/alice',
+      });
+      assert.strictEqual(status, 200);
+      assert.strictEqual(body.pruned, 1);
+      assert.strictEqual(body.failed, 1);
+      assert(Array.isArray(body.failures), 'should include failures array');
+      assert.strictEqual(body.failures.length, 1);
+      assert(body.failures[0].error.includes('Failed to delete key'));
+    } finally {
+      await new Promise<void>(r => h.server.close(() => r()));
+    }
+  });
+
+  test('returns empty result when no keys are expired', async () => {
+    const now = new Date();
+    const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+
+    const h = await startHarness({
+      config: { 'litellm.userIdDomain': 'example.com' },
+      client: mockClient({
+        listKeys: (uid?: string) =>
+          Promise.resolve([
+            {
+              key: 'sk-...1',
+              token: 'h1',
+              key_alias: 'active',
+              user_id: uid,
+              created_at: '',
+              spend: 0,
+              expires_at: tomorrow.toISOString(),
+            } as VirtualKey,
+          ]),
+        deleteKeys: (r: any) => {
+          throw new Error('should not delete any keys');
+        },
+      }),
+    });
+    try {
+      const { status, body } = await req(h.baseUrl, 'POST', '/keys/prune-expired', {
+        authRef: 'user:default/alice',
+      });
+      assert.strictEqual(status, 200);
+      assert.strictEqual(body.pruned, 0);
+      assert.strictEqual(body.failed, 0);
+    } finally {
+      await new Promise<void>(r => h.server.close(() => r()));
+    }
+  });
+
+  test('401 for anonymous caller', async () => {
+    const h = await startHarness({});
+    try {
+      const { status } = await req(h.baseUrl, 'POST', '/keys/prune-expired', {
+        // No authRef = no authenticated user
+      });
+      assert.strictEqual(status, 401);
+    } finally {
+      await new Promise<void>(r => h.server.close(() => r()));
+    }
+  });
+
+  test('403 when user lacks litellmKeyRevokePermission', async () => {
+    const h = await startHarness({
+      permissions: mockPermissions({
+        authorize: async (queries: any[]) => {
+          // Deny revoke permission for key-related operations
+          return queries.map(q => ({
+            result: q.permission?.name === 'litellm.key.revoke' ? AuthorizeResult.DENY : AuthorizeResult.ALLOW,
+          }));
+        },
+      }),
+      client: mockClient({
+        listKeys: () => {
+          throw new Error('should not list keys if permission denied');
+        },
+      }),
+    });
+    try {
+      const { status, body } = await req(h.baseUrl, 'POST', '/keys/prune-expired', {
+        authRef: 'user:default/alice',
+      });
+      assert.strictEqual(status, 403);
+      assert(body.error?.includes('Access denied'));
+    } finally {
+      await new Promise<void>(r => h.server.close(() => r()));
+    }
+  });
+});
+
 describe('router /models', () => {
   test('lists models', async () => {
     const h = await startHarness({
