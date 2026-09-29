@@ -1,4 +1,4 @@
-import { GenerateKeyRequest, UpdateKeyRequest, VirtualKey } from './types';
+import { GenerateKeyRequest, UpdateKeyRequest } from './types';
 
 export interface ValidationErrors {
   alias?: string;
@@ -10,9 +10,9 @@ export interface ValidationErrors {
 
 export interface ValidationOptions {
   teamRequired?: boolean;
-  allowUnlimitedBudget?: boolean;
+  /** True when the user has ticked the 'Unlimited budget' checkbox. */
+  unlimitedBudget?: boolean;
   isCreate?: boolean;
-  keys?: VirtualKey[];
 }
 
 /**
@@ -26,9 +26,8 @@ export function validateKeyForm(
 ): ValidationErrors {
   const {
     teamRequired = true,
-    allowUnlimitedBudget = false,
+    unlimitedBudget = false,
     isCreate = true,
-    keys = [],
   } = options;
 
   const errors: ValidationErrors = {};
@@ -37,9 +36,8 @@ export function validateKeyForm(
   const alias = (isCreate ? (formData as GenerateKeyRequest).alias : (formData as UpdateKeyRequest).key_alias) ?? '';
   if (!alias.trim()) {
     errors.alias = 'Alias is required';
-  } else if (isCreate && keys.some(k => k.key_alias === alias)) {
-    errors.alias = 'This alias is already used by one of your keys — LiteLLM requires aliases to be unique across all keys';
   }
+  // A duplicate alias is only a warning in the UI (see aliasDuplicate), never a blocking error.
 
   // Team validation (create mode only)
   if (isCreate) {
@@ -51,8 +49,7 @@ export function validateKeyForm(
 
   // Budget validation
   const maxBudget = formData.max_budget;
-  const isUnlimited = allowUnlimitedBudget && (maxBudget === null || maxBudget === undefined);
-  if (!isUnlimited && (maxBudget === undefined || maxBudget === null || maxBudget <= 0)) {
+  if (!unlimitedBudget && (maxBudget === undefined || maxBudget === null || maxBudget <= 0)) {
     errors.budget = 'Enter a positive budget or tick "Unlimited"';
   }
 

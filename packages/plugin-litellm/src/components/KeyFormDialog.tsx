@@ -404,9 +404,8 @@ export const KeyFormDialog: React.FC<KeyFormDialogProps> = ({
   // ── Validation using the validation module ────────────────────────────────
   const validationErrors = validateKeyForm(formData, {
     teamRequired,
-    allowUnlimitedBudget,
+    unlimitedBudget,
     isCreate,
-    keys: isCreate ? keys : [],
   });
 
   // Show errors only if the field was touched or submit was attempted
@@ -431,9 +430,8 @@ export const KeyFormDialog: React.FC<KeyFormDialogProps> = ({
     // Validate before submitting
     const errors = validateKeyForm(generateForm, {
       teamRequired,
-      allowUnlimitedBudget,
+      unlimitedBudget,
       isCreate: true,
-      keys,
     });
 
     if (Object.keys(errors).length > 0) {
@@ -488,9 +486,8 @@ export const KeyFormDialog: React.FC<KeyFormDialogProps> = ({
     // Validate before submitting
     const errors = validateKeyForm(editFormState, {
       teamRequired,
-      allowUnlimitedBudget,
+      unlimitedBudget,
       isCreate: false,
-      keys,
     });
 
     if (Object.keys(errors).length > 0) {

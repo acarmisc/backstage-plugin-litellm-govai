@@ -13,10 +13,9 @@ describe('validateKeyForm', () => {
     assert.strictEqual(errors.alias, undefined);
   });
 
-  test('detects duplicate alias', () => {
-    const keys = [{ key_alias: 'existing' }] as any;
-    const errors = validateKeyForm({ alias: 'existing' }, { isCreate: true, keys });
-    assert.ok(errors.alias?.includes('already used'));
+  test('a duplicate alias is a warning in the UI, never a blocking error', () => {
+    const errors = validateKeyForm({ alias: 'existing', max_budget: 5 }, { isCreate: true, teamRequired: false });
+    assert.strictEqual(errors.alias, undefined);
   });
 
   test('requires team when teamRequired is true', () => {
@@ -29,25 +28,25 @@ describe('validateKeyForm', () => {
     assert.strictEqual(errors.team, undefined);
   });
 
-  test('requires budget when allowUnlimitedBudget is false', () => {
-    const errors = validateKeyForm({ alias: 'test', max_budget: undefined }, { isCreate: true, allowUnlimitedBudget: false });
+  test('requires budget when unlimited is not ticked', () => {
+    const errors = validateKeyForm({ alias: 'test', max_budget: undefined }, { isCreate: true, unlimitedBudget: false });
     assert.ok(errors.budget);
   });
 
-  test('allows null budget when allowUnlimitedBudget is true', () => {
-    const errors = validateKeyForm({ alias: 'test', max_budget: null }, { isCreate: true, allowUnlimitedBudget: true });
+  test('allows an empty budget only when unlimited is ticked', () => {
+    const errors = validateKeyForm({ alias: 'test', max_budget: null }, { isCreate: true, unlimitedBudget: true });
     assert.strictEqual(errors.budget, undefined);
   });
 
   test('rejects zero or negative budget', () => {
-    const errors = validateKeyForm({ alias: 'test', max_budget: 0 }, { isCreate: true, allowUnlimitedBudget: false });
+    const errors = validateKeyForm({ alias: 'test', max_budget: 0 }, { isCreate: true, unlimitedBudget: false });
     assert.ok(errors.budget);
-    const errors2 = validateKeyForm({ alias: 'test', max_budget: -5 }, { isCreate: true, allowUnlimitedBudget: false });
+    const errors2 = validateKeyForm({ alias: 'test', max_budget: -5 }, { isCreate: true, unlimitedBudget: false });
     assert.ok(errors2.budget);
   });
 
   test('accepts positive budget', () => {
-    const errors = validateKeyForm({ alias: 'test', max_budget: 100 }, { isCreate: true, allowUnlimitedBudget: false });
+    const errors = validateKeyForm({ alias: 'test', max_budget: 100 }, { isCreate: true, unlimitedBudget: false });
     assert.strictEqual(errors.budget, undefined);
   });
 
