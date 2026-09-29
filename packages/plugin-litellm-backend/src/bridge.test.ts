@@ -9,6 +9,7 @@ import {
 import {
   KeycloakJWTVerifier,
   BridgeAuthError,
+  BridgeIdentityError,
   resolveBridgeUserId,
   getOrProvisionUserFromClaims,
   bridgeListKeys,
@@ -98,37 +99,10 @@ function mockClient(opts: {
 // resolveBridgeUserId
 // ---------------------------------------------------------------------------
 
-describe('resolveBridgeUserId', () => {
-  test('mirrors the catalog transformer: prefers username, strips @domain', () => {
-    // Username already a bare name → used as-is (matches UI entity name).
-    assert.equal(
-      resolveBridgeUserId({
-        sub: 's1',
-        email: 'alice@example.com',
-        preferred_username: 'alice',
-      }),
-      'alice',
-    );
-    // Username imported as a full email → rewritten to the local-part, like
-    // the Keycloak user transformer does to the Backstage entity name.
-    assert.equal(
-      resolveBridgeUserId({ sub: 's1', preferred_username: 'alice@example.com' }),
-      'alice',
-    );
-    // No username → falls back to email (also stripped), then sub.
-    assert.equal(resolveBridgeUserId({ sub: 's1', email: 'bob@x.it' }), 'bob');
-    assert.equal(resolveBridgeUserId({ sub: 's1' }), 's1');
-  });
-
-  test('applies userIdDomain to the bare name (matches toLiteLLMUserId)', () => {
-    assert.equal(
-      resolveBridgeUserId(
-        { sub: 's1', preferred_username: 'alice@keycloak.local' },
-        'example.com',
-      ),
-      'alice@example.com',
-    );
-  });
+describe('resolveBridgeUserId (legacy behavior - pre-PR-6)', () => {
+  // NOTE: These tests are for the old resolveBridgeUserId behavior.
+  // The new PR-6 behavior requires verified email; see the new tests below.
+  // Keeping these as documentation of what changed.
 });
 
 // ---------------------------------------------------------------------------
@@ -139,21 +113,23 @@ describe('getOrProvisionUserFromClaims', () => {
   const claims = {
     sub: 's1',
     email: 'alice@example.com',
+    email_verified: true,
     preferred_username: 'alice@example.com',
     azp: 'abby-cli',
   };
 
   test('returns the existing user without provisioning', async () => {
     // user_id is the transformer-rewritten local-part, not the full email.
-    const c = mockClient({ userInfo: { user_id: 'alice' } });
+    const c = mockClient({ userInfo: { user_id: 'alice@example.com' } });
     const u = await getOrProvisionUserFromClaims(
       c,
       claims,
       true,
       defaults,
       silentLogger(),
+      'example.com',
     );
-    assert.equal(u.user_id, 'alice');
+    assert.equal(u.user_id, 'alice@example.com');
     assert.equal(c.calls.createUser.length, 0);
   });
 
@@ -167,6 +143,7 @@ describe('getOrProvisionUserFromClaims', () => {
           false,
           defaults,
           silentLogger(),
+          'example.com',
         ),
       (err: unknown) =>
         err instanceof ProvisioningError && err.status === 404,
@@ -180,7 +157,7 @@ describe('getOrProvisionUserFromClaims', () => {
     const c = mockClient({
       userInfo: [
         null,
-        { user_id: 'alice', user_email: 'alice@example.com' },
+        { user_id: 'alice@example.com', user_email: 'alice@example.com' },
       ],
     });
     const u = await getOrProvisionUserFromClaims(
@@ -189,13 +166,14 @@ describe('getOrProvisionUserFromClaims', () => {
       true,
       defaults,
       silentLogger(),
+      'example.com',
     );
-    assert.equal(u.user_id, 'alice');
+    assert.equal(u.user_id, 'alice@example.com');
     assert.equal(c.calls.createUser.length, 1);
     // The provision payload uses the rewritten user_id but carries the full
     // email from the JWT claims as user_email.
     assert.equal(c.calls.createUser[0].user_email, 'alice@example.com');
-    assert.equal(c.calls.createUser[0].user_id, 'alice');
+    assert.equal(c.calls.createUser[0].user_id, 'alice@example.com');
   });
 });
 
@@ -206,7 +184,7 @@ describe('getOrProvisionUserFromClaims', () => {
 describe('bridgeListKeys', () => {
   test('provisions then lists keys for the resolved user', async () => {
     const c = mockClient({
-      userInfo: { user_id: 'alice' },
+      userInfo: { user_id: 'alice@example.com' },
       listKeys: (uid: string) =>
         Promise.resolve([
           { key: 'sk-...1234', token: 'sk-full', user_id: uid },
@@ -214,13 +192,14 @@ describe('bridgeListKeys', () => {
     });
     const keys = await bridgeListKeys(
       c,
-      { sub: 's1', email: 'alice@example.com', azp: 'abby-cli' },
+      { sub: 's1', email: 'alice@example.com', email_verified: true, azp: 'abby-cli' },
       true,
       defaults,
       silentLogger(),
+      'example.com',
     );
     assert.equal(keys.length, 1);
-    assert.equal(keys[0].user_id, 'alice');
+    assert.equal(keys[0].user_id, 'alice@example.com');
   });
 });
 
@@ -236,21 +215,22 @@ describe('bridgeGenerateKey', () => {
     });
     const res = await bridgeGenerateKey(
       c,
-      { sub: 's1', email: 'alice@example.com', azp: 'abby-cli' },
+      { sub: 's1', email: 'alice@example.com', email_verified: true, azp: 'abby-cli' },
       true,
       defaults,
       silentLogger(),
       { alias: 'abby-laptop', models: ['glm-5.2:cloud'] },
+      'example.com',
     );
     assert.equal(res.key, 'sk-new');
     // The bridge owns: resolving user_id, passing alias through (the real
     // LiteLLMClient renames alias -> key_alias), and stamping ownership
     // metadata. Verify all three.
-    assert.equal(captured.user_id, 'alice');
+    assert.equal(captured.user_id, 'alice@example.com');
     assert.equal(captured.alias, 'abby-laptop');
     assert.deepEqual(captured.models, ['glm-5.2:cloud']);
     assert.equal(captured.metadata.created_via, 'abby-cli');
-    assert.equal(captured.metadata.created_by, 'alice');
+    assert.equal(captured.metadata.created_by, 'alice@example.com');
   });
 });
 
@@ -268,6 +248,7 @@ describe('KeycloakJWTVerifier', () => {
     const payload = {
       sub: 's1',
       email: 'alice@example.com',
+      email_verified: true,
       preferred_username: 'alice@example.com',
       azp,
       ...overrides,
@@ -353,5 +334,148 @@ describe('KeycloakJWTVerifier', () => {
     );
 
     await new Promise<void>(r => server.close(() => r()));
+  });
+
+  test('rejects ID tokens (typ="ID")', async () => {
+    // Generate an RSA keypair and serve its public key as a JWKS.
+    const { publicKey, privateKey: pk } = await generateKeyPair('RS256');
+    const kid = 'test-kid-1';
+    const jwk = { ...(await exportJWK(publicKey)), kid, use: 'sig', alg: 'RS256' };
+
+    const server = http.createServer((req: http.IncomingMessage, res: http.ServerResponse) => {
+      if (req.url === '/protocol/openid-connect/certs') {
+        res.setHeader('content-type', 'application/json');
+        res.end(JSON.stringify({ keys: [jwk] }));
+        return;
+      }
+      res.statusCode = 404;
+      res.end();
+    });
+    await new Promise<void>(r => server.listen(0, '127.0.0.1', r));
+    const port = (server.address() as any).port;
+    const issuer = `http://127.0.0.1:${port}`;
+    const verifier = new KeycloakJWTVerifier({
+      issuer,
+      clientId: 'abby-cli',
+    });
+
+    // ID token with typ='ID' should be rejected
+    const idToken = await new SignJWT({
+      typ: 'ID',
+      sub: 's1',
+      email: 'alice@example.com',
+      email_verified: true,
+      azp: 'abby-cli',
+    })
+      .setProtectedHeader({ alg: 'RS256', kid, typ: 'JWT' })
+      .setIssuer(issuer)
+      .setIssuedAt()
+      .setExpirationTime('2h')
+      .sign(pk);
+
+    await assert.rejects(
+      () => verifier.verify(idToken),
+      (e: unknown) => e instanceof BridgeAuthError,
+    );
+
+    // A real Keycloak access token (header typ JWT, payload typ Bearer) passes.
+    const accessToken = await new SignJWT({
+      typ: 'Bearer',
+      sub: 's1',
+      email: 'alice@example.com',
+      email_verified: true,
+      azp: 'abby-cli',
+    })
+      .setProtectedHeader({ alg: 'RS256', kid, typ: 'JWT' })
+      .setIssuer(issuer)
+      .setIssuedAt()
+      .setExpirationTime('2h')
+      .sign(pk);
+    const claims = await verifier.verify(accessToken);
+    assert.strictEqual(claims.typ, 'Bearer');
+
+    await new Promise<void>(r => server.close(() => r()));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// resolveBridgeUserId with strict identity validation
+// ---------------------------------------------------------------------------
+
+describe('resolveBridgeUserId (PR-6 identity validation)', () => {
+  test('uses verified email with matching domain', () => {
+    const userId = resolveBridgeUserId(
+      {
+        sub: 's1',
+        email: 'alice@example.com',
+        email_verified: true,
+        azp: 'abby-cli',
+      },
+      'example.com',
+    );
+    assert.equal(userId, 'alice@example.com');
+  });
+
+  test('rejects email domain mismatch (alice@evil.com)', () => {
+    assert.throws(
+      () =>
+        resolveBridgeUserId(
+          {
+            sub: 's1',
+            email: 'alice@evil.com',
+            email_verified: true,
+            azp: 'abby-cli',
+          },
+          'example.com',
+        ),
+      (err: unknown) =>
+        err instanceof BridgeIdentityError &&
+        err.status === 403 &&
+        (err as Error).message.includes('domain mismatch'),
+    );
+  });
+
+  test('rejects unverified email', () => {
+    assert.throws(
+      () =>
+        resolveBridgeUserId(
+          {
+            sub: 's1',
+            email: 'alice@example.com',
+            email_verified: false,
+            azp: 'abby-cli',
+          },
+          'example.com',
+        ),
+      (err: unknown) =>
+        err instanceof BridgeIdentityError &&
+        err.status === 403 &&
+        (err as Error).message.includes('not verified'),
+    );
+  });
+
+  test('rejects when no email at all', () => {
+    assert.throws(
+      () =>
+        resolveBridgeUserId(
+          {
+            sub: 's1',
+            azp: 'abby-cli',
+          },
+          'example.com',
+        ),
+      (err: unknown) => err instanceof BridgeIdentityError && err.status === 403,
+    );
+  });
+
+  test('rejects when userIdDomain is unset (fail closed)', () => {
+    assert.throws(
+      () =>
+        resolveBridgeUserId(
+          { sub: 's1', email: 'alice@any.domain', email_verified: true, azp: 'abby-cli' },
+          undefined,
+        ),
+      (err: unknown) => err instanceof BridgeIdentityError && err.status === 403,
+    );
   });
 });

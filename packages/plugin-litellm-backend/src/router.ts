@@ -11,7 +11,6 @@ import {
   UsageMetrics,
   TeamInfo,
   GenerateKeyRequest,
-  GenerateKeyResponse,
   UpdateKeyRequest,
 } from './types';
 import {
@@ -28,12 +27,13 @@ import {
 } from './provisioning';
 import {
   BridgeAuthError,
+  BridgeIdentityError,
   BridgeClaims,
   TokenVerifier,
-  bridgeGenerateKey,
   bridgeListKeys,
   newDefaultVerifier,
   readBridgeConfig,
+  resolveBridgeUserId,
 } from './bridge';
 import {
   litellmKeyCreatePermission,
@@ -56,6 +56,11 @@ import {
   type GenerateKeyInput,
   type UpdateKeyInput,
 } from './validation/keySchemas';
+import {
+  createKeyForUser,
+  KeyServiceError,
+  type KeyCreateContext,
+} from './services/keyService';
 import {
   isTeamManagementEnabled,
   isObjectPermissionsEnabled,
@@ -478,133 +483,33 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
       const tokenEntityRef = res.locals.tokenEntityRef as string;
       const resolvedUserId = res.locals.userId as string;
 
-      // ── Ensure user is provisioned ──────────────────────────────────────
-      const userInfo = await getOrProvisionUser(
+      // ── Create key via unified service ──────────────────────────────────
+      const keyCreateCtx: KeyCreateContext = {
         client,
-        tokenEntityRef,
-        resolvedUserId,
-        provisioningEnabled,
-        provisioningDefaults,
-        roleConfigs,
+        config: {
+          allowUnlimitedBudget,
+          teamRequired,
+        },
         catalogClient,
         auth,
         logger,
+        keyValidationConfig,
+        provisioningEnabled,
+        provisioningDefaults,
+        roleConfigs,
+        userIdDomain,
+      };
+      const result = await createKeyForUser(
+        { tokenEntityRef, userId: resolvedUserId },
+        input,
+        keyCreateCtx,
       );
-
-      // ── Enforce config flags ────────────────────────────────────────────
-      if (!allowUnlimitedBudget && (input.max_budget === null || input.max_budget === undefined)) {
-        res.status(400).json({
-          error: 'max_budget is required when unlimited budgets are not allowed',
-        });
-        return;
-      }
-
-      if (teamRequired && !input.team_id) {
-        res.status(400).json({
-          error: 'team_id is required',
-        });
-        return;
-      }
-
-      // ── Validate team membership ────────────────────────────────────────
-      if (input.team_id) {
-        const userTeams = userInfo?.teams ?? [];
-        if (!userTeams.includes(input.team_id)) {
-          res.status(403).json({
-            error: 'Access denied: team is not one of your teams',
-            team_id: input.team_id,
-          });
-          return;
-        }
-      }
-
-      // ── Validate models are subset of allowed ────────────────────────────
-      if (input.models && input.models.length > 0) {
-        // When team_id is set, use team's models; otherwise use user's models.
-        // Empty/missing allowedModels list means unrestricted.
-        let allowedModels: string[] = [];
-        if (input.team_id) {
-          // Fetch team info to get its allowed models
-          // Fail closed: if the team can't be fetched the error propagates
-          // rather than silently skipping the model check.
-          const teamInfo = await client.getTeamInfo(input.team_id);
-          allowedModels = teamInfo?.models ?? [];
-        } else {
-          allowedModels = userInfo?.models ?? [];
-        }
-
-        // Only enforce if the allowedModels list is non-empty (non-empty = restricted)
-        if (allowedModels.length > 0) {
-          const disallowed = input.models.filter(m => !allowedModels.includes(m));
-          if (disallowed.length > 0) {
-            res.status(400).json({
-              error: 'One or more requested models are not allowed',
-              disallowed_models: disallowed,
-            });
-            return;
-          }
-        }
-      }
-
-      // ── Stamp ownership into LiteLLM key metadata ────────────────────────
-      // LiteLLM's native `created_by` column is only populated when the caller
-      // authenticates via JWT/SSO; we always call with the master key, so that
-      // column stays null. Enriching `metadata` makes the owner identity visible
-      // in LiteLLM's UI and queryable via API.
-      const profile = tokenEntityRef
-        ? await resolveUserProfile(tokenEntityRef, catalogClient, auth, logger)
-        : {};
-      const clientMetadata = input.metadata ?? {};
-      const serverMetadata = {
-        created_by_backstage_user: tokenEntityRef ?? 'unknown',
-        ...(profile.email && { created_by_email: profile.email }),
-        ...(profile.displayName && {
-          created_by_display_name: profile.displayName,
-        }),
-        created_via: 'backstage',
-        created_at_iso: new Date().toISOString(),
-      };
-      // Server-owned keys override client values
-      const enrichedMetadata = {
-        ...clientMetadata,
-        ...serverMetadata,
-      };
-
-      // ── Build upstream request EXPLICITLY from parsed fields ──────────────
-      // Never spread the raw body; only include fields we've explicitly validated.
-      const upstreamRequest: GenerateKeyRequest = {
-        alias: input.alias,
-        user_id: resolvedUserId,
-      };
-
-      if (input.models !== undefined) {
-        upstreamRequest.models = input.models;
-      }
-      if (input.duration !== undefined) {
-        upstreamRequest.duration = input.duration;
-      }
-      if (input.max_budget !== undefined) {
-        // max_budget from input can be null (unlimited) or a number
-        upstreamRequest.max_budget = input.max_budget ?? undefined;
-      }
-      if (input.tpm_limit !== undefined) {
-        upstreamRequest.tpm_limit = input.tpm_limit;
-      }
-      if (input.rpm_limit !== undefined) {
-        upstreamRequest.rpm_limit = input.rpm_limit;
-      }
-      if (input.team_id !== undefined) {
-        upstreamRequest.team_id = input.team_id;
-      }
-      if (input.key_type !== undefined) {
-        upstreamRequest.key_type = input.key_type;
-      }
-      upstreamRequest.metadata = enrichedMetadata;
-
-      const result: GenerateKeyResponse = await client.generateKey(upstreamRequest);
-      logger.info({ action: 'key.generate', userId: resolvedUserId ?? 'unknown', keyAlias: input.alias });
       res.json(result);
     } catch (error: any) {
+      if (error instanceof KeyServiceError) {
+        res.status(error.status).json(error.body);
+        return;
+      }
       if (error instanceof ProvisioningError) {
         res.status(error.status).json(error.body);
         return;
@@ -1967,7 +1872,17 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
 
     const handleBridgeError = (error: any, res: Response) => {
       if (error instanceof BridgeAuthError) {
-        res.status(401).json({ error: 'unauthorized', hint: error.message });
+        // Log the jose error details server-side, send opaque 401 to client
+        logger.warn(`Bridge auth error: ${error.message}`);
+        res.status(401).json({ error: 'unauthorized' });
+        return;
+      }
+      if (error instanceof BridgeIdentityError) {
+        res.status(403).json({ error: 'forbidden', detail: error.message });
+        return;
+      }
+      if (error instanceof KeyServiceError) {
+        res.status(error.status).json(error.body);
         return;
       }
       if (error instanceof ProvisioningError) {
@@ -2002,14 +1917,46 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
     router.post('/bridge/keys', async (req: Request, res: Response) => {
       try {
         const claims = await requireClaims(req);
-        const result = await bridgeGenerateKey(
+
+        // ── Parse & validate input with strict schema ────────────────────────
+        const parseResult = generateKeyInputSchema.safeParse(req.body);
+        if (!parseResult.success) {
+          const errorMessages = parseResult.error.errors
+            .map(e => `${e.path.join('.')}: ${e.message}`)
+            .join('; ');
+          res.status(400).json({
+            error: 'Invalid request body',
+            details: errorMessages,
+          });
+          return;
+        }
+        const input: GenerateKeyInput = parseResult.data;
+
+        // ── Resolve user identity from verified claims ───────────────────────
+        const userId = resolveBridgeUserId(claims, userIdDomain);
+
+        // ── Create key via unified service ──────────────────────────────────
+        const keyCreateCtx: KeyCreateContext = {
           client,
-          claims,
+          config: {
+            allowUnlimitedBudget,
+            teamRequired,
+          },
+          // Bridge does not have Backstage catalogClient/auth
+          // so provisioning from JWT claims only (no Backstage profile enrichment)
+          catalogClient: undefined,
+          auth: undefined,
+          logger,
+          keyValidationConfig,
           provisioningEnabled,
           provisioningDefaults,
-          logger,
-          (req.body ?? {}) as Partial<GenerateKeyRequest>,
+          roleConfigs,
           userIdDomain,
+        };
+        const result = await createKeyForUser(
+          { userId },
+          input,
+          keyCreateCtx,
         );
         res.json(result);
       } catch (error: any) {
