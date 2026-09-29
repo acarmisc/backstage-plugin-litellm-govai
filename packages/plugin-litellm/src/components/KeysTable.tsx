@@ -30,6 +30,7 @@ import {
 import { useCopyToClipboard } from '../hooks';
 import { expiryStatus } from '../api';
 import { keyDisplayLabel, keyLast4, pruneCopy } from '../keyLabels';
+import { fmtUsd, fmtLimits } from '../format';
 import { filterKeysByStatus, type KeyFilterType } from '../keyFilter';
 import { GenerateKeyButton } from './GenerateKeyButton';
 import {
@@ -126,9 +127,9 @@ function BudgetCell({ spend, maxBudget }: { spend: number; maxBudget?: number })
   if (!maxBudget) {
     return (
       <Typography variant="body2" color="text.secondary" sx={{ fontVariantNumeric: 'tabular-nums' }}>
-        ${spend.toFixed(2)}
+        {fmtUsd(spend)}
         <Typography component="span" variant="caption" sx={{ ml: 0.5, opacity: 0.7 }}>
-          / ∞
+          / Unlimited
         </Typography>
       </Typography>
     );
@@ -137,9 +138,9 @@ function BudgetCell({ spend, maxBudget }: { spend: number; maxBudget?: number })
   return (
     <Box minWidth={104}>
       <Typography variant="body2" sx={{ fontVariantNumeric: 'tabular-nums', mb: 0.5 }}>
-        ${spend.toFixed(2)}
+        {fmtUsd(spend)}
         <Typography component="span" variant="caption" color="text.secondary" sx={{ ml: 0.5 }}>
-          / ${maxBudget}
+          / {fmtUsd(maxBudget)}
         </Typography>
       </Typography>
       <Meter value={pct} tone={budgetTone(pct)} height={4} />
@@ -398,7 +399,7 @@ export const KeysTable: React.FC<KeysTableProps> = ({
           </TableCell>
           <TableCell>
             <Typography variant="body2" color="text.secondary" sx={{ fontVariantNumeric: 'tabular-nums' }}>
-              {key.tpm_limit ?? '∞'} / {key.rpm_limit ?? '∞'}
+              {fmtLimits(key.tpm_limit, key.rpm_limit)}
             </Typography>
           </TableCell>
           <TableCell>
@@ -536,7 +537,7 @@ export const KeysTable: React.FC<KeysTableProps> = ({
                   <TableSortLabel active={sortKey === 'budget'} direction={sortKey === 'budget' ? sortDirection : 'asc'} onClick={() => handleSort('budget')}>Budget</TableSortLabel>
                 </TableCell>
                 <TableCell sortDirection={sortKey === 'limits' ? sortDirection : false}>
-                  <TableSortLabel active={sortKey === 'limits'} direction={sortKey === 'limits' ? sortDirection : 'asc'} onClick={() => handleSort('limits')}>TPM / RPM</TableSortLabel>
+                  <TableSortLabel active={sortKey === 'limits'} direction={sortKey === 'limits' ? sortDirection : 'asc'} onClick={() => handleSort('limits')}>TPM / RPM (per min)</TableSortLabel>
                 </TableCell>
                 <TableCell sortDirection={sortKey === 'models' ? sortDirection : false}>
                   <TableSortLabel active={sortKey === 'models'} direction={sortKey === 'models' ? sortDirection : 'asc'} onClick={() => handleSort('models')}>Models</TableSortLabel>
