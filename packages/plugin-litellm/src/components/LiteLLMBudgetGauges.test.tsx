@@ -5,12 +5,18 @@ import React from 'react';
 import { render, cleanup, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { TestApiProvider, mockApis } from '@backstage/test-utils';
-import { alertApiRef } from '@backstage/core-plugin-api';
+import { alertApiRef, createApiRef } from '@backstage/core-plugin-api';
 import { permissionApiRef } from '@backstage/plugin-permission-react';
 import { LiteLLMBudgetGauges } from './LiteLLMBudgetGauges';
 import { liteLlmApiRef } from '../api';
 import { ApiError } from '../api';
 import { UserInfo, VirtualKey, TeamInfo } from '../types';
+
+// Mock the route-resolution API for useRouteRef
+const coreRouteResolutionRef = createApiRef<any>({ id: 'core.route-resolution' });
+const mockRouteResolution = {
+  resolve: () => '/',
+};
 
 afterEach(() => cleanup());
 
@@ -69,6 +75,7 @@ describe('LiteLLMBudgetGauges', () => {
             [alertApiRef, fakeAlertApi],
           [permissionApiRef, mockApis.permission()],
             [liteLlmApiRef, fakeApi],
+            [coreRouteResolutionRef, mockRouteResolution],
           ]}
         >
           <LiteLLMBudgetGauges {...defaultProps} />

@@ -130,14 +130,13 @@ describe('KeyFormDialog', () => {
     const submitButton = screen.getByRole('button', { name: /Generate/i });
     await userEvent.click(submitButton);
 
-    // Should show validation error
-    await waitFor(() => {
-      // Error should appear for the Alias field
-      assert.ok(screen.queryByText(/Alias/i), 'Alias field should be present');
-    });
-
     // onCreateKey should NOT have been called
     assert.strictEqual(createKeyCallCount, 0);
+
+    // The form should still have the Generate button (not have navigated to secret screen)
+    await waitFor(() => {
+      assert.ok(screen.getByRole('button', { name: /Generate/i }));
+    });
   });
 
   test('after successful create shows one-time secret with warning text', async () => {
@@ -159,7 +158,9 @@ describe('KeyFormDialog', () => {
     // Should show the secret and warning text
     await waitFor(() => {
       assert.ok(screen.getByText(/Copy this key now\. It will never be shown again\./));
-      assert.ok(screen.getByText(/sk-secret-value-should-appear-here/));
+      // Use getAllByText to handle multiple occurrences (secret may appear in snippets too)
+      const secretElements = screen.getAllByText(/sk-secret-value-should-appear-here/);
+      assert.ok(secretElements.length > 0);
     });
   });
 
