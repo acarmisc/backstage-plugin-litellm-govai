@@ -35,7 +35,7 @@ export interface BridgeClaims {
   /** Authorized party — Keycloak sets this to the client_id of the requester. */
   azp?: string;
   aud?: string | string[];
-  /** Token type from the JWT header. Should be 'Bearer' for access tokens, absent or 'ID' for ID tokens. */
+  /** Keycloak payload `typ` claim: 'Bearer' for access tokens, 'ID' for ID tokens. */
   typ?: string;
 }
 
@@ -99,13 +99,11 @@ export class KeycloakJWTVerifier implements TokenVerifier {
 
   async verify(token: string): Promise<BridgeClaims> {
     let payload: JWTPayload;
-    let header: Record<string, unknown>;
     try {
       const result = await jwtVerify(token, this.jwks, {
         issuer: this.issuer,
       });
       payload = result.payload;
-      header = result.protectedHeader ?? {};
     } catch (err) {
       // Expired, bad signature, wrong issuer, malformed, JWKS unreachable, etc.
       throw new BridgeAuthError(
@@ -124,8 +122,10 @@ export class KeycloakJWTVerifier implements TokenVerifier {
         `token not issued for client "${this.clientId}" (azp=${azp ?? 'none'})`,
       );
     }
-    // Reject ID tokens (typ='ID'); only access tokens (typ absent or 'Bearer') are accepted.
-    const typ = header.typ as string | undefined;
+    // Keycloak marks the token kind in the PAYLOAD `typ` claim ('Bearer' for
+    // access tokens, 'ID' for ID tokens); the JWT header `typ` is just 'JWT'.
+    // Reject anything that isn't an access token.
+    const typ = (payload as Record<string, unknown>).typ as string | undefined;
     if (typ && typ !== 'Bearer') {
       throw new BridgeAuthError(
         `token type must be Bearer or absent, got: ${typ}`,
@@ -174,50 +174,31 @@ export function resolveBridgeUserId(
   claims: BridgeClaims,
   userIdDomain?: string,
 ): string {
-  // Prefer verified email with matching domain
-  if (claims.email && claims.email_verified) {
-    const emailParts = claims.email.split('@');
-    if (emailParts.length === 2) {
-      const [localPart, domain] = emailParts;
-      // If userIdDomain is configured, email must match it
-      if (userIdDomain) {
-        if (domain === userIdDomain) {
-          // Return the local part (catalog transformer rewrite)
-          return toLiteLLMUserId(localPart, userIdDomain);
-        }
-        // Domain mismatch
-        throw new BridgeIdentityError(
-          `email domain mismatch: email is from "${domain}", expected "${userIdDomain}"`,
-        );
-      } else {
-        // userIdDomain not set: use local part with null domain
-        return toLiteLLMUserId(localPart, undefined);
-      }
-    }
-  } else if (claims.email && !claims.email_verified) {
-    // Unverified email: always reject
+  // The bridge maps identities by verified email only. Without a configured
+  // domain we can't tell our users from another tenant's, and stripping the
+  // domain would merge alice@a.com and alice@b.com — fail closed.
+  if (!userIdDomain) {
     throw new BridgeIdentityError(
-      'email is not verified',
+      'litellm.userIdDomain must be configured to use the CLI bridge',
     );
   }
-
-  // If no verified email is available, reject
-  throw new BridgeIdentityError(
-    'no verified email found in token',
-  );
-}
-
-/**
- * @deprecated Use resolveBridgeUserId with userIdDomain parameter instead.
- * Old version that strips domains from preferred_username — kept for backwards compat.
- */
-export function resolveBridgeUserIdLegacy(
-  claims: BridgeClaims,
-  userIdDomain?: string,
-): string {
-  const raw = claims.preferred_username ?? claims.email ?? claims.sub;
-  const entityName = raw.includes('@') ? raw.split('@')[0] : raw;
-  return toLiteLLMUserId(entityName, userIdDomain);
+  if (!claims.email) {
+    throw new BridgeIdentityError('no email found in token');
+  }
+  if (claims.email_verified !== true) {
+    throw new BridgeIdentityError('email is not verified');
+  }
+  const parts = claims.email.split('@');
+  if (parts.length !== 2 || !parts[0]) {
+    throw new BridgeIdentityError('malformed email in token');
+  }
+  const [localPart, domain] = parts;
+  if (domain.toLowerCase() !== userIdDomain.toLowerCase()) {
+    throw new BridgeIdentityError(
+      `email domain mismatch: "${domain}" is not allowed for this deployment`,
+    );
+  }
+  return toLiteLLMUserId(localPart, userIdDomain);
 }
 
 /**

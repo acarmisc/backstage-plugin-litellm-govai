@@ -120,15 +120,16 @@ describe('getOrProvisionUserFromClaims', () => {
 
   test('returns the existing user without provisioning', async () => {
     // user_id is the transformer-rewritten local-part, not the full email.
-    const c = mockClient({ userInfo: { user_id: 'alice' } });
+    const c = mockClient({ userInfo: { user_id: 'alice@example.com' } });
     const u = await getOrProvisionUserFromClaims(
       c,
       claims,
       true,
       defaults,
       silentLogger(),
+      'example.com',
     );
-    assert.equal(u.user_id, 'alice');
+    assert.equal(u.user_id, 'alice@example.com');
     assert.equal(c.calls.createUser.length, 0);
   });
 
@@ -142,6 +143,7 @@ describe('getOrProvisionUserFromClaims', () => {
           false,
           defaults,
           silentLogger(),
+          'example.com',
         ),
       (err: unknown) =>
         err instanceof ProvisioningError && err.status === 404,
@@ -155,7 +157,7 @@ describe('getOrProvisionUserFromClaims', () => {
     const c = mockClient({
       userInfo: [
         null,
-        { user_id: 'alice', user_email: 'alice@example.com' },
+        { user_id: 'alice@example.com', user_email: 'alice@example.com' },
       ],
     });
     const u = await getOrProvisionUserFromClaims(
@@ -164,13 +166,14 @@ describe('getOrProvisionUserFromClaims', () => {
       true,
       defaults,
       silentLogger(),
+      'example.com',
     );
-    assert.equal(u.user_id, 'alice');
+    assert.equal(u.user_id, 'alice@example.com');
     assert.equal(c.calls.createUser.length, 1);
     // The provision payload uses the rewritten user_id but carries the full
     // email from the JWT claims as user_email.
     assert.equal(c.calls.createUser[0].user_email, 'alice@example.com');
-    assert.equal(c.calls.createUser[0].user_id, 'alice');
+    assert.equal(c.calls.createUser[0].user_id, 'alice@example.com');
   });
 });
 
@@ -358,12 +361,13 @@ describe('KeycloakJWTVerifier', () => {
 
     // ID token with typ='ID' should be rejected
     const idToken = await new SignJWT({
+      typ: 'ID',
       sub: 's1',
       email: 'alice@example.com',
       email_verified: true,
       azp: 'abby-cli',
     })
-      .setProtectedHeader({ alg: 'RS256', kid, typ: 'ID' })
+      .setProtectedHeader({ alg: 'RS256', kid, typ: 'JWT' })
       .setIssuer(issuer)
       .setIssuedAt()
       .setExpirationTime('2h')
@@ -373,6 +377,22 @@ describe('KeycloakJWTVerifier', () => {
       () => verifier.verify(idToken),
       (e: unknown) => e instanceof BridgeAuthError,
     );
+
+    // A real Keycloak access token (header typ JWT, payload typ Bearer) passes.
+    const accessToken = await new SignJWT({
+      typ: 'Bearer',
+      sub: 's1',
+      email: 'alice@example.com',
+      email_verified: true,
+      azp: 'abby-cli',
+    })
+      .setProtectedHeader({ alg: 'RS256', kid, typ: 'JWT' })
+      .setIssuer(issuer)
+      .setIssuedAt()
+      .setExpirationTime('2h')
+      .sign(pk);
+    const claims = await verifier.verify(accessToken);
+    assert.strictEqual(claims.typ, 'Bearer');
 
     await new Promise<void>(r => server.close(() => r()));
   });
@@ -448,19 +468,14 @@ describe('resolveBridgeUserId (PR-6 identity validation)', () => {
     );
   });
 
-  test('allows verified email when userIdDomain is unset', () => {
-    // When userIdDomain is not configured, verified email is OK
-    const userId = resolveBridgeUserId(
-      {
-        sub: 's1',
-        email: 'alice@any.domain',
-        email_verified: true,
-        azp: 'abby-cli',
-      },
-      undefined,
+  test('rejects when userIdDomain is unset (fail closed)', () => {
+    assert.throws(
+      () =>
+        resolveBridgeUserId(
+          { sub: 's1', email: 'alice@any.domain', email_verified: true, azp: 'abby-cli' },
+          undefined,
+        ),
+      (err: unknown) => err instanceof BridgeIdentityError && err.status === 403,
     );
-    // Without userIdDomain, toLiteLLMUserId returns the email as-is or processes it
-    // Exact value depends on toLiteLLMUserId impl, but it should work
-    assert.ok(userId);
   });
 });
