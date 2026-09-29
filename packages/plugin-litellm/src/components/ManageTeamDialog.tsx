@@ -1,4 +1,4 @@
-import React, { FC, useState, useEffect, useMemo } from 'react';
+import React, { FC, useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import Dialog from '@mui/material/Dialog';
 import DialogTitle from '@mui/material/DialogTitle';
 import DialogContent from '@mui/material/DialogContent';
@@ -26,7 +26,6 @@ import { Delete as DeleteIcon } from '@mui/icons-material';
 import { useApi } from '@backstage/core-plugin-api';
 import { catalogApiRef } from '@backstage/plugin-catalog-react';
 import { stringifyEntityRef, UserEntity } from '@backstage/catalog-model';
-import { useAsync } from 'react-use';
 import { TeamInfo, ModelInfo, LiteLlmConfig, CreateTeamRequest, UpdateTeamRequest, VectorStoreInfo, McpServerInfo } from '../types';
 import { StatusPill, dataTableSx } from './ui';
 
@@ -130,22 +129,44 @@ export const ManageTeamDialog: FC<ManageTeamDialogProps> = ({
   const members = useMemo(() => team?.members_with_roles ?? [], [team]);
   const showMembers = mode === 'edit' && !!canManageMembers;
 
-  // Catalog users for the member picker, fetched only while the Members
-  // section is actually visible. Failures degrade to an empty option list —
-  // the field stays usable as a plain entity-ref input either way.
+  // Catalog users for the member picker, fetched on demand with debounced search.
+  // Failures degrade to an empty option list — the field stays usable as a
+  // plain entity-ref input either way.
   const catalogApi = useApi(catalogApiRef);
-  const { value: catalogUsers, loading: usersLoading } = useAsync(async () => {
-    if (!open || !showMembers) return [] as UserEntity[];
-    try {
-      const { items } = await catalogApi.getEntities({
-        filter: { kind: 'User' },
-        fields: ['kind', 'metadata.namespace', 'metadata.name', 'metadata.title', 'spec.profile'],
-      });
-      return items as UserEntity[];
-    } catch {
-      return [] as UserEntity[];
+  const [searchUsers, setSearchUsers] = useState<UserEntity[]>([]);
+  const [usersLoading, setUsersLoading] = useState(false);
+  const debounceTimerRef = useRef<NodeJS.Timeout>();
+
+  const handleUserSearch = useCallback(async (term: string) => {
+    // Clear any pending debounce.
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
     }
-  }, [open, showMembers, catalogApi]);
+
+    if (!term.trim()) {
+      setSearchUsers([]);
+      return;
+    }
+
+    setUsersLoading(true);
+    debounceTimerRef.current = setTimeout(async () => {
+      try {
+        const { items } = await catalogApi.queryEntities({
+          filter: { kind: 'User' },
+          fullTextFilter: {
+            term: term.trim(),
+            fields: ['metadata.name', 'spec.profile.displayName', 'spec.profile.email'],
+          },
+          limit: 20,
+        });
+        setSearchUsers(items as UserEntity[]);
+      } catch {
+        setSearchUsers([]);
+      } finally {
+        setUsersLoading(false);
+      }
+    }, 300); // 300ms debounce
+  }, [catalogApi]);
 
   const userOptions = useMemo<UserOption[]>(() => {
     const existingEmails = new Set(
@@ -153,7 +174,7 @@ export const ManageTeamDialog: FC<ManageTeamDialogProps> = ({
         .map(m => m.user_email?.toLowerCase())
         .filter((e): e is string => !!e),
     );
-    return (catalogUsers ?? [])
+    return (searchUsers ?? [])
       .map(e => {
         const ref = stringifyEntityRef(e);
         const displayName =
@@ -167,7 +188,16 @@ export const ManageTeamDialog: FC<ManageTeamDialogProps> = ({
       })
       .filter(o => !(o.email && existingEmails.has(o.email.toLowerCase())))
       .sort((a, b) => a.label.localeCompare(b.label));
-  }, [catalogUsers, members]);
+  }, [searchUsers, members]);
+
+  // Clean up debounce timer on unmount.
+  useEffect(() => {
+    return () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (open) {
@@ -500,6 +530,8 @@ export const ManageTeamDialog: FC<ManageTeamDialogProps> = ({
                   // free typing (and clearing) back into the submitted ref here.
                   if (reason === 'input' || reason === 'clear') {
                     setMemberRef(newInputValue);
+                    // Trigger a debounced search for new results.
+                    handleUserSearch(newInputValue);
                   }
                 }}
                 onChange={(_, newValue) => {

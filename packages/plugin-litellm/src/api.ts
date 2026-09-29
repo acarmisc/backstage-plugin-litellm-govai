@@ -37,7 +37,7 @@ export interface LiteLlmApiInterface {
   blockKey(keyId: string): Promise<void>;
   unblockKey(keyId: string): Promise<void>;
   resetKeySpend(keyId: string): Promise<void>;
-  pruneExpiredKeys(): Promise<{ pruned: number }>;
+  pruneExpiredKeys(): Promise<{ pruned: number; failed: number; failures?: { keyId: string; error: string }[] }>;
   listModels(): Promise<ModelInfo[]>;
   getTeams(): Promise<TeamInfo[]>;
   getManagedTeams(): Promise<TeamInfo[]>;
@@ -187,19 +187,11 @@ export class LiteLlmApi implements LiteLlmApiInterface {
     await this.post(`/keys/${encodeURIComponent(keyId)}/reset_spend`, {});
   }
 
-  async pruneExpiredKeys(): Promise<{ pruned: number }> {
-    const keys = await this.get<VirtualKey[]>('/keys');
-    const expired = keys.filter(k => expiryStatus(k.expires_at) === 'expired');
-    if (expired.length === 0) return { pruned: 0 };
-    for (const key of expired) {
-      try {
-        await this.del(`/keys/${encodeURIComponent(key.token ?? key.key)}`);
-      } catch (err) {
-        // eslint-disable-next-line no-console -- best-effort bulk cleanup; no errorApi in this client class to report through
-        console.warn(`Failed to delete expired key ${key.token ?? key.key}:`, err);
-      }
-    }
-    return { pruned: expired.length };
+  async pruneExpiredKeys(): Promise<{ pruned: number; failed: number; failures?: { keyId: string; error: string }[] }> {
+    return this.post<{ pruned: number; failed: number; failures?: { keyId: string; error: string }[] }>(
+      '/keys/prune-expired',
+      {},
+    );
   }
 
   async getAuditLogs(params: AuditLogsParams): Promise<PaginatedAuditLogs> {

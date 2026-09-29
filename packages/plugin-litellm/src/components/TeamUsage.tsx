@@ -67,11 +67,19 @@ interface TeamCardProps {
   usageLoading: boolean;
   canManage?: boolean;
   onEditTeam?: (team: TeamInfo) => void;
+  onExpand?: (team: TeamInfo) => void;
 }
 
-const TeamCard: React.FC<TeamCardProps> = ({ team, usage, usageLoading, canManage, onEditTeam }) => {
+const TeamCard: React.FC<TeamCardProps> = ({ team, usage, usageLoading, canManage, onEditTeam, onExpand }) => {
   const [expanded, setExpanded] = useState(false);
   const chart = useChartTheme();
+
+  const handleExpandChange = (newExpanded: boolean) => {
+    setExpanded(newExpanded);
+    if (newExpanded && onExpand) {
+      onExpand(team);
+    }
+  };
 
   // When the backend redacts dollar amounts (budget hiding), only the
   // consumption level survives: pct + status + reset window. Spend charts
@@ -193,7 +201,7 @@ const TeamCard: React.FC<TeamCardProps> = ({ team, usage, usageLoading, canManag
         )}
         <IconButton
           size="small"
-          onClick={() => setExpanded(e => !e)}
+          onClick={() => handleExpandChange(!expanded)}
           aria-label={expanded ? 'Hide team details' : 'Show team details'}
           aria-expanded={expanded}
           sx={theme => ({
@@ -345,6 +353,8 @@ interface TeamUsageProps {
   /** When true (with `onCreateTeam`), a "Create Team" action renders in the section header. */
   canCreate?: boolean;
   onCreateTeam?: () => void;
+  /** Called when a team card is expanded to trigger data loading. */
+  onTeamExpand?: (team: TeamInfo) => void;
 }
 
 export const TeamUsage: React.FC<TeamUsageProps> = ({
@@ -356,6 +366,7 @@ export const TeamUsage: React.FC<TeamUsageProps> = ({
   onEditTeam,
   canCreate,
   onCreateTeam,
+  onTeamExpand,
 }) => {
   const createAction =
     canCreate && onCreateTeam ? (
@@ -405,6 +416,7 @@ export const TeamUsage: React.FC<TeamUsageProps> = ({
             usageLoading={getTeamUsageLoading(team.team_id)}
             canManage={canManage}
             onEditTeam={onEditTeam}
+            onExpand={onTeamExpand}
           />
         ))}
       </Box>
