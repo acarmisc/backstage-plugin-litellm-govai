@@ -19,7 +19,7 @@ import {
   type UpdateKeyInput,
 } from '@acarmisc/backstage-plugin-litellm-common';
 import { createKeyForUser, KeyServiceError, type KeyCreateContext } from '../services/keyService';
-import { sendError } from '../errors';
+import { sendError, sanitizeUpstreamMessage } from '../errors';
 import type { RouterContext } from './context';
 import { getProvisionedUser } from './middleware/withUser';
 
@@ -137,7 +137,7 @@ export function registerKeysRoutes(router: Router, ctx: RouterContext): void {
           const keyId = key.token ?? key.key;
           let errorMsg = 'Unknown error';
           if (err instanceof Error) {
-            errorMsg = err.message.substring(0, 200); // Sanitize: cap at 200 chars
+            errorMsg = sanitizeUpstreamMessage(err.message) || 'Unknown error';
           }
           failures.push({ keyId, error: errorMsg });
           logger.warn('key.prune-expired failed', {

@@ -3991,3 +3991,40 @@ describe('PR-2 review follow-ups', () => {
     }
   });
 });
+
+describe('user info cache (router level)', () => {
+  test('a page-load burst hits upstream getUserInfo once per user', async () => {
+    const h = await startHarness({
+      client: mockClient({ userInfo: { user_id: 'alice@example.com', teams: [] } }),
+    });
+    try {
+      const authRef = 'user:default/alice';
+      await Promise.all([
+        req(h.baseUrl, 'GET', '/user/info', { authRef }),
+        req(h.baseUrl, 'GET', '/keys', { authRef }),
+        req(h.baseUrl, 'GET', '/teams', { authRef }),
+      ]);
+      await req(h.baseUrl, 'GET', '/user/info', { authRef });
+      assert.strictEqual(h.client.calls.getUserInfo.length, 1);
+    } finally {
+      h.server.close();
+    }
+  });
+
+  test('a mutation invalidates the cache so the next request re-fetches', async () => {
+    const h = await startHarness({
+      config: { 'litellm.keyGeneration.teamRequired': false, 'litellm.keyGeneration.allowUnlimitedBudget': true },
+      client: mockClient({ userInfo: { user_id: 'alice@example.com', teams: [] } }),
+    });
+    try {
+      const authRef = 'user:default/alice';
+      await req(h.baseUrl, 'GET', '/user/info', { authRef });
+      await req(h.baseUrl, 'POST', '/keys/generate', { authRef, body: { alias: 'k', max_budget: 5 } });
+      const before = h.client.calls.getUserInfo.length;
+      await req(h.baseUrl, 'GET', '/user/info', { authRef });
+      assert.ok(h.client.calls.getUserInfo.length > before);
+    } finally {
+      h.server.close();
+    }
+  });
+});
