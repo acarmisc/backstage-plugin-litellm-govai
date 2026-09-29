@@ -171,12 +171,12 @@ print(response.choices[0].message.content)`,
     ]
   }
 }`,
-    claudeCode: `# Option 1 -- Static key (store in environment or .env)
+    claudeCode: `# Option 1 — Static key (store in environment or .env)
 export ANTHROPIC_AUTH_TOKEN="${key}"
 export ANTHROPIC_BASE_URL="${base}"
 claude --model ${model}
 
-# Option 2 -- Read from OS keychain (macOS or Linux)
+# Option 2 — Read from OS keychain (macOS or Linux)
 # 1. Store this key in your system keychain:
 #    macOS:
 security add-generic-password -s litellm-api-key -a "$USER" -w '<paste key>'
@@ -197,7 +197,7 @@ export CLAUDE_CODE_API_KEY_HELPER_TTL_MS=3600000`,
 
 function aliasHelperText(aliasError: boolean, aliasDuplicate: boolean): string | undefined {
   if (aliasError) return 'Alias is required';
-  if (aliasDuplicate) return 'This alias is already used by one of your keys -- LiteLLM requires aliases to be unique across all keys';
+  if (aliasDuplicate) return 'This alias is already used by one of your keys — LiteLLM requires aliases to be unique across all keys';
   return undefined;
 }
 
@@ -234,7 +234,7 @@ const SnippetTabs: React.FC<SnippetTabsProps> = ({ snippets, model, copyState })
   const fileHint = SNIPPET_FILE_HINTS[tab];
   return (
     <Box>
-      <Tabs value={tab} onChange={(_, v) => setTab((v as unknown) as SnippetTab)} sx={{ mb: 1 }} variant="scrollable">
+      <Tabs value={tab} onChange={(_, v) => setTab(v as SnippetTab)} sx={{ mb: 1 }} variant="scrollable">
         <Tab label="curl" value="curl" />
         <Tab label="OpenAI SDK" value="openai" />
         <Tab label="opencode" value="opencode" />
@@ -276,7 +276,7 @@ const SnippetTabs: React.FC<SnippetTabsProps> = ({ snippets, model, copyState })
         </Typography>
         {model && (
           <Typography variant="caption" color="text.secondary" display="block" mt={1}>
-            Using model "{model}" -- swap it for any model you have access to.
+            Using model “{model}” — swap it for any model you have access to.
           </Typography>
         )}
       </Box>
@@ -372,7 +372,7 @@ export const KeyFormDialog: React.FC<KeyFormDialogProps> = ({
   const selectedTeam = teams.find(t => t.team_id === (isCreate ? generateForm.team_id : undefined)) ?? null;
 
   // Once a team is selected, only offer models that team is actually allowed
-  // to use -- `models` here is already scoped to what the user can access.
+  // to use — `models` here is already scoped to what the user can access.
   // Applies on edit too, so a key can no longer drift out of its team's
   // allowlist via /key/update.
   const availableModels = useMemo(() => {
@@ -392,7 +392,7 @@ export const KeyFormDialog: React.FC<KeyFormDialogProps> = ({
   const canSubmit = !aliasError && !teamError && !budgetInvalid && !submitting;
 
   // Issue #35: warn (don't block) when the alias already matches one of the
-  // user's loaded keys -- LiteLLM enforces globally-unique aliases.
+  // user's loaded keys — LiteLLM enforces globally-unique aliases.
   const aliasDuplicate = !!currentAlias && keys.some(k => k.key_alias === currentAlias && k !== keyToEdit);
 
   // ── Budget estimate at the selected model's input rate ───────────────────
@@ -483,7 +483,7 @@ export const KeyFormDialog: React.FC<KeyFormDialogProps> = ({
     setCloseWithoutCopyConfirm(false);
   };
 
-  // Handle close when showing the secret -- check if copied first
+  // Handle close when showing the secret — check if copied first
   const handleCloseSecretDialog = () => {
     if (newKeyValue && !secretCopied) {
       // Show confirmation before closing
@@ -553,7 +553,7 @@ export const KeyFormDialog: React.FC<KeyFormDialogProps> = ({
               helperText={
                 isCreate
                   ? teamHelperText(teamError, teamRequired)
-                  : 'Team binding is fixed after creation -- delete and recreate the key to change it'
+                  : 'Team binding is fixed after creation — delete and recreate the key to change it'
               }
               required={isCreate && teamRequired}
               fullWidth
@@ -565,7 +565,7 @@ export const KeyFormDialog: React.FC<KeyFormDialogProps> = ({
     if (teamRequired && isCreate) {
       return (
         <Typography variant="body2" color="error">
-          Team selection is required, but you don't belong to any team yet -- contact your administrator.
+          Team selection is required, but you don't belong to any team yet — contact your administrator.
         </Typography>
       );
     }
@@ -689,7 +689,7 @@ export const KeyFormDialog: React.FC<KeyFormDialogProps> = ({
             {newKeySnippets && (
               <Box mt={2}>
                 <Typography variant="caption" color="text.secondary" display="block" gutterBottom>
-                  Public endpoint -- paste into any tool's base URL / API base field
+                  Public endpoint — paste into any tool's base URL / API base field
                 </Typography>
                 <Box
                   display="flex"
@@ -728,7 +728,7 @@ export const KeyFormDialog: React.FC<KeyFormDialogProps> = ({
                 <Box display="flex" alignItems="center" gap={1} mb={1}>
                   <Code fontSize="small" color="action" />
                   <Typography variant="subtitle2">
-                    Start calling the proxy -- paste and run
+                    Start calling the proxy — paste and run
                   </Typography>
                 </Box>
                 <SnippetTabs snippets={newKeySnippets} model={newKeyModel} copyState={clipboardSnippet} />
