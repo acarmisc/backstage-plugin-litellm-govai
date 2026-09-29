@@ -23,6 +23,7 @@
  * one on the plugin page.
  */
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useRouteRef } from '@backstage/frontend-plugin-api';
 import Paper from '@mui/material/Paper';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -52,9 +53,7 @@ import {
   budgetTone,
   fmtBudgetDuration,
 } from '../budget';
-
-/** The module page; `?tab=` picks the tab and `?generate=1` opens the dialog. */
-const MODULE_PATH = '/litellm';
+import { rootRouteRef } from '../routes';
 
 /** Preset action-bar buttons. `label` overrides the default copy. */
 export type BudgetCtaKind = 'new-key' | 'module' | 'all-limits';
@@ -140,7 +139,7 @@ function resetLabel(limit: BudgetLimit): string {
   return window ? `resets ${window}` : 'never resets';
 }
 
-const LevelGauge: React.FC<{ gauge: BudgetGauge; size: number; keysHref: string }> = ({
+const LevelGauge: React.FC<{ gauge: BudgetGauge; size: number; keysHref?: string }> = ({
   gauge,
   size,
   keysHref,
@@ -207,7 +206,7 @@ const LevelGauge: React.FC<{ gauge: BudgetGauge; size: number; keysHref: string 
           >
             {spendCaption(limit)}
           </Typography>
-          {extra > 0 ? (
+          {extra > 0 && keysHref ? (
             <Typography
               component={Link}
               to={keysHref}
@@ -391,7 +390,7 @@ export const LiteLLMBudgetGauges: React.FC<LiteLLMBudgetGaugesProps> = ({
   title = 'Budget',
   size = 72,
   keysHref,
-  moduleHref = MODULE_PATH,
+  moduleHref: propModuleHref,
   onCreateKey,
   ctas,
   maxExpandedKeys = 8,
@@ -404,6 +403,8 @@ export const LiteLLMBudgetGauges: React.FC<LiteLLMBudgetGaugesProps> = ({
   keys: propKeys,
 }) => {
   const api = useApi(liteLlmApiRef);
+  const moduleRouteRef = useRouteRef(rootRouteRef);
+  const moduleHref = propModuleHref ?? moduleRouteRef?.();
   const { userInfo: hookUserInfo, teams: hookTeams, keys: hookKeys, loading: profileLoading, error: profileError } = useLiteLLMProfile();
   const [usageLoading, setUsageLoading] = useState(true);
   const [usageError, setUsageError] = useState<string | null>(null);
@@ -429,7 +430,7 @@ export const LiteLLMBudgetGauges: React.FC<LiteLLMBudgetGaugesProps> = ({
     onExpandedChange?.(next);
   }, [isControlled, isExpanded, onExpandedChange]);
 
-  const keysTabHref = keysHref ?? `${moduleHref}?tab=keys`;
+  const keysTabHref = keysHref ?? (moduleHref ? `${moduleHref}?tab=keys` : undefined);
 
   useEffect(() => {
     let cancelled = false;
@@ -506,12 +507,15 @@ export const LiteLLMBudgetGauges: React.FC<LiteLLMBudgetGaugesProps> = ({
         // The shared plugin-page CTA — identical copy, icon and styling
         // everywhere. Deep-links to the module's generate-key dialog unless
         // the host takes over with `onCreateKey`.
+        if (!onCreateKey && !moduleHref) return null;
         return onCreateKey ? (
           <GenerateKeyButton key={key} size="small" label={label} onClick={onCreateKey} />
         ) : (
           <GenerateKeyButton key={key} size="small" label={label} to={`${moduleHref}?generate=1`} />
         );
       case 'module':
+        // Hide if route is not mounted
+        if (!moduleHref) return null;
         return (
           <Button key={key} size="small" variant="outlined" component={Link} to={moduleHref}>
             {label}
