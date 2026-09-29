@@ -268,7 +268,7 @@ export function registerKeysRoutes(router: Router, ctx: RouterContext): void {
       }
 
       const result = await client.updateKey(upstreamRequest);
-      logger.info({ action: 'key.update', userId: tokenEntityRef ?? 'unknown', keyId });
+      logger.info('key.update', { userId: tokenEntityRef ?? 'unknown', keyId });
       res.json(result);
     } catch (error: any) {
       if (sendOwnershipError(error, res)) return;
@@ -291,7 +291,7 @@ export function registerKeysRoutes(router: Router, ctx: RouterContext): void {
 
       const { tokenEntityRef } = await authorizeKeyAction(req, keyId);
       await client.deleteKeys({ keys: [keyId] });
-      logger.info({ action: 'key.delete', userId: tokenEntityRef ?? 'unknown', keyId });
+      logger.info('key.delete', { userId: tokenEntityRef ?? 'unknown', keyId });
       res.json({ success: true });
     } catch (error: any) {
       if (sendOwnershipError(error, res)) return;
@@ -324,7 +324,7 @@ export function registerKeysRoutes(router: Router, ctx: RouterContext): void {
         metadata: updatedMetadata,
       });
 
-      logger.info({ action: 'key.block', userId: tokenEntityRef ?? 'unknown', keyId });
+      logger.info('key.block', { userId: tokenEntityRef ?? 'unknown', keyId });
       res.json({ success: true });
     } catch (error: any) {
       if (sendOwnershipError(error, res)) return;
@@ -364,7 +364,7 @@ export function registerKeysRoutes(router: Router, ctx: RouterContext): void {
         metadata: updatedMetadata,
       });
 
-      logger.info({ action: 'key.unblock', userId: tokenEntityRef ?? 'unknown', keyId });
+      logger.info('key.unblock', { userId: tokenEntityRef ?? 'unknown', keyId });
       res.json({ success: true });
     } catch (error: any) {
       if (sendOwnershipError(error, res)) return;
@@ -392,7 +392,7 @@ export function registerKeysRoutes(router: Router, ctx: RouterContext): void {
 
       const { tokenEntityRef } = await authorizeKeyAction(req, keyId);
       await client.resetKeySpend(keyId);
-      logger.info({ action: 'key.reset_spend', userId: tokenEntityRef ?? 'unknown', keyId });
+      logger.info('key.reset_spend', { userId: tokenEntityRef ?? 'unknown', keyId });
       res.json({ success: true });
     } catch (error: any) {
       if (sendOwnershipError(error, res)) return;

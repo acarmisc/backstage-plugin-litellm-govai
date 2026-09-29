@@ -1,6 +1,5 @@
 import express, { Router, Request, Response } from 'express';
-import { Config } from '@backstage/config';
-import { AuthService, DiscoveryService, PermissionsService } from '@backstage/backend-plugin-api';
+import { AuthService, DiscoveryService, PermissionsService, LoggerService, RootConfigService } from '@backstage/backend-plugin-api';
 import { AuthorizeResult, BasicPermission } from '@backstage/plugin-permission-common';
 import { CatalogClient } from '@backstage/catalog-client';
 import { LiteLLMClient, LiteLLMUpstreamError } from './client';
@@ -37,8 +36,8 @@ import { withTeamFetchRetry } from './http/teamFetch';
 export { ProvisioningError };
 
 export interface RouterOptions {
-  config: Config;
-  logger: any;
+  config: RootConfigService;
+  logger: LoggerService;
   auth: AuthService;
   discovery: DiscoveryService;
   permissions: PermissionsService;

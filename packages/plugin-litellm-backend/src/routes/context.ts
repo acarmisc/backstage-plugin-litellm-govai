@@ -1,5 +1,5 @@
 import { Response, Request } from 'express';
-import { AuthService, PermissionsService } from '@backstage/backend-plugin-api';
+import { AuthService, PermissionsService, LoggerService } from '@backstage/backend-plugin-api';
 import { BasicPermission } from '@backstage/plugin-permission-common';
 import { CatalogClient } from '@backstage/catalog-client';
 import { LiteLLMClient } from '../client';
@@ -24,7 +24,7 @@ export interface RouterContext {
   catalogClient: CatalogClient;
   auth: AuthService;
   permissions: PermissionsService;
-  logger: any;
+  logger: LoggerService;
 
   // Config-derived values
   baseUrl: string;

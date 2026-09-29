@@ -1,5 +1,5 @@
 import { Config } from '@backstage/config';
-import { AuthService, BackstageCredentials } from '@backstage/backend-plugin-api';
+import { AuthService, BackstageCredentials, LoggerService } from '@backstage/backend-plugin-api';
 import { CatalogClient } from '@backstage/catalog-client';
 import { Request } from 'express';
 import { LiteLLMClient } from './client';
@@ -174,7 +174,7 @@ export async function resolveUserProfile(
   userEntityRef: string,
   catalogClient: CatalogClient,
   auth: AuthService,
-  logger: any,
+  logger: LoggerService,
 ): Promise<BackstageUserProfile> {
   try {
     const { token } = await auth.getPluginRequestToken({
@@ -205,7 +205,7 @@ export async function provisionUser(
   defaults: ProvisioningDefaults,
   profile: BackstageUserProfile,
   backstageEntity: string | undefined,
-  logger: any,
+  logger: LoggerService,
 ): Promise<UserInfo | null> {
   const payload = {
     user_id: userId,
@@ -321,7 +321,7 @@ export async function getOrProvisionUser(
   roleConfigs: RoleConfig[],
   catalogClient: CatalogClient,
   auth: AuthService,
-  logger: any,
+  logger: LoggerService,
 ): Promise<UserInfo> {
   if (!userId) {
     throw new ProvisioningError(
@@ -444,7 +444,7 @@ export async function isUserMemberOfGroup(
   group: string,
   catalogClient: CatalogClient,
   auth: AuthService,
-  logger: any,
+  logger: LoggerService,
 ): Promise<boolean> {
   try {
     const { token } = await auth.getPluginRequestToken({
@@ -471,7 +471,7 @@ export async function resolveUserRole(
   roleConfigs: RoleConfig[],
   catalogClient: CatalogClient,
   auth: AuthService,
-  logger: any,
+  logger: LoggerService,
 ): Promise<RoleConfig | undefined> {
   if (!roleConfigs.length) return undefined;
   try {

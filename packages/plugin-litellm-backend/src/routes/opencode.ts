@@ -246,8 +246,7 @@ export function registerOpencodeRoutes(router: Router, ctx: RouterContext): void
         const url = new URL(redirectUri);
         url.searchParams.set('key', key);
         if (teamId) url.searchParams.set('team', teamId);
-        logger.info({
-          action: 'opencode.connect',
+        logger.info('opencode.connect', {
           userId,
           team: teamId ?? null,
           rotated,

@@ -104,8 +104,7 @@ export function registerObjectPermissionsRoutes(router: Router, ctx: RouterConte
             updated_at_iso: new Date().toISOString(),
           },
         });
-        logger.info({
-          action: 'team.knowledgebase.set',
+        logger.info('team.knowledgebase.set', {
           actor,
           teamId,
           owningGroup,
@@ -207,8 +206,7 @@ export function registerObjectPermissionsRoutes(router: Router, ctx: RouterConte
             updated_at_iso: new Date().toISOString(),
           },
         });
-        logger.info({
-          action: 'team.mcp.set',
+        logger.info('team.mcp.set', {
           actor,
           teamId,
           owningGroup,

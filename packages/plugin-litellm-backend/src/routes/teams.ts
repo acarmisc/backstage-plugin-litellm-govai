@@ -119,8 +119,7 @@ export function registerTeamsRoutes(router: Router, ctx: RouterContext): void {
 
     const createPromise = (async () => {
       const result = await client.createTeam(payload);
-      logger.info({
-        action: 'team.create',
+      logger.info('team.create', {
         actor: check.userEntityRef,
         teamAlias: v.value.team_alias,
         owningGroup: teamAdminCfg.group,
@@ -189,8 +188,7 @@ export function registerTeamsRoutes(router: Router, ctx: RouterContext): void {
 
     try {
       const r = await client.updateTeam(payload);
-      logger.info({
-        action: 'team.update',
+      logger.info('team.update', {
         actor,
         teamId,
         owningGroup,
@@ -240,7 +238,7 @@ export function registerTeamsRoutes(router: Router, ctx: RouterContext): void {
 
     try {
       await client.deleteTeam(teamId);
-      logger.info({ action: 'team.delete', actor, teamId, owningGroup, force });
+      logger.info('team.delete', { actor, teamId, owningGroup, force });
       res.json({ success: true });
     } catch (err: any) {
       sendTeamError(err, res);
@@ -391,8 +389,7 @@ export function registerTeamsRoutes(router: Router, ctx: RouterContext): void {
             max_budget_in_team: maxBudgetInTeam,
           }),
         });
-        logger.info({
-          action: 'team.member.add',
+        logger.info('team.member.add', {
           actor,
           teamId,
           member: litellmUserId,
@@ -433,8 +430,7 @@ export function registerTeamsRoutes(router: Router, ctx: RouterContext): void {
           team_id: teamId,
           user_id: litellmUserId,
         });
-        logger.info({
-          action: 'team.member.remove',
+        logger.info('team.member.remove', {
           actor,
           teamId,
           member: litellmUserId,

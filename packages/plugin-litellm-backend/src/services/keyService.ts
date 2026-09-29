@@ -6,7 +6,7 @@
  * and explicit upstream request construction.
  */
 
-import { AuthService } from '@backstage/backend-plugin-api';
+import { AuthService, LoggerService } from '@backstage/backend-plugin-api';
 import { CatalogClient } from '@backstage/catalog-client';
 import { LiteLLMClient } from '../client';
 import {
@@ -41,7 +41,7 @@ export interface KeyCreateContext {
   };
   catalogClient?: CatalogClient;
   auth?: AuthService;
-  logger: any; // LoggerService doesn't have consistent interface across versions
+  logger: LoggerService;
   keyValidationConfig: KeyValidationConfig;
   provisioningEnabled: boolean;
   provisioningDefaults: ProvisioningDefaults;
@@ -263,6 +263,6 @@ export async function createKeyForUser(
 
   // ── Call upstream LiteLLM ───────────────────────────────────────────
   const result: GenerateKeyResponse = await client.generateKey(upstreamRequest);
-  logger.info({ action: 'key.generate', userId: user.userId, keyAlias: input.alias });
+  logger.info('key.generate', { userId: user.userId, keyAlias: input.alias });
   return result;
 }
