@@ -88,9 +88,10 @@ export function toHttpError(error: unknown): {
       };
     }
 
-    // 4xx (other than 401/403) → 400 with sanitized message and param
+    // 4xx (other than 401/403) → sanitized message and param. Not-found and
+    // conflict keep their meaning; everything else collapses to 400.
     return {
-      status: 400,
+      status: error.status === 404 || error.status === 409 ? error.status : 400,
       body: {
         error: sanitizeUpstreamMessage(error.message),
         ...(error.param ? { param: error.param } : {}),
