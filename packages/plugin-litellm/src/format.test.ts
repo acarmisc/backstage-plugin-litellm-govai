@@ -112,3 +112,79 @@ describe('fmtLimits', () => {
     assert.strictEqual(fmtLimits(1000000, 100000), '1,000,000 / 100,000');
   });
 });
+
+import { modelsWithUsage } from './format';
+
+describe('modelsWithUsage', () => {
+  const mockModels = [
+    { model_name: 'gpt-4' },
+    { model_name: 'gpt-3.5-turbo' },
+    { model_name: 'claude-3-opus' },
+    { model_name: 'unused-model' },
+  ];
+
+  test('returns all models when usage is null', () => {
+    const result = modelsWithUsage(null, mockModels);
+    assert.deepStrictEqual(result, ['gpt-4', 'gpt-3.5-turbo', 'claude-3-opus', 'unused-model']);
+  });
+
+  test('returns all models when usage_by_model is undefined', () => {
+    const result = modelsWithUsage({}, mockModels);
+    assert.deepStrictEqual(result, ['gpt-4', 'gpt-3.5-turbo', 'claude-3-opus', 'unused-model']);
+  });
+
+  test('filters to only models with usage', () => {
+    const usage = {
+      usage_by_model: {
+        'gpt-4': {
+          total_spend: 10,
+          prompt_tokens: 100,
+          completion_tokens: 50,
+          total_tokens: 150,
+          api_requests: 5,
+          successful_requests: 5,
+          failed_requests: 0,
+        },
+        'claude-3-opus': {
+          total_spend: 5,
+          prompt_tokens: 50,
+          completion_tokens: 25,
+          total_tokens: 75,
+          api_requests: 3,
+          successful_requests: 3,
+          failed_requests: 0,
+        },
+      },
+    };
+    const result = modelsWithUsage(usage, mockModels);
+    assert.deepStrictEqual(result, ['gpt-4', 'claude-3-opus']);
+  });
+
+  test('preserves order from the models list', () => {
+    const usage = {
+      usage_by_model: {
+        'gpt-3.5-turbo': {
+          total_spend: 1,
+          prompt_tokens: 10,
+          completion_tokens: 5,
+          total_tokens: 15,
+          api_requests: 1,
+          successful_requests: 1,
+          failed_requests: 0,
+        },
+        'gpt-4': {
+          total_spend: 20,
+          prompt_tokens: 200,
+          completion_tokens: 100,
+          total_tokens: 300,
+          api_requests: 10,
+          successful_requests: 10,
+          failed_requests: 0,
+        },
+      },
+    };
+    const result = modelsWithUsage(usage, mockModels);
+    // Should be in the order they appear in mockModels, not usage_by_model
+    assert.deepStrictEqual(result, ['gpt-4', 'gpt-3.5-turbo']);
+  });
+});

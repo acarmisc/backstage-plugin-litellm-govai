@@ -57,3 +57,35 @@ export const fmtLimits = (tpm: number | null | undefined, rpm: number | null | u
   }
   return `${tpmStr} / ${rpmStr}`;
 };
+
+export interface ModelInfo {
+  model_name: string;
+}
+
+export interface UsageModelBreakdown {
+  total_spend: number;
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
+  api_requests: number;
+  successful_requests: number;
+  failed_requests: number;
+}
+
+/**
+ * Filter models to only those that have usage data in the given period.
+ * Keeps 'all' as a first option and extracts model names from the full list,
+ * then filters to only those present in the usage breakdown.
+ */
+export const modelsWithUsage = (
+  usage: { usage_by_model?: Record<string, UsageModelBreakdown> } | null,
+  models: ModelInfo[],
+): string[] => {
+  if (!usage?.usage_by_model) {
+    return models.map(m => m.model_name);
+  }
+  const modelsInUsage = new Set(Object.keys(usage.usage_by_model));
+  return models
+    .map(m => m.model_name)
+    .filter(name => modelsInUsage.has(name));
+};
