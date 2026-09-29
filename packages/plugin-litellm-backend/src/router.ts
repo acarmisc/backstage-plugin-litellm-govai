@@ -1,10 +1,9 @@
-import express, { Router, Request, Response, NextFunction } from 'express';
+import express, { Router, Request, Response } from 'express';
 import { Config } from '@backstage/config';
 import { AuthService, DiscoveryService, PermissionsService } from '@backstage/backend-plugin-api';
 import { AuthorizeResult, BasicPermission } from '@backstage/plugin-permission-common';
 import { CatalogClient } from '@backstage/catalog-client';
 import { LiteLLMClient, LiteLLMUpstreamError } from './client';
-import { openApiSpec } from './openapi';
 import {
   VirtualKey,
   ModelInfo,
@@ -21,7 +20,6 @@ import {
   getOrProvisionUser,
   readProvisioningDefaults,
   readRoleConfigs,
-  applyRoleOverrides,
   isUserMemberOfGroup,
   ProvisioningError,
 } from './provisioning';
@@ -75,6 +73,10 @@ import {
 } from './teamBudgetVisibility';
 import { readOpencodeConfig } from './opencode';
 import { sendError } from './errors';
+import type { RouterContext } from './routes/context';
+import { createRequireUser, getProvisionedUser } from './routes/middleware/withUser';
+import { respondTeamList } from './http/respondTeam';
+import { registerConfigRoutes } from './routes/config';
 
 export { ProvisioningError };
 
@@ -221,6 +223,170 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
     );
   }
 
+  // Build shared RouterContext with config and helpers
+  const ctx: RouterContext = {
+    client,
+    catalogClient,
+    auth,
+    permissions,
+    logger,
+    baseUrl,
+    publicBaseUrl,
+    userIdDomain,
+    provisioningEnabled,
+    provisioningDefaults,
+    roleConfigs,
+    auditGroup,
+    allowUnlimitedBudget,
+    teamRequired,
+    allowOwnerResetSpend,
+    keyValidationConfig,
+    teamMgmtEnabled,
+    objectPermsEnabled,
+    teamAdminCfg,
+    teamBudgetVisibility,
+    opencodeCfg,
+
+    // Helper functions - defined inline below this object
+    authorizeKeyAction: async (req: Request, keyId: string) => {
+      const tokenEntityRef = req.res!.locals.tokenEntityRef as string;
+      const userId = req.res!.locals.userId as string;
+      const ownKeys = await client.listKeys(userId);
+      const key = ownKeys.find(k => (k.token ?? k.key) === keyId);
+      if (!key) {
+        throw Object.assign(new Error('Access denied: key does not belong to the caller'), {
+          status: 403,
+          body: { error: 'Access denied: key does not belong to the caller' },
+        });
+      }
+      return { tokenEntityRef, userId, key };
+    },
+
+    sendOwnershipError: (err: any, res: Response): boolean => {
+      if (err && typeof err.status === 'number' && err.body) {
+        res.status(err.status).json(err.body);
+        return true;
+      }
+      return false;
+    },
+
+    assertPermission: async (req: Request, permission: BasicPermission): Promise<boolean> => {
+      const credentials = await resolveCredentials(req, auth);
+      if (!credentials) return false;
+      const [decision] = await permissions.authorize([{ permission }], {
+        credentials,
+      });
+      return decision.result === AuthorizeResult.ALLOW;
+    },
+
+    sendPermissionDenied: (res: Response, permission: BasicPermission): void => {
+      res.status(403).json({
+        error: `Access denied: missing permission "${permission.name}"`,
+      });
+    },
+
+    requireTeamMgmt: (res: Response): boolean => {
+      if (!teamMgmtEnabled) {
+        res.status(403).json({
+          error: 'Team management is disabled (requires permission.enabled and litellm.teamAdmin.group)',
+        });
+        return false;
+      }
+      return true;
+    },
+
+    requireObjectPerms: (res: Response): boolean => {
+      if (!ctx.requireTeamMgmt(res)) return false;
+      if (!objectPermsEnabled) {
+        res.status(403).json({
+          error:
+            'Knowledge-base / MCP management is disabled (set litellm.teamAdmin.objectPermissions.enabled: true, with a permission policy and the allowlists in place)',
+        });
+        return false;
+      }
+      return true;
+    },
+
+    sendTeamError: (err: any, res: Response): void => {
+      sendError(res, err, logger, 'team operation');
+    },
+
+    authorizeTeamSubresource: async (
+      req: Request,
+      res: Response,
+      permission: BasicPermission,
+    ): Promise<
+      | { teamId: string; owningGroup: string; actor: string; team: TeamInfo }
+      | null
+    > => {
+      if (!ctx.requireTeamMgmt(res)) return null;
+
+      const check = await assertTeamAdmin({
+        req,
+        auth,
+        permissions,
+        catalogClient,
+        teamAdminGroup: teamAdminCfg.group!,
+        permission,
+        logger,
+      });
+      if (!check.ok) {
+        res.status(check.status).json({ error: check.error });
+        return null;
+      }
+
+      const { teamId } = req.params;
+      if (!teamId) {
+        res.status(400).json({ error: 'teamId is required' });
+        return null;
+      }
+
+      let existing;
+      try {
+        existing = await withTeamFetchRetry(() => client.getTeamInfo(teamId));
+      } catch (err: any) {
+        if (err instanceof LiteLLMUpstreamError && err.status === 404) {
+          res.status(404).json({ error: 'Team not found' });
+          return null;
+        }
+        ctx.sendTeamError(err, res);
+        return null;
+      }
+
+      const owningGroup =
+        typeof existing.metadata?.owning_group === 'string'
+          ? existing.metadata.owning_group
+          : undefined;
+      if (!owningGroup) {
+        res.status(403).json({
+          error:
+            'This team is not managed by Backstage team admins and cannot be edited here',
+        });
+        return null;
+      }
+      const owns = await isUserMemberOfGroup(
+        check.userEntityRef,
+        owningGroup,
+        catalogClient,
+        auth,
+        logger,
+      );
+      if (!owns) {
+        res
+          .status(403)
+          .json({ error: `Access denied: team is owned by ${owningGroup}` });
+        return null;
+      }
+
+      return {
+        teamId,
+        owningGroup,
+        actor: check.userEntityRef,
+        team: existing,
+      };
+    },
+  };
+
   const router = Router();
   // JSON body parser. Without this, every POST/PUT endpoint sees an empty
   // req.body. Backstage's httpRouter does not apply a body parser at the
@@ -233,121 +399,16 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
   // comes ONLY from a verified Backstage user principal — never from the query
   // string or body — so service/external principals (and anonymous callers)
   // are rejected instead of being allowed to name an arbitrary user_id.
-  const requireUser = async (req: Request, res: Response, next: NextFunction) => {
-    const tokenEntityRef = await resolveUserId(req, auth);
-    if (!tokenEntityRef) {
-      res.status(401).json({ error: 'A Backstage user credential is required' });
-      return;
-    }
-    res.locals.tokenEntityRef = tokenEntityRef;
-    res.locals.userId = toLiteLLMUserId(tokenEntityRef, userIdDomain);
-    next();
-  };
+  const requireUser = createRequireUser(ctx);
   router.use(['/user/info', '/keys', '/usage'], requireUser);
 
-  router.get('/health', (_req: Request, res: Response) => {
-    res.json({ status: 'ok', provisioning: provisioningEnabled });
-  });
-
-  // Exposes the public LiteLLM proxy URL so the frontend can build
-  // ready-to-paste curl / OpenAI-SDK snippets for freshly generated keys.
-  router.get('/config', (_req: Request, res: Response) => {
-    res.json({
-      baseUrl: publicBaseUrl,
-      keyGeneration: { allowUnlimitedBudget, teamRequired },
-      keyActions: { allowOwnerResetSpend },
-      opencode: { enabled: opencodeCfg.enabled },
-      teamManagement: {
-        enabled: teamMgmtEnabled,
-        maxBudgetCeiling: teamAdminCfg.maxBudgetCeiling,
-        allowUnlimitedBudget: teamAdminCfg.allowUnlimitedBudget,
-        objectPermissionsEnabled: objectPermsEnabled,
-      },
-      display: {
-        hideTeamBudgetForMembers:
-          teamBudgetVisibility.hideTeamBudgetForMembers,
-        hideTeamBudgetForManagers:
-          teamBudgetVisibility.hideTeamBudgetForManagers,
-      },
-    });
-  });
-
-  // Self-hosted OpenAPI 3.1 contract — lets integrators read a spec instead
-  // of router.ts. No swagger-ui dependency; serve the JSON and point external
-  // renderers (Stoplight, Swagger UI hosted elsewhere) at this endpoint.
-  router.get('/openapi.json', (_req: Request, res: Response) => {
-    res.json(openApiSpec);
-  });
-
-  // Provisioning dry-run: resolves which role a Backstage group maps to and
-  // echoes the effective defaults, collapsing the config → deploy → test loop
-  // into one request. Admin-gated by the audit group (same RBAC as /audit).
-  router.get('/provisioning/preview', async (req: Request, res: Response) => {
-    if (!auditGroup) {
-      res.status(403).json({ error: 'Preview is not configured (litellm.audit.group not set)' });
-      return;
-    }
-    const tokenEntityRef = await resolveUserId(req, auth);
-    if (!tokenEntityRef) {
-      res.status(401).json({ error: 'Authentication required' });
-      return;
-    }
-    const allowed = await isUserMemberOfGroup(
-      tokenEntityRef,
-      auditGroup,
-      catalogClient,
-      auth,
-      logger,
-    );
-    if (!allowed) {
-      res.status(403).json({ error: 'Access denied: not a member of the audit group' });
-      return;
-    }
-    const group = (req.query.group as string | undefined)?.trim();
-    if (!group) {
-      res.status(400).json({ error: 'group query parameter is required (e.g. group=group:default/ai-platform)' });
-      return;
-    }
-    if (!roleConfigs.length) {
-      res.json({
-        group,
-        matched_role: null,
-        effective_defaults: provisioningDefaults,
-        note: 'No litellm.provisioning.roles configured — every group receives the base defaults.',
-      });
-      return;
-    }
-    try {
-      const matched = roleConfigs.find(rc => rc.group === group);
-      const effective = matched
-        ? applyRoleOverrides(provisioningDefaults, matched)
-        : provisioningDefaults;
-      res.json({
-        group,
-        matched_role: matched?.group ?? null,
-        effective_defaults: effective,
-      });
-    } catch (error: any) {
-      sendError(res, error, logger, 'resolve provisioning preview');
-    }
-  });
+  // Register config routes (/health, /config, /openapi.json, /provisioning/preview)
+  registerConfigRoutes(router, ctx);
 
   router.get('/user/info', async (_req: Request, res: Response) => {
     try {
       const tokenEntityRef = res.locals.tokenEntityRef as string;
-      const userId = res.locals.userId as string;
-
-      const userInfo = await getOrProvisionUser(
-        client,
-        tokenEntityRef,
-        userId,
-        provisioningEnabled,
-        provisioningDefaults,
-        roleConfigs,
-        catalogClient,
-        auth,
-        logger,
-      );
+      const userInfo = await getProvisionedUser(ctx, res);
       const canViewAudit =
         auditGroup && tokenEntityRef
           ? await isUserMemberOfGroup(
@@ -370,20 +431,9 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
 
   router.get('/keys', async (_req: Request, res: Response) => {
     try {
-      const tokenEntityRef = res.locals.tokenEntityRef as string;
       const userId = res.locals.userId as string;
 
-      await getOrProvisionUser(
-        client,
-        tokenEntityRef,
-        userId,
-        provisioningEnabled,
-        provisioningDefaults,
-        roleConfigs,
-        catalogClient,
-        auth,
-        logger,
-      );
+      await getProvisionedUser(ctx, res);
 
       const keys: VirtualKey[] = await client.listKeys(userId);
       res.json(keys);
@@ -1052,20 +1102,7 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
 
   router.get('/teams', requireUser, async (_req: Request, res: Response) => {
     try {
-      const tokenEntityRef = res.locals.tokenEntityRef as string;
-      const userId = res.locals.userId as string;
-
-      const userInfo = await getOrProvisionUser(
-        client,
-        tokenEntityRef,
-        userId,
-        provisioningEnabled,
-        provisioningDefaults,
-        roleConfigs,
-        catalogClient,
-        auth,
-        logger,
-      );
+      const userInfo = await getProvisionedUser(ctx, res);
 
       if (!userInfo?.teams?.length) {
         res.json([]);
@@ -1073,7 +1110,7 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
       }
 
       const teams = await Promise.all(
-        userInfo.teams.map(teamId =>
+        userInfo.teams.map((teamId: string) =>
           withTeamFetchRetry(() => client.getTeamInfo(teamId)).catch(err => {
             logger.warn(`Failed to fetch team ${teamId} after retries: ${err.message}`);
             return null;
@@ -1083,11 +1120,7 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
       const list = teams.filter(Boolean) as TeamInfo[];
       // Member surface: strip dollar amounts when the operator hides them
       // from members. Managers who need the numbers use /teams/managed.
-      res.json(
-        teamBudgetVisibility.hideTeamBudgetForMembers
-          ? list.map(redactTeamBudget)
-          : list,
-      );
+      respondTeamList(res, list, ctx, 'member');
     } catch (error: any) {
       if (error instanceof ProvisioningError) {
         res.status(error.status).json(error.body);
