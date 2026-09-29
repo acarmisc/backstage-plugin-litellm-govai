@@ -60,7 +60,7 @@ export function registerBridgeRoutes(router: Router, ctx: RouterContext, bridgeO
       return verifier.verify(token);
     };
 
-    const handleBridgeError = (error: any, res: Response) => {
+    const handleBridgeError = (error: unknown, res: Response) => {
       if (error instanceof BridgeAuthError) {
         // Log the jose error details server-side, send opaque 401 to client
         logger.warn(`Bridge auth error: ${error.message}`);
