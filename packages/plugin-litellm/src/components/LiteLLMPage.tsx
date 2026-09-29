@@ -410,26 +410,72 @@ export const LiteLLMPage: React.FC = () => {
         tabs={pageTabs}
       />
 
-      {activeTab === 'overview' && (
-        <Grid container spacing={2} alignItems="flex-start">
-          <Grid item xs={12} lg={8}>
-            <UsageStats
-              usage={usage ?? null}
-              usageError={usageError}
-              onRetryUsage={refreshUsage}
-              models={allModels ?? []}
-              dateRange={dateRange}
-              currentPreset={currentPreset}
-              onDateRangeChange={handleDateRangeChange}
-              loading={usageLoading}
-              userInfo={userInfo}
-            />
+      {activeTab === 'overview' && (() => {
+        // Show onboarding when keys have loaded without error and list is empty
+        if (!keysLoading && !keysError && keys?.length === 0) {
+          return (
+            <Box sx={{ maxWidth: 600, mx: 'auto', py: 4 }}>
+              <Box
+                sx={{
+                  textAlign: 'center',
+                  py: 6,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  gap: 3,
+                }}
+              >
+                <Typography variant="h5" sx={{ fontWeight: 600 }}>
+                  Create your first API key
+                </Typography>
+                <Box
+                  component="ol"
+                  sx={{
+                    textAlign: 'left',
+                    pl: 3,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 1,
+                    '& li': { color: 'text.secondary' },
+                  }}
+                >
+                  <li>Generate a key</li>
+                  <li>Copy the endpoint</li>
+                  <li>Make a call</li>
+                </Box>
+                <Button
+                  variant="contained"
+                  color="primary"
+                  onClick={() => setGenerateDialogOpen(true)}
+                >
+                  Generate API Key
+                </Button>
+              </Box>
+            </Box>
+          );
+        }
+
+        return (
+          <Grid container spacing={2} alignItems="flex-start">
+            <Grid item xs={12} lg={8}>
+              <UsageStats
+                usage={usage ?? null}
+                usageError={usageError}
+                onRetryUsage={refreshUsage}
+                models={allModels ?? []}
+                dateRange={dateRange}
+                currentPreset={currentPreset}
+                onDateRangeChange={handleDateRangeChange}
+                loading={usageLoading}
+                userInfo={userInfo}
+              />
+            </Grid>
+            <Grid item xs={12} lg={4}>
+              <LiteLLMBudgetWidget compact collapsible userInfo={userInfo ?? null} teams={teams} keys={keys ?? []} />
+            </Grid>
           </Grid>
-          <Grid item xs={12} lg={4}>
-            <LiteLLMBudgetWidget compact collapsible userInfo={userInfo ?? null} teams={teams} keys={keys ?? []} />
-          </Grid>
-        </Grid>
-      )}
+        );
+      })()}
 
       {activeTab === 'keys' && (() => {
         if (keysError) {
