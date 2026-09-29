@@ -1,6 +1,7 @@
 import express, { Router, Request, Response } from 'express';
 import { AuthService, DiscoveryService, PermissionsService, LoggerService, RootConfigService } from '@backstage/backend-plugin-api';
 import { AuthorizeResult, BasicPermission } from '@backstage/plugin-permission-common';
+import { NotAllowedError } from '@backstage/errors';
 import { CatalogClient } from '@backstage/catalog-client';
 import { LiteLLMClient, LiteLLMUpstreamError } from './client';
 import { TeamInfo } from './types';
@@ -143,18 +144,24 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
       const ownKeys = await client.listKeys(userId);
       const key = ownKeys.find(k => (k.token ?? k.key) === keyId);
       if (!key) {
-        throw Object.assign(new Error('Access denied: key does not belong to the caller'), {
-          status: 403,
-          body: { error: 'Access denied: key does not belong to the caller' },
-        });
+        throw new NotAllowedError('Access denied: key does not belong to the caller');
       }
       return { tokenEntityRef, userId, key };
     },
 
-    sendOwnershipError: (err: any, res: Response): boolean => {
-      if (err && typeof err.status === 'number' && err.body) {
-        res.status(err.status).json(err.body);
+    sendOwnershipError: (err: unknown, res: Response): boolean => {
+      // Handle NotAllowedError from authorizeKeyAction
+      if (err instanceof NotAllowedError) {
+        res.status(403).json({ error: err.message });
         return true;
+      }
+      // Fallback for legacy errors with status and body
+      if (err && typeof err === 'object' && 'status' in err && 'body' in err) {
+        const errObj = err as any;
+        if (typeof errObj.status === 'number' && errObj.body) {
+          res.status(errObj.status).json(errObj.body);
+          return true;
+        }
       }
       return false;
     },
@@ -196,7 +203,7 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
       return true;
     },
 
-    sendTeamError: (err: any, res: Response): void => {
+    sendTeamError: (err: unknown, res: Response): void => {
       sendError(res, err, logger, 'team operation');
     },
 

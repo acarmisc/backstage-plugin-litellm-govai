@@ -50,7 +50,7 @@ export interface RouterContext {
     keyId: string,
   ): Promise<{ tokenEntityRef: string; userId: string; key: VirtualKey }>;
 
-  sendOwnershipError(err: any, res: Response): boolean;
+  sendOwnershipError(err: unknown, res: Response): boolean;
 
   assertPermission(
     req: Request,
@@ -63,7 +63,7 @@ export interface RouterContext {
 
   requireObjectPerms(res: Response): boolean;
 
-  sendTeamError(err: any, res: Response): void;
+  sendTeamError(err: unknown, res: Response): void;
 
   authorizeTeamSubresource(
     req: Request,
