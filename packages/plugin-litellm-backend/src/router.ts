@@ -39,6 +39,8 @@ import {
   litellmKeyCreatePermission,
   litellmKeyRevokePermission,
   litellmKeyManagePermission,
+  litellmKeyResetSpendPermission,
+  litellmKeyUnblockPermission,
   litellmAuditReadPermission,
   litellmTeamCreatePermission,
   litellmTeamManagePermission,
@@ -166,6 +168,7 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
   const auditGroup = config.getOptionalString('litellm.audit.group');
   const allowUnlimitedBudget = config.getOptionalBoolean('litellm.keyGeneration.allowUnlimitedBudget') ?? false;
   const teamRequired = config.getOptionalBoolean('litellm.keyGeneration.teamRequired') ?? true;
+  const allowOwnerResetSpend = config.getOptionalBoolean('litellm.keyActions.allowOwnerResetSpend') ?? false;
   // Key validation ceilings (PR-2)
   const keyMaxBudget = config.getOptionalNumber('litellm.keys.maxBudget') ?? 100;
   const keyMaxTpm = config.getOptionalNumber('litellm.keys.maxTpm') ?? 100000;
@@ -245,6 +248,7 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
     res.json({
       baseUrl: publicBaseUrl,
       keyGeneration: { allowUnlimitedBudget, teamRequired },
+      keyActions: { allowOwnerResetSpend },
       opencode: { enabled: opencodeCfg.enabled },
       teamManagement: {
         enabled: teamMgmtEnabled,
@@ -922,8 +926,22 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
         return;
       }
 
-      const { tokenEntityRef } = await authorizeKeyAction(req, keyId);
+      const { tokenEntityRef, key } = await authorizeKeyAction(req, keyId);
+
+      // Record metadata: who blocked this key and when
+      const updatedMetadata = {
+        ...(key.metadata ?? {}),
+        blocked_by: tokenEntityRef,
+        blocked_at: new Date().toISOString(),
+      };
+
       await client.blockKey(keyId);
+      // Also update the key's metadata to record blocked_by and blocked_at
+      await client.updateKey({
+        key: keyId,
+        metadata: updatedMetadata,
+      });
+
       logger.info({ action: 'key.block', userId: tokenEntityRef ?? 'unknown', keyId });
       res.json({ success: true });
     } catch (error: any) {
@@ -937,13 +955,34 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
     try {
       const { keyId } = req.params;
 
-      if (!(await assertPermission(req, litellmKeyManagePermission))) {
-        sendPermissionDenied(res, litellmKeyManagePermission);
-        return;
+      const { tokenEntityRef, key } = await authorizeKeyAction(req, keyId);
+
+      // Check if the key can be unblocked:
+      // - Owner can unblock a self-blocked key (metadata.blocked_by === tokenEntityRef)
+      // - Otherwise require the unblock permission
+      const isOwnerUnblockingOwnBlock = key.metadata?.blocked_by === tokenEntityRef;
+
+      if (!isOwnerUnblockingOwnBlock) {
+        if (!(await assertPermission(req, litellmKeyUnblockPermission))) {
+          sendPermissionDenied(res, litellmKeyUnblockPermission);
+          return;
+        }
       }
 
-      const { tokenEntityRef } = await authorizeKeyAction(req, keyId);
       await client.unblockKey(keyId);
+
+      // Clear the blocked_by metadata on unblock
+      const updatedMetadata = {
+        ...(key.metadata ?? {}),
+      };
+      delete updatedMetadata.blocked_by;
+      delete updatedMetadata.blocked_at;
+
+      await client.updateKey({
+        key: keyId,
+        metadata: updatedMetadata,
+      });
+
       logger.info({ action: 'key.unblock', userId: tokenEntityRef ?? 'unknown', keyId });
       res.json({ success: true });
     } catch (error: any) {
@@ -957,8 +996,17 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
     try {
       const { keyId } = req.params;
 
-      if (!(await assertPermission(req, litellmKeyManagePermission))) {
-        sendPermissionDenied(res, litellmKeyManagePermission);
+      // Fail closed: check the config flag first — if false, always deny even with an allow-all permission
+      if (!allowOwnerResetSpend) {
+        res.status(403).json({
+          error: 'Reset spend is not allowed. Contact your administrator to enable this action.',
+        });
+        return;
+      }
+
+      // Then check permissions
+      if (!(await assertPermission(req, litellmKeyResetSpendPermission))) {
+        sendPermissionDenied(res, litellmKeyResetSpendPermission);
         return;
       }
 

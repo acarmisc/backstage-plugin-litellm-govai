@@ -98,6 +98,8 @@ export interface VirtualKey {
   /** Team the key is bound to, when any (mirrors LiteLLM /user/info team_id). */
   team_id?: string;
   blocked?: boolean;
+  /** Arbitrary metadata stored on the key record. */
+  metadata?: Record<string, unknown>;
 }
 
 /**
@@ -121,6 +123,8 @@ export interface LiteLLMUserKey {
   team_id?: string | null;
   created_at: string;
   blocked?: boolean | null;
+  /** Arbitrary metadata stored on the key record. */
+  metadata?: Record<string, unknown> | null;
 }
 
 export interface ModelInfo {
@@ -219,6 +223,8 @@ export interface UpdateKeyRequest {
   rpm_limit?: number;
   team_id?: string;
   duration?: string;
+  /** Arbitrary metadata to merge with the existing record. */
+  metadata?: Record<string, unknown>;
 }
 
 export interface GenerateKeyResponse {

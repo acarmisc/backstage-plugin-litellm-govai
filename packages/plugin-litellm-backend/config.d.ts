@@ -190,6 +190,22 @@ export interface Config {
     };
 
     /**
+     * Controls for key ownership and governance.
+     */
+    keyActions?: {
+      /**
+       * When true, key owners can reset their key's spend counter via the
+       * "Reset Spend" button in the frontend, subject to the
+       * litellm.key.resetSpend permission. When false (the default), reset
+       * is only available to administrators, even if the permission is ALLOW.
+       * Fail-closed: enforced before the permission check.
+       * @default false
+       * @visibility backend
+       */
+      allowOwnerResetSpend?: boolean;
+    };
+
+    /**
      * Team administration governance. Allows a designated Backstage group to
      * create and manage LiteLLM teams. The feature is disabled (fail-closed)
      * when unset — all fields default to empty/false to prevent accidental
