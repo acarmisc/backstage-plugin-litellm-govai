@@ -22,20 +22,29 @@ export const Gauge: React.FC<{
   label?: React.ReactNode;
   /** Small caption under the value, inside the ring. */
   caption?: React.ReactNode;
-}> = ({ value, tone = 'accent', size = 72, thickness = 6, label, caption }) => {
+  /** Optional aria-label for accessibility. */
+  ariaLabel?: string;
+}> = ({ value, tone = 'accent', size = 72, thickness = 6, label, caption, ariaLabel }) => {
   const clamped = Math.max(0, Math.min(100, value ?? 0));
   const r = (size - thickness) / 2;
   const c = 2 * Math.PI * r;
   const dash = (clamped / 100) * c;
+  const isOverCap = value > 100;
+
   return (
     <Box
       sx={theme => ({
         position: 'relative',
         width: size,
         height: size,
-        flexShrink: 0,
         color: toneColor(theme, tone),
       })}
+      role="meter"
+      aria-valuenow={clamped}
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-label={ariaLabel}
+      aria-valuetext={isOverCap ? `${Math.round(value)}% — over cap` : undefined}
     >
       <Box
         component="svg"
@@ -92,7 +101,7 @@ export const Gauge: React.FC<{
             color: 'text.primary',
           }}
         >
-          {label ?? `${Math.round(value)}%`}
+          {isOverCap ? 'Over cap' : (label ?? `${Math.round(value)}%`)}
         </Typography>
         {caption && (
           <Typography
