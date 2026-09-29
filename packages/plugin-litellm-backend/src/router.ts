@@ -49,8 +49,10 @@ import {
 } from './permissions';
 import {
   createGenerateKeyInputSchema,
+  createUpdateKeyInputSchema,
   type KeyValidationConfig,
   type GenerateKeyInput,
+  type UpdateKeyInput,
 } from './validation/keySchemas';
 import {
   isTeamManagementEnabled,
@@ -176,6 +178,7 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
     allowedDurations: keyAllowedDurations,
   };
   const generateKeyInputSchema = createGenerateKeyInputSchema(keyValidationConfig);
+  const updateKeyInputSchema = createUpdateKeyInputSchema(keyValidationConfig);
   const teamMgmtEnabled = isTeamManagementEnabled(config);
   const objectPermsEnabled = isObjectPermissionsEnabled(config);
   const teamAdminCfg = readTeamAdminConfig(config);
@@ -398,18 +401,18 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
   async function authorizeKeyAction(
     req: Request,
     keyId: string,
-  ): Promise<{ tokenEntityRef: string; userId: string }> {
+  ): Promise<{ tokenEntityRef: string; userId: string; key: VirtualKey }> {
     const tokenEntityRef = req.res!.locals.tokenEntityRef as string;
     const userId = req.res!.locals.userId as string;
     const ownKeys = await client.listKeys(userId);
-    const owns = ownKeys.some(k => (k.token ?? k.key) === keyId);
-    if (!owns) {
+    const key = ownKeys.find(k => (k.token ?? k.key) === keyId);
+    if (!key) {
       throw Object.assign(new Error('Access denied: key does not belong to the caller'), {
         status: 403,
         body: { error: 'Access denied: key does not belong to the caller' },
       });
     }
-    return { tokenEntityRef, userId };
+    return { tokenEntityRef, userId, key };
   }
 
   // Normalize the ownership-guard rejection shape into a response.
@@ -794,9 +797,89 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
         return;
       }
 
-      const { tokenEntityRef } = await authorizeKeyAction(req, keyId);
-      const request: UpdateKeyRequest = { ...req.body, key: keyId };
-      const result = await client.updateKey(request);
+      const { tokenEntityRef, userId, key } = await authorizeKeyAction(req, keyId);
+
+      // ── Parse and validate request with strict schema ──────────────────────
+      // This will reject unknown fields including team_id, user_id, spend, blocked, key, budget_duration.
+      let input: UpdateKeyInput;
+      try {
+        input = updateKeyInputSchema.parse(req.body);
+      } catch (error: any) {
+        res.status(400).json({
+          error: error.errors?.[0]?.message || 'Invalid request',
+          details: error.errors,
+        });
+        return;
+      }
+
+      // ── Enforce budget rules ──────────────────────────────────────────────
+      // allowUnlimitedBudget===false rejects max_budget:null explicitly sent
+      if (!allowUnlimitedBudget && input.max_budget === null) {
+        res.status(400).json({
+          error: 'max_budget cannot be null when unlimited budgets are not allowed',
+        });
+        return;
+      }
+
+      // ── Validate models are subset of allowed using the key's team_id ─────
+      if (input.models && input.models.length > 0) {
+        let allowedModels: string[] = [];
+        if (key.team_id) {
+          // Fetch team info to get its allowed models.
+          // Fail closed: if the team can't be fetched, the error propagates.
+          try {
+            const teamInfo = await client.getTeamInfo(key.team_id);
+            allowedModels = teamInfo?.models ?? [];
+          } catch (err) {
+            logger.error('Failed to fetch team info for model validation', err);
+            res.status(500).json({
+              error: 'Failed to validate models for the key\'s team',
+            });
+            return;
+          }
+        } else {
+          // Use user's models if no team
+          const userInfo = await client.getUserInfo(userId);
+          allowedModels = userInfo?.models ?? [];
+        }
+
+        // Only enforce if the allowedModels list is non-empty (non-empty = restricted)
+        if (allowedModels.length > 0) {
+          const disallowed = input.models.filter(m => !allowedModels.includes(m));
+          if (disallowed.length > 0) {
+            res.status(400).json({
+              error: 'One or more requested models are not allowed',
+              disallowed_models: disallowed,
+            });
+            return;
+          }
+        }
+      }
+
+      // ── Build upstream request EXPLICITLY from parsed fields ──────────────
+      // Never spread the raw body; only include fields we've explicitly validated.
+      const upstreamRequest: UpdateKeyRequest = {
+        key: keyId,
+      };
+
+      if (input.key_alias !== undefined) {
+        upstreamRequest.key_alias = input.key_alias;
+      }
+      if (input.models !== undefined) {
+        upstreamRequest.models = input.models;
+      }
+      if (input.max_budget !== undefined) {
+        // max_budget from input can be null (unlimited) or a number
+        upstreamRequest.max_budget = input.max_budget ?? undefined;
+      }
+      if (input.tpm_limit !== undefined) {
+        upstreamRequest.tpm_limit = input.tpm_limit;
+      }
+      if (input.rpm_limit !== undefined) {
+        upstreamRequest.rpm_limit = input.rpm_limit;
+      }
+
+      const result = await client.updateKey(upstreamRequest);
       logger.info({ action: 'key.update', userId: tokenEntityRef ?? 'unknown', keyId });
       res.json(result);
     } catch (error: any) {

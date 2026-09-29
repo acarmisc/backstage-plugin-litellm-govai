@@ -74,3 +74,50 @@ export function createGenerateKeyInputSchema(config: KeyValidationConfig) {
 export type GenerateKeyInput = z.infer<
   ReturnType<typeof createGenerateKeyInputSchema>
 >;
+
+/**
+ * Creates a strict Zod schema for UpdateKeyInput validation.
+ * Only allows key_alias, models, max_budget, tpm_limit, and rpm_limit fields.
+ * Rejects all other fields including team_id, user_id, spend, blocked, key, and budget_duration.
+ *
+ * @param config Server configuration with ceiling values
+ * @returns A Zod object schema that validates the input
+ */
+export function createUpdateKeyInputSchema(config: KeyValidationConfig) {
+  return z
+    .object({
+      key_alias: z
+        .string()
+        .trim()
+        .min(1, 'key_alias is required')
+        .max(128, 'key_alias must be at most 128 characters')
+        .optional(),
+      models: z
+        .array(z.string())
+        .max(100, 'models array is too large')
+        .optional(),
+      max_budget: z
+        .number()
+        .positive('max_budget must be a positive number')
+        .max(config.maxBudget, `max_budget must not exceed ${config.maxBudget}`)
+        .nullable()
+        .optional(),
+      tpm_limit: z
+        .number()
+        .int('tpm_limit must be an integer')
+        .positive('tpm_limit must be a positive number')
+        .max(config.maxTpm, `tpm_limit must not exceed ${config.maxTpm}`)
+        .optional(),
+      rpm_limit: z
+        .number()
+        .int('rpm_limit must be an integer')
+        .positive('rpm_limit must be a positive number')
+        .max(config.maxRpm, `rpm_limit must not exceed ${config.maxRpm}`)
+        .optional(),
+    })
+    .strict();
+}
+
+export type UpdateKeyInput = z.infer<
+  ReturnType<typeof createUpdateKeyInputSchema>
+>;
