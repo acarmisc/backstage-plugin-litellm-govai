@@ -156,8 +156,8 @@ export class LiteLLMClient {
         soft_limit: inner.soft_limit ?? raw?.soft_limit,
         hard_limit: inner.hard_limit ?? raw?.hard_limit,
       };
-    } catch (err: any) {
-      if (err.status === 404) return null;
+    } catch (err: unknown) {
+      if (err instanceof LiteLLMUpstreamError && err.status === 404) return null;
       throw err;
     }
   }
@@ -202,8 +202,11 @@ export class LiteLLMClient {
       );
       const rawKeys = response.keys ?? [];
       return rawKeys.map(this.toVirtualKey);
-    } catch (err: any) {
-      if (err.status === 404 || err.message.includes('not found')) {
+    } catch (err: unknown) {
+      if (err instanceof LiteLLMUpstreamError && err.status === 404) {
+        return [];
+      }
+      if (err instanceof Error && err.message.includes('not found')) {
         return [];
       }
       throw err;
@@ -725,8 +728,11 @@ export class LiteLLMClient {
         `/user/daily/activity?${params.toString()}`,
       );
       return this.transformDailyActivity(response);
-    } catch (err: any) {
-      if (err.status === 404 || err.message.includes('not found')) {
+    } catch (err: unknown) {
+      if (err instanceof LiteLLMUpstreamError && err.status === 404) {
+        return this.emptyUsage();
+      }
+      if (err instanceof Error && err.message.includes('not found')) {
         return this.emptyUsage();
       }
       throw err;
@@ -749,8 +755,11 @@ export class LiteLLMClient {
         `/team/daily/activity?${params.toString()}`,
       );
       return this.transformDailyActivity(response);
-    } catch (err: any) {
-      if (err.status === 404 || err.message.includes('not found')) {
+    } catch (err: unknown) {
+      if (err instanceof LiteLLMUpstreamError && err.status === 404) {
+        return this.emptyUsage();
+      }
+      if (err instanceof Error && err.message.includes('not found')) {
         return this.emptyUsage();
       }
       throw err;

@@ -1,6 +1,6 @@
 import { Request } from 'express';
 import { Config } from '@backstage/config';
-import { AuthService, PermissionsService } from '@backstage/backend-plugin-api';
+import { AuthService, PermissionsService, LoggerService } from '@backstage/backend-plugin-api';
 import { BasicPermission, AuthorizeResult } from '@backstage/plugin-permission-common';
 import { CatalogClient } from '@backstage/catalog-client';
 import { resolveUserId, resolveCredentials, isUserMemberOfGroup } from './provisioning';
@@ -128,7 +128,7 @@ export async function assertTeamAdmin(opts: {
   catalogClient: CatalogClient;
   teamAdminGroup: string;
   permission: BasicPermission;
-  logger: any;
+  logger: LoggerService;
 }): Promise<TeamAdminCheck> {
   const {
     req,

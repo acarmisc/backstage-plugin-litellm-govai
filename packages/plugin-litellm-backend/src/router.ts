@@ -1,7 +1,7 @@
 import express, { Router, Request, Response } from 'express';
-import { Config } from '@backstage/config';
-import { AuthService, DiscoveryService, PermissionsService } from '@backstage/backend-plugin-api';
+import { AuthService, DiscoveryService, PermissionsService, LoggerService, RootConfigService } from '@backstage/backend-plugin-api';
 import { AuthorizeResult, BasicPermission } from '@backstage/plugin-permission-common';
+import { NotAllowedError } from '@backstage/errors';
 import { CatalogClient } from '@backstage/catalog-client';
 import { LiteLLMClient, LiteLLMUpstreamError } from './client';
 import { TeamInfo } from './types';
@@ -37,8 +37,8 @@ import { withTeamFetchRetry } from './http/teamFetch';
 export { ProvisioningError };
 
 export interface RouterOptions {
-  config: Config;
-  logger: any;
+  config: RootConfigService;
+  logger: LoggerService;
   auth: AuthService;
   discovery: DiscoveryService;
   permissions: PermissionsService;
@@ -139,23 +139,33 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
 
     // Helper functions - defined inline below this object
     authorizeKeyAction: async (req: Request, keyId: string) => {
-      const tokenEntityRef = req.res!.locals.tokenEntityRef as string;
-      const userId = req.res!.locals.userId as string;
+      // Express middleware should have populated req.res.locals with user info
+      if (!req.res || !req.res.locals.tokenEntityRef || !req.res.locals.userId) {
+        throw new NotAllowedError('User identity not found in request');
+      }
+      const tokenEntityRef = req.res.locals.tokenEntityRef as string;
+      const userId = req.res.locals.userId as string;
       const ownKeys = await client.listKeys(userId);
       const key = ownKeys.find(k => (k.token ?? k.key) === keyId);
       if (!key) {
-        throw Object.assign(new Error('Access denied: key does not belong to the caller'), {
-          status: 403,
-          body: { error: 'Access denied: key does not belong to the caller' },
-        });
+        throw new NotAllowedError('Access denied: key does not belong to the caller');
       }
       return { tokenEntityRef, userId, key };
     },
 
-    sendOwnershipError: (err: any, res: Response): boolean => {
-      if (err && typeof err.status === 'number' && err.body) {
-        res.status(err.status).json(err.body);
+    sendOwnershipError: (err: unknown, res: Response): boolean => {
+      // Handle NotAllowedError from authorizeKeyAction
+      if (err instanceof NotAllowedError) {
+        res.status(403).json({ error: err.message });
         return true;
+      }
+      // Fallback for legacy errors with status and body
+      if (err && typeof err === 'object' && 'status' in err && 'body' in err) {
+        const errObj = err as any;
+        if (typeof errObj.status === 'number' && errObj.body) {
+          res.status(errObj.status).json(errObj.body);
+          return true;
+        }
       }
       return false;
     },
@@ -197,7 +207,7 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
       return true;
     },
 
-    sendTeamError: (err: any, res: Response): void => {
+    sendTeamError: (err: unknown, res: Response): void => {
       sendError(res, err, logger, 'team operation');
     },
 
@@ -210,13 +220,17 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
       | null
     > => {
       if (!ctx.requireTeamMgmt(res)) return null;
+      if (!teamAdminCfg.group) {
+        res.status(500).json({ error: 'Team management is misconfigured (group is missing)' });
+        return null;
+      }
 
       const check = await assertTeamAdmin({
         req,
         auth,
         permissions,
         catalogClient,
-        teamAdminGroup: teamAdminCfg.group!,
+        teamAdminGroup: teamAdminCfg.group,
         permission,
         logger,
       });
@@ -234,7 +248,7 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
       let existing;
       try {
         existing = await withTeamFetchRetry(() => client.getTeamInfo(teamId));
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (err instanceof LiteLLMUpstreamError && err.status === 404) {
           res.status(404).json({ error: 'Team not found' });
           return null;

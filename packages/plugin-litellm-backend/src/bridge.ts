@@ -15,6 +15,7 @@
  */
 import { createRemoteJWKSet, jwtVerify, JWTPayload } from 'jose';
 import { Config } from '@backstage/config';
+import { LoggerService } from '@backstage/backend-plugin-api';
 import { LiteLLMClient } from './client';
 import {
   GenerateKeyRequest,
@@ -212,7 +213,7 @@ export async function getOrProvisionUserFromClaims(
   claims: BridgeClaims,
   provisioningEnabled: boolean,
   provisioningDefaults: ProvisioningDefaults,
-  logger: { info: (...args: unknown[]) => void },
+  logger: LoggerService,
   userIdDomain?: string,
 ): Promise<UserInfo> {
   const userId = resolveBridgeUserId(claims, userIdDomain);
@@ -256,7 +257,7 @@ export async function bridgeListKeys(
   claims: BridgeClaims,
   provisioningEnabled: boolean,
   provisioningDefaults: ProvisioningDefaults,
-  logger: { info: (...args: unknown[]) => void },
+  logger: LoggerService,
   userIdDomain?: string,
 ): Promise<VirtualKey[]> {
   await getOrProvisionUserFromClaims(
@@ -276,7 +277,7 @@ export async function bridgeGenerateKey(
   claims: BridgeClaims,
   provisioningEnabled: boolean,
   provisioningDefaults: ProvisioningDefaults,
-  logger: { info: (...args: unknown[]) => void },
+  logger: LoggerService,
   request: Partial<GenerateKeyRequest>,
   userIdDomain?: string,
 ): Promise<GenerateKeyResponse> {

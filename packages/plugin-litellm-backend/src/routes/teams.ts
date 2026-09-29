@@ -55,7 +55,7 @@ export function registerTeamsRoutes(router: Router, ctx: RouterContext): void {
       // Member surface: strip dollar amounts when the operator hides them
       // from members. Managers who need the numbers use /teams/managed.
       respondTeamList(res, list, ctx, 'member');
-    } catch (error: any) {
+    } catch (error: unknown) {
       if (error instanceof ProvisioningError) {
         res.status(error.status).json(error.body);
         return;
@@ -67,13 +67,17 @@ export function registerTeamsRoutes(router: Router, ctx: RouterContext): void {
 
   router.post('/teams', async (req: Request, res: Response) => {
     if (!requireTeamMgmt(res)) return;
+    if (!teamAdminCfg.group) {
+      res.status(500).json({ error: 'Team management is misconfigured (group is missing)' });
+      return;
+    }
 
     const check = await assertTeamAdmin({
       req,
       auth,
       permissions,
       catalogClient,
-      teamAdminGroup: teamAdminCfg.group!,
+      teamAdminGroup: teamAdminCfg.group,
       permission: litellmTeamCreatePermission,
       logger,
     });
@@ -96,7 +100,7 @@ export function registerTeamsRoutes(router: Router, ctx: RouterContext): void {
       try {
         const result = await pending;
         res.json(result);
-      } catch (err: any) {
+      } catch (err: unknown) {
         sendTeamError(err, res);
       }
       return;
@@ -119,8 +123,7 @@ export function registerTeamsRoutes(router: Router, ctx: RouterContext): void {
 
     const createPromise = (async () => {
       const result = await client.createTeam(payload);
-      logger.info({
-        action: 'team.create',
+      logger.info('team.create', {
         actor: check.userEntityRef,
         teamAlias: v.value.team_alias,
         owningGroup: teamAdminCfg.group,
@@ -137,7 +140,7 @@ export function registerTeamsRoutes(router: Router, ctx: RouterContext): void {
           ? redactTeamBudget(result as TeamInfo)
           : result,
       );
-    } catch (err: any) {
+    } catch (err: unknown) {
       sendTeamError(err, res);
     } finally {
       teamCreateInFlight.delete(key);
@@ -189,8 +192,7 @@ export function registerTeamsRoutes(router: Router, ctx: RouterContext): void {
 
     try {
       const r = await client.updateTeam(payload);
-      logger.info({
-        action: 'team.update',
+      logger.info('team.update', {
         actor,
         teamId,
         owningGroup,
@@ -200,7 +202,7 @@ export function registerTeamsRoutes(router: Router, ctx: RouterContext): void {
           ? redactTeamBudget(r as TeamInfo)
           : r,
       );
-    } catch (err: any) {
+    } catch (err: unknown) {
       sendTeamError(err, res);
     }
   });
@@ -240,9 +242,9 @@ export function registerTeamsRoutes(router: Router, ctx: RouterContext): void {
 
     try {
       await client.deleteTeam(teamId);
-      logger.info({ action: 'team.delete', actor, teamId, owningGroup, force });
+      logger.info('team.delete', { actor, teamId, owningGroup, force });
       res.json({ success: true });
-    } catch (err: any) {
+    } catch (err: unknown) {
       sendTeamError(err, res);
     }
   });
@@ -254,13 +256,17 @@ export function registerTeamsRoutes(router: Router, ctx: RouterContext): void {
   // `/teams/:param` route so the literal path is not shadowed.
   router.get('/teams/managed', async (req: Request, res: Response) => {
     if (!requireTeamMgmt(res)) return;
+    if (!teamAdminCfg.group) {
+      res.status(500).json({ error: 'Team management is misconfigured (group is missing)' });
+      return;
+    }
 
     const check = await assertTeamAdmin({
       req,
       auth,
       permissions,
       catalogClient,
-      teamAdminGroup: teamAdminCfg.group!,
+      teamAdminGroup: teamAdminCfg.group,
       permission: litellmTeamManagePermission,
       logger,
     });
@@ -350,9 +356,10 @@ export function registerTeamsRoutes(router: Router, ctx: RouterContext): void {
           });
           return;
         }
-      } catch (err: any) {
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
         logger.warn(
-          `Catalog lookup failed for ${userEntityRef}: ${err.message}`,
+          `Catalog lookup failed for ${userEntityRef}: ${message}`,
         );
         res.status(400).json({
           error: `Could not verify ${userEntityRef} in the Backstage catalog`,
@@ -374,7 +381,7 @@ export function registerTeamsRoutes(router: Router, ctx: RouterContext): void {
           auth,
           logger,
         );
-      } catch (err: any) {
+      } catch (err: unknown) {
         if (err instanceof ProvisioningError) {
           res.status(err.status).json(err.body);
           return;
@@ -391,8 +398,7 @@ export function registerTeamsRoutes(router: Router, ctx: RouterContext): void {
             max_budget_in_team: maxBudgetInTeam,
           }),
         });
-        logger.info({
-          action: 'team.member.add',
+        logger.info('team.member.add', {
           actor,
           teamId,
           member: litellmUserId,
@@ -404,7 +410,7 @@ export function registerTeamsRoutes(router: Router, ctx: RouterContext): void {
             ? redactTeamBudget(updated as TeamInfo)
             : updated,
         );
-      } catch (err: any) {
+      } catch (err: unknown) {
         sendTeamError(err, res);
       }
     },
@@ -433,8 +439,7 @@ export function registerTeamsRoutes(router: Router, ctx: RouterContext): void {
           team_id: teamId,
           user_id: litellmUserId,
         });
-        logger.info({
-          action: 'team.member.remove',
+        logger.info('team.member.remove', {
           actor,
           teamId,
           member: litellmUserId,
@@ -446,7 +451,7 @@ export function registerTeamsRoutes(router: Router, ctx: RouterContext): void {
             ? redactTeamBudget(updated as TeamInfo)
             : updated,
         );
-      } catch (err: any) {
+      } catch (err: unknown) {
         sendTeamError(err, res);
       }
     },

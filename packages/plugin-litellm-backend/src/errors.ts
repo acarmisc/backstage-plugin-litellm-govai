@@ -10,10 +10,40 @@
  */
 
 import { Response } from 'express';
+import { LoggerService } from '@backstage/backend-plugin-api';
 import { LiteLLMUpstreamError } from './client';
 
 /** Regex to find HTML-like tags and entities. */
 const HTML_TAG_PATTERN = /<[^>]*>|&[a-z]+;/gi;
+
+/**
+ * Type guard: narrows unknown to {status: number; body: Record<string, unknown>}.
+ * Used to detect custom errors that have status and body properties.
+ */
+export function isHttpishError(error: unknown): error is { status: number; body: Record<string, unknown> } {
+  return (
+    error !== null &&
+    typeof error === 'object' &&
+    'status' in error &&
+    'body' in error &&
+    typeof (error as any).status === 'number' && // any: property access after guard check
+    typeof (error as any).body === 'object' // any: property access after guard check
+  );
+}
+
+/**
+ * Safely extract a message string from any error type.
+ * Returns empty string if no message can be extracted.
+ */
+export function errorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (typeof error === 'string') return error;
+  if (error && typeof error === 'object' && 'message' in error) {
+    const msg = (error as any).message; // any: message type varies, guarded below
+    if (typeof msg === 'string') return msg;
+  }
+  return '';
+}
 
 /**
  * Sanitizes a message by:
@@ -54,16 +84,10 @@ export function toHttpError(error: unknown): {
   _logMessage?: string;
 } {
   // KeyServiceError and ProvisioningError have status + body fields — pass through.
-  if (
-    error &&
-    typeof error === 'object' &&
-    'status' in error &&
-    'body' in error &&
-    typeof (error as any).status === 'number'
-  ) {
+  if (isHttpishError(error)) {
     return {
-      status: (error as any).status,
-      body: (error as any).body,
+      status: error.status,
+      body: error.body,
       logLevel: 'warn',
     };
   }
@@ -107,8 +131,8 @@ export function toHttpError(error: unknown): {
     'name' in error &&
     'message' in error
   ) {
-    const name = (error as any).name;
-    const message = String((error as any).message);
+    const name = (error as any).name; // any: error name type varies, guarded by 'in' checks
+    const message = String((error as any).message); // any: error message type varies, guarded by 'in' checks
 
     if (name === 'InputError') {
       return {
@@ -162,7 +186,7 @@ export function toHttpError(error: unknown): {
 export function sendError(
   res: Response,
   error: unknown,
-  logger: any,
+  logger: LoggerService,
   context: string,
 ): void {
   const { status, body, logLevel, _logMessage } = toHttpError(error);

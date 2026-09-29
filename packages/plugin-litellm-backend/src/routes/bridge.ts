@@ -51,14 +51,16 @@ export function registerBridgeRoutes(router: Router, ctx: RouterContext, bridgeO
   }
 
   if (bridgeCfg.enabled && tokenVerifier) {
+    // Capture tokenVerifier in the closure to avoid non-null assertion
+    const verifier = tokenVerifier;
     const requireClaims = async (req: Request): Promise<BridgeClaims> => {
       const header = req.headers.authorization ?? '';
       const token = header.startsWith('Bearer ') ? header.slice(7) : '';
       if (!token) throw new BridgeAuthError('missing Bearer token');
-      return tokenVerifier!.verify(token);
+      return verifier.verify(token);
     };
 
-    const handleBridgeError = (error: any, res: Response) => {
+    const handleBridgeError = (error: unknown, res: Response) => {
       if (error instanceof BridgeAuthError) {
         // Log the jose error details server-side, send opaque 401 to client
         logger.warn(`Bridge auth error: ${error.message}`);
@@ -96,7 +98,7 @@ export function registerBridgeRoutes(router: Router, ctx: RouterContext, bridgeO
           userIdDomain,
         );
         res.json(keys);
-      } catch (error: any) {
+      } catch (error: unknown) {
         handleBridgeError(error, res);
       }
     });
@@ -146,7 +148,7 @@ export function registerBridgeRoutes(router: Router, ctx: RouterContext, bridgeO
           keyCreateCtx,
         );
         res.json(result);
-      } catch (error: any) {
+      } catch (error: unknown) {
         handleBridgeError(error, res);
       }
     });
@@ -156,7 +158,7 @@ export function registerBridgeRoutes(router: Router, ctx: RouterContext, bridgeO
         await requireClaims(req); // authenticate only
         const models = await client.listModels();
         res.json(models);
-      } catch (error: any) {
+      } catch (error: unknown) {
         handleBridgeError(error, res);
       }
     });
