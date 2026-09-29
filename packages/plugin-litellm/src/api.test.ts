@@ -354,3 +354,31 @@ describe('base URL resolution', () => {
     assert.strictEqual(calls[0].url, 'https://b.example.com/api/litellm/keys/k1/block');
   });
 });
+
+describe('profile cache invalidation on writes', () => {
+  test('a successful write drops the cached profile for that API instance', async () => {
+    const { profileCacheInstance } = await import('./profileCache');
+    const { fetchApi } = makeFetch(200, {});
+    const api = new LiteLlmApi(fetchApi, 'http://localhost/api/litellm');
+    let loads = 0;
+    const load = () => profileCacheInstance.memoize(api, 'profile', async () => ++loads);
+    await load();
+    await load();
+    assert.strictEqual(loads, 1);
+    await api.blockKey('k1');
+    await load();
+    assert.strictEqual(loads, 2);
+  });
+
+  test('a failed write keeps the cached profile', async () => {
+    const { profileCacheInstance } = await import('./profileCache');
+    const { fetchApi } = makeFetch(500, { error: 'boom' });
+    const api = new LiteLlmApi(fetchApi, 'http://localhost/api/litellm');
+    let loads = 0;
+    const load = () => profileCacheInstance.memoize(api, 'profile', async () => ++loads);
+    await load();
+    await assert.rejects(() => api.blockKey('k1'));
+    await load();
+    assert.strictEqual(loads, 1);
+  });
+});

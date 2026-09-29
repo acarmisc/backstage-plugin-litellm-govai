@@ -17,6 +17,7 @@ import {
   CreateTeamResponse,
   UpdateTeamRequest,
 } from './types';
+import { profileCacheInstance } from './profileCache';
 
 class ApiError extends Error {
   body: unknown;
@@ -121,6 +122,8 @@ export class LiteLlmApi implements LiteLlmApiInterface {
       body: JSON.stringify(body),
     });
     await this.throwIfNotOk(response);
+    // Any successful write can change the profile (budget, keys, teams).
+    profileCacheInstance.invalidateProfile(this);
     return response.json();
   }
 
@@ -130,6 +133,8 @@ export class LiteLlmApi implements LiteLlmApiInterface {
       headers: { 'Content-Type': 'application/json' },
     });
     await this.throwIfNotOk(response);
+    // Any successful write can change the profile (budget, keys, teams).
+    profileCacheInstance.invalidateProfile(this);
     return response.json();
   }
 
@@ -140,6 +145,8 @@ export class LiteLlmApi implements LiteLlmApiInterface {
       body: JSON.stringify(body),
     });
     await this.throwIfNotOk(response);
+    // Any successful write can change the profile (budget, keys, teams).
+    profileCacheInstance.invalidateProfile(this);
     return response.json();
   }
 
@@ -150,6 +157,8 @@ export class LiteLlmApi implements LiteLlmApiInterface {
       body: JSON.stringify(body),
     });
     await this.throwIfNotOk(response);
+    // Any successful write can change the profile (budget, keys, teams).
+    profileCacheInstance.invalidateProfile(this);
     return response.json();
   }
 
