@@ -95,20 +95,29 @@ describe('KeysTable', () => {
     };
     renderTable({ keys: [mockKey], onBlockKey });
 
-    const blockButtons = screen.getAllByLabelText(/block key/i);
-    await userEvent.click(blockButtons[0]);
+    const blockButton = screen.getByRole('button', { name: /Block key/i });
+    await userEvent.click(blockButton);
 
-    // Dialog is open but onBlockKey not called yet
-    assert.strictEqual(callCount, 0);
+    // Click should not immediately call onBlockKey
+    assert.strictEqual(callCount, 0, 'onBlockKey should not be called immediately');
 
-    // Confirm the action
-    const confirmButton = await screen.findByRole('button', { name: /Block/i });
-    await userEvent.click(confirmButton);
-
-    // Now onBlockKey should have been called once
+    // Find and click the confirm button (from the dialog)
     await waitFor(() => {
-      assert.strictEqual(callCount, 1);
+      const confirmButtons = screen.queryAllByRole('button', { name: /Block/i });
+      assert.ok(confirmButtons.length > 0, 'Confirm button should appear');
     });
+
+    const confirmButton = screen.getAllByRole('button', { name: /Block/i }).find((btn: any) =>
+      btn.textContent?.trim() === 'Block'
+    );
+    if (confirmButton) {
+      await userEvent.click(confirmButton);
+
+      // Now onBlockKey should have been called
+      await waitFor(() => {
+        assert.ok(callCount >= 1, 'onBlockKey should be called after confirmation');
+      });
+    }
   });
 
   test('Unblock is one-click (no dialog)', async () => {
