@@ -29,11 +29,14 @@ import { ProvisioningError, provisionUser, toLiteLLMUserId } from './provisionin
 export interface BridgeClaims {
   sub: string;
   email?: string;
+  email_verified?: boolean;
   preferred_username?: string;
   name?: string;
   /** Authorized party — Keycloak sets this to the client_id of the requester. */
   azp?: string;
   aud?: string | string[];
+  /** Token type from the JWT header. Should be 'Bearer' for access tokens, absent or 'ID' for ID tokens. */
+  typ?: string;
 }
 
 /** A token verifier pluggable for tests. */
@@ -66,6 +69,11 @@ export class BridgeAuthError extends Error {
   readonly status = 401;
 }
 
+/** Thrown when the caller's identity fails validation (e.g. email domain mismatch) → maps to HTTP 403. */
+export class BridgeIdentityError extends Error {
+  readonly status = 403;
+}
+
 export interface KeycloakJWTVerifierOptions {
   issuer: string;
   clientId: string;
@@ -91,11 +99,13 @@ export class KeycloakJWTVerifier implements TokenVerifier {
 
   async verify(token: string): Promise<BridgeClaims> {
     let payload: JWTPayload;
+    let header: Record<string, unknown>;
     try {
       const result = await jwtVerify(token, this.jwks, {
         issuer: this.issuer,
       });
       payload = result.payload;
+      header = result.protectedHeader ?? {};
     } catch (err) {
       // Expired, bad signature, wrong issuer, malformed, JWKS unreachable, etc.
       throw new BridgeAuthError(
@@ -114,14 +124,23 @@ export class KeycloakJWTVerifier implements TokenVerifier {
         `token not issued for client "${this.clientId}" (azp=${azp ?? 'none'})`,
       );
     }
+    // Reject ID tokens (typ='ID'); only access tokens (typ absent or 'Bearer') are accepted.
+    const typ = header.typ as string | undefined;
+    if (typ && typ !== 'Bearer') {
+      throw new BridgeAuthError(
+        `token type must be Bearer or absent, got: ${typ}`,
+      );
+    }
     return {
       sub: payload.sub ?? '',
       email: payload.email as string | undefined,
+      email_verified: (payload as Record<string, unknown>).email_verified as boolean | undefined,
       preferred_username: (payload as Record<string, unknown>)
         .preferred_username as string | undefined,
       name: payload.name as string | undefined,
       azp,
       aud,
+      typ,
     };
   }
 }
@@ -138,15 +157,61 @@ export function newDefaultVerifier(cfg: BridgeConfig): TokenVerifier {
 }
 
 /**
- * Resolves the LiteLLM user_id from the verified claims, matching exactly how
- * the UI derives it so the bridge addresses the *same* LiteLLM user (not a
- * duplicate). The UI uses toLiteLLMUserId(entityRef, userIdDomain) where the
- * Backstage entity name has been rewritten by the Keycloak user transformer:
- * because the catalog rejects '@' in entity names, usernames imported as full
- * emails are stored as their local-part. We replicate that here — strip the
- * '@domain' off the username, then apply the same userIdDomain rule.
+ * Resolves the LiteLLM user_id from the verified claims with strict identity validation.
+ *
+ * PR-6 identity mapping:
+ * - Prefer `email` with `email_verified === true` whose domain equals `userIdDomain`.
+ * - If userIdDomain is unset, always reject unverified emails (guard against misconfig).
+ * - Never strip an arbitrary domain from `preferred_username`.
+ * - Rejects invalid/missing identity with 403.
+ *
+ * @param claims Verified JWT claims from the bridge token
+ * @param userIdDomain Expected email domain (e.g. "example.com"); if set, email must match
+ * @returns The resolved LiteLLM user_id
+ * @throws BridgeIdentityError (403) if identity validation fails
  */
 export function resolveBridgeUserId(
+  claims: BridgeClaims,
+  userIdDomain?: string,
+): string {
+  // Prefer verified email with matching domain
+  if (claims.email && claims.email_verified) {
+    const emailParts = claims.email.split('@');
+    if (emailParts.length === 2) {
+      const [localPart, domain] = emailParts;
+      // If userIdDomain is configured, email must match it
+      if (userIdDomain) {
+        if (domain === userIdDomain) {
+          // Return the local part (catalog transformer rewrite)
+          return toLiteLLMUserId(localPart, userIdDomain);
+        }
+        // Domain mismatch
+        throw new BridgeIdentityError(
+          `email domain mismatch: email is from "${domain}", expected "${userIdDomain}"`,
+        );
+      } else {
+        // userIdDomain not set: use local part with null domain
+        return toLiteLLMUserId(localPart, undefined);
+      }
+    }
+  } else if (claims.email && !claims.email_verified) {
+    // Unverified email: always reject
+    throw new BridgeIdentityError(
+      'email is not verified',
+    );
+  }
+
+  // If no verified email is available, reject
+  throw new BridgeIdentityError(
+    'no verified email found in token',
+  );
+}
+
+/**
+ * @deprecated Use resolveBridgeUserId with userIdDomain parameter instead.
+ * Old version that strips domains from preferred_username — kept for backwards compat.
+ */
+export function resolveBridgeUserIdLegacy(
   claims: BridgeClaims,
   userIdDomain?: string,
 ): string {
