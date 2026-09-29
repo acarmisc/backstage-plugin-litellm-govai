@@ -7,6 +7,7 @@ import {
   budgetHeadline,
   fmtBudgetDuration,
   budgetTone,
+  userBudgetKpi,
 } from './budget';
 import { UserInfo, TeamInfo, VirtualKey } from './types';
 
@@ -254,5 +255,102 @@ describe('budgetTone', () => {
     assert.strictEqual(budgetTone(80), 'warning');
     assert.strictEqual(budgetTone(79.9), 'accent');
     assert.strictEqual(budgetTone(0), 'accent');
+  });
+});
+
+describe('userBudgetKpi', () => {
+  test('capped budget with reset date shows reset timestamp', () => {
+    const kpi = userBudgetKpi({
+      user_id: 'user:default/alice',
+      max_budget: 100,
+      spend: 46,
+      budget_duration: '30d',
+      budget_reset_at: '2026-10-29T00:00:00Z',
+    });
+    assert.strictEqual(kpi.kind, 'capped');
+    assert.strictEqual(kpi.max, 100);
+    assert.strictEqual(kpi.spend, 46);
+    assert.strictEqual(kpi.remaining, 54);
+    assert.ok(Math.abs(kpi.pct! - 46) < 1e-9);
+    assert.ok(kpi.resetLabel?.includes('resets'));
+    assert.ok(kpi.resetLabel?.includes('Oct'));
+  });
+
+  test('capped budget without reset date shows lifetime cap', () => {
+    const kpi = userBudgetKpi({
+      user_id: 'user:default/bob',
+      max_budget: 100,
+      spend: 25,
+    });
+    assert.strictEqual(kpi.kind, 'capped');
+    assert.strictEqual(kpi.max, 100);
+    assert.strictEqual(kpi.resetLabel, 'lifetime cap');
+  });
+
+  test('capped budget over the cap', () => {
+    const kpi = userBudgetKpi({
+      user_id: 'user:default/charlie',
+      max_budget: 100,
+      spend: 150,
+      budget_duration: '30d',
+      budget_reset_at: '2026-11-01T00:00:00Z',
+    });
+    assert.strictEqual(kpi.max, 100);
+    assert.strictEqual(kpi.spend, 150);
+    assert.strictEqual(kpi.remaining, 0);
+    assert.ok(Math.abs(kpi.pct! - 150) < 1e-9);
+    assert.strictEqual(kpi.kind, 'capped');
+  });
+
+  test('unlimited budget (undefined max_budget)', () => {
+    const kpi = userBudgetKpi({
+      user_id: 'user:default/dave',
+      spend: 500,
+    });
+    assert.strictEqual(kpi.kind, 'unlimited');
+    assert.strictEqual(kpi.max, null);
+    assert.strictEqual(kpi.remaining, null);
+    assert.strictEqual(kpi.pct, null);
+    assert.strictEqual(kpi.resetLabel, null);
+  });
+
+  test('unlimited budget (zero max_budget)', () => {
+    const kpi = userBudgetKpi({
+      user_id: 'user:default/eve',
+      max_budget: 0,
+      spend: 100,
+    });
+    assert.strictEqual(kpi.kind, 'unlimited');
+    assert.strictEqual(kpi.max, null);
+    assert.strictEqual(kpi.resetLabel, null);
+  });
+
+  test('null userInfo returns unlimited', () => {
+    const kpi = userBudgetKpi(null);
+    assert.strictEqual(kpi.kind, 'unlimited');
+    assert.strictEqual(kpi.max, null);
+    assert.strictEqual(kpi.spend, 0);
+    assert.strictEqual(kpi.resetLabel, null);
+  });
+
+  test('missing spend defaults to 0', () => {
+    const kpi = userBudgetKpi({
+      user_id: 'user:default/frank',
+      max_budget: 50,
+    });
+    assert.strictEqual(kpi.spend, 0);
+    assert.strictEqual(kpi.remaining, 50);
+    assert.ok(Math.abs(kpi.pct! - 0) < 1e-9);
+  });
+
+  test('invalid reset_at falls back to lifetime cap', () => {
+    const kpi = userBudgetKpi({
+      user_id: 'user:default/grace',
+      max_budget: 100,
+      spend: 50,
+      budget_duration: '30d',
+      budget_reset_at: 'not-a-date',
+    });
+    assert.strictEqual(kpi.resetLabel, 'lifetime cap');
   });
 });
