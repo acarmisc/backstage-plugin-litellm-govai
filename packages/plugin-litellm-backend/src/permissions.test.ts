@@ -5,6 +5,8 @@ import {
   litellmKeyCreatePermission,
   litellmKeyRevokePermission,
   litellmKeyManagePermission,
+  litellmKeyResetSpendPermission,
+  litellmKeyUnblockPermission,
   litellmAuditReadPermission,
   litellmTeamCreatePermission,
   litellmTeamManagePermission,
@@ -34,11 +36,13 @@ describe('litellmPermissions', () => {
     }
   });
 
-  test('contains all 4 original key/audit permissions', () => {
+  test('contains all 6 key/audit permissions', () => {
     const permNames = litellmPermissions.map(p => p.name);
     assert.ok(permNames.includes('litellm.key.create'));
     assert.ok(permNames.includes('litellm.key.revoke'));
     assert.ok(permNames.includes('litellm.key.manage'));
+    assert.ok(permNames.includes('litellm.key.resetSpend'));
+    assert.ok(permNames.includes('litellm.key.unblock'));
     assert.ok(permNames.includes('litellm.audit.read'));
   });
 
@@ -76,10 +80,18 @@ describe('litellmPermissions', () => {
     assert.strictEqual(litellmTeamDeletePermission.attributes.action, 'delete');
   });
 
-  test('original permissions still have correct actions', () => {
+  test('original key/audit permissions still have correct actions', () => {
     assert.strictEqual(litellmKeyCreatePermission.attributes.action, 'create');
     assert.strictEqual(litellmKeyRevokePermission.attributes.action, 'delete');
     assert.strictEqual(litellmKeyManagePermission.attributes.action, 'update');
     assert.strictEqual(litellmAuditReadPermission.attributes.action, 'read');
+  });
+
+  test('key.resetSpend has action "update"', () => {
+    assert.strictEqual(litellmKeyResetSpendPermission.attributes.action, 'update');
+  });
+
+  test('key.unblock has action "update"', () => {
+    assert.strictEqual(litellmKeyUnblockPermission.attributes.action, 'update');
   });
 });

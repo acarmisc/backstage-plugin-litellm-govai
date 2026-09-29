@@ -304,6 +304,7 @@ export const KeyFormDialog: React.FC<KeyFormDialogProps> = ({
   const [editError, setEditError] = useState<string | null>(null);
   const [resetSpendConfirm, setResetSpendConfirm] = useState(false);
   const [resetSpendSubmitting, setResetSpendSubmitting] = useState(false);
+  const [config, setConfig] = useState<LiteLlmConfig | null>(null);
 
   // Re-arm the form each time the dialog opens so a stale result from a
   // previous run (or another user's session) is never shown.
@@ -327,8 +328,10 @@ export const KeyFormDialog: React.FC<KeyFormDialogProps> = ({
       setGenerateError(null);
       setEditError(null);
       setResetSpendConfirm(false);
+      // Fetch config to check key action capabilities
+      onGetConfig().then(setConfig).catch(() => setConfig(null));
     }
-  }, [open, isCreate, keyToEdit, username, keyGenerationSettings?.allowUnlimitedBudget]);
+  }, [open, isCreate, keyToEdit, username, keyGenerationSettings?.allowUnlimitedBudget, onGetConfig]);
 
   const allowUnlimitedBudget = keyGenerationSettings?.allowUnlimitedBudget ?? false;
   const teamRequired = keyGenerationSettings?.teamRequired ?? true;
@@ -533,6 +536,8 @@ export const KeyFormDialog: React.FC<KeyFormDialogProps> = ({
 
   const renderDangerZone = () => {
     if (isCreate || !onResetKeySpend) return null;
+    // Hide the danger zone if allowOwnerResetSpend is false
+    if (!config?.keyActions?.allowOwnerResetSpend) return null;
     return (
       <Box mt={1} pt={2} borderTop="1px solid" sx={{ borderColor: 'divider' }}>
         <Typography variant="caption" color="text.secondary" display="block" mb={1}>

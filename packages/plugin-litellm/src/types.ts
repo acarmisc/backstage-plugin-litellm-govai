@@ -187,6 +187,11 @@ export interface LiteLlmConfig {
     /** When true (default), a team must be selected before a key can be generated. */
     teamRequired: boolean;
   };
+  /** Controls for key actions, set via litellm.keyActions in app-config.yaml. */
+  keyActions?: {
+    /** Whether key owners can reset their key's spend via the frontend (gated by litellm.key.resetSpend permission). */
+    allowOwnerResetSpend?: boolean;
+  };
   /** Team-management surface controls, set via litellm.teamAdmin in app-config.yaml. */
   teamManagement?: {
     /** True only when the permission framework is enabled AND an admin group is configured. */

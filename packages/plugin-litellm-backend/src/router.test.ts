@@ -952,8 +952,11 @@ describe('router key-mutation routes — ownership guard (rec #18 regression)', 
     }
   });
 
-  test('200 on reset_spend of own key', async () => {
-    const h = await mutationHarness();
+  test('200 on reset_spend of own key with allowOwnerResetSpend=true', async () => {
+    const h = await startHarness({
+      config: { 'litellm.userIdDomain': 'example.com', 'litellm.keys.allowOwnerResetSpend': true },
+      client: clientWithTwoUsers(),
+    });
     try {
       const { status } = await req(h.baseUrl, 'POST', '/keys/hash-own/reset_spend', {
         authRef: 'user:default/alice',
@@ -1177,6 +1180,137 @@ describe('router key-mutation routes — ownership guard (rec #18 regression)', 
       assert.strictEqual(payload.rpm_limit, undefined);
     } finally {
       await new Promise<void>(r => h.server.close(() => r()));
+    }
+  });
+
+  test('PR-4: owner reset-spend with default config (allowOwnerResetSpend=false) → 403', async () => {
+    const h = await mutationHarness();
+    try {
+      const { status, body } = await req(h.baseUrl, 'POST', '/keys/hash-own/reset_spend', {
+        authRef: 'user:default/alice',
+      });
+      assert.strictEqual(status, 403);
+      assert.match(body.error || '', /not allowed/i);
+      assert.strictEqual(h.client.calls.resetKeySpend.length, 0);
+    } finally {
+      await new Promise<void>(r => h.server.close(() => r()));
+    }
+  });
+
+  test('PR-4: owner reset-spend with allowOwnerResetSpend=true and permission ALLOW → 200', async () => {
+    const h = await startHarness({
+      config: { 'litellm.userIdDomain': 'example.com', 'litellm.keys.allowOwnerResetSpend': true },
+      client: clientWithTwoUsers(),
+      permissions: mockPermissions(),
+    });
+    try {
+      const { status } = await req(h.baseUrl, 'POST', '/keys/hash-own/reset_spend', {
+        authRef: 'user:default/alice',
+      });
+      assert.strictEqual(status, 200);
+      assert.strictEqual(h.client.calls.resetKeySpend.length, 1);
+      assert.strictEqual(h.client.calls.resetKeySpend[0], 'hash-own');
+    } finally {
+      h.server.close();
+    }
+  });
+
+  test('PR-4: owner reset-spend with flag true but permission DENY → 403', async () => {
+    const h = await startHarness({
+      config: { 'litellm.userIdDomain': 'example.com', 'litellm.keys.allowOwnerResetSpend': true },
+      client: clientWithTwoUsers(),
+      permissions: mockPermissions({
+        authorize: async () => [{ result: AuthorizeResult.DENY }],
+      }),
+    });
+    try {
+      const { status } = await req(h.baseUrl, 'POST', '/keys/hash-own/reset_spend', {
+        authRef: 'user:default/alice',
+      });
+      assert.strictEqual(status, 403);
+      assert.strictEqual(h.client.calls.resetKeySpend.length, 0);
+    } finally {
+      h.server.close();
+    }
+  });
+
+  test('PR-4: block stamps blocked_by and blocked_at metadata', async () => {
+    const h = await startHarness({
+      config: { 'litellm.userIdDomain': 'example.com' },
+      client: mockClient({
+        listKeys: (uid?: string) =>
+          Promise.resolve([
+            { key: 'sk-...own', token: 'hash-own', key_alias: 'alice-key', user_id: uid, created_at: '', spend: 0, metadata: { custom: 'value' } } as VirtualKey,
+          ]),
+      }),
+    });
+    try {
+      const { status } = await req(h.baseUrl, 'POST', '/keys/hash-own/block', {
+        authRef: 'user:default/alice',
+      });
+      assert.strictEqual(status, 200);
+      assert.strictEqual(h.client.calls.blockKey.length, 1);
+      assert.strictEqual(h.client.calls.updateKey.length, 1);
+      const updatePayload = h.client.calls.updateKey[0];
+      assert.strictEqual(updatePayload.key, 'hash-own');
+      assert.strictEqual(updatePayload.metadata.custom, 'value'); // existing metadata retained
+      assert.strictEqual(updatePayload.metadata.blocked_by, 'user:default/alice');
+      assert.ok(updatePayload.metadata.blocked_at); // ISO timestamp
+    } finally {
+      h.server.close();
+    }
+  });
+
+  test('PR-4: owner cannot unblock an admin-blocked key (blocked_by differs) without permission → 403', async () => {
+    const h = await startHarness({
+      config: { 'litellm.userIdDomain': 'example.com' },
+      client: mockClient({
+        listKeys: (uid?: string) =>
+          Promise.resolve([
+            { key: 'sk-...own', token: 'hash-own', key_alias: 'alice-key', user_id: uid, created_at: '', spend: 0, metadata: { blocked_by: 'user:default/bob' } } as VirtualKey,
+          ]),
+      }),
+      permissions: mockPermissions({
+        authorize: async () => [{ result: AuthorizeResult.DENY }],
+      }),
+    });
+    try {
+      const { status } = await req(h.baseUrl, 'POST', '/keys/hash-own/unblock', {
+        authRef: 'user:default/alice',
+      });
+      assert.strictEqual(status, 403);
+      assert.strictEqual(h.client.calls.unblockKey.length, 0);
+    } finally {
+      h.server.close();
+    }
+  });
+
+  test('PR-4: owner unblocks a self-blocked key without permission → 200', async () => {
+    const h = await startHarness({
+      config: { 'litellm.userIdDomain': 'example.com' },
+      client: mockClient({
+        listKeys: (uid?: string) =>
+          Promise.resolve([
+            { key: 'sk-...own', token: 'hash-own', key_alias: 'alice-key', user_id: uid, created_at: '', spend: 0, metadata: { blocked_by: 'user:default/alice' } } as VirtualKey,
+          ]),
+      }),
+      permissions: mockPermissions({
+        authorize: async () => [{ result: AuthorizeResult.DENY }],
+      }),
+    });
+    try {
+      const { status } = await req(h.baseUrl, 'POST', '/keys/hash-own/unblock', {
+        authRef: 'user:default/alice',
+      });
+      assert.strictEqual(status, 200);
+      assert.strictEqual(h.client.calls.unblockKey.length, 1);
+      assert.strictEqual(h.client.calls.updateKey.length, 1);
+      const updatePayload = h.client.calls.updateKey[0];
+      assert.strictEqual(updatePayload.key, 'hash-own');
+      assert.ok(!updatePayload.metadata.blocked_by);
+      assert.ok(!updatePayload.metadata.blocked_at);
+    } finally {
+      h.server.close();
     }
   });
 });

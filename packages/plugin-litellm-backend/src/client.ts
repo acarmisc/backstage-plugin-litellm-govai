@@ -223,6 +223,7 @@ export class LiteLLMClient {
       user_id: k.user_id ?? undefined,
       team_id: k.team_id ?? undefined,
       blocked: k.blocked ?? undefined,
+      metadata: k.metadata ?? undefined,
     };
   }
 

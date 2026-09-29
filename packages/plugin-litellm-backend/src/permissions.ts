@@ -15,6 +15,16 @@ export const litellmKeyManagePermission = createPermission({
   attributes: { action: 'update' },
 });
 
+export const litellmKeyResetSpendPermission = createPermission({
+  name: 'litellm.key.resetSpend',
+  attributes: { action: 'update' },
+});
+
+export const litellmKeyUnblockPermission = createPermission({
+  name: 'litellm.key.unblock',
+  attributes: { action: 'update' },
+});
+
 export const litellmAuditReadPermission = createPermission({
   name: 'litellm.audit.read',
   attributes: { action: 'read' },
@@ -55,6 +65,8 @@ export const litellmPermissions = [
   litellmKeyCreatePermission,
   litellmKeyRevokePermission,
   litellmKeyManagePermission,
+  litellmKeyResetSpendPermission,
+  litellmKeyUnblockPermission,
   litellmAuditReadPermission,
   litellmTeamCreatePermission,
   litellmTeamManagePermission,
