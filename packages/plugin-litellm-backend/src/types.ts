@@ -213,7 +213,8 @@ export interface UpdateKeyRequest {
   key: string;
   key_alias?: string;
   models?: string[];
-  max_budget?: number;
+  /** null clears the cap (unlimited); gated by allowUnlimitedBudget. */
+  max_budget?: number | null;
   tpm_limit?: number;
   rpm_limit?: number;
   team_id?: string;

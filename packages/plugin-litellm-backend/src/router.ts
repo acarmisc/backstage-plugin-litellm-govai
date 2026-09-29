@@ -870,7 +870,7 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
       }
       if (input.max_budget !== undefined) {
         // max_budget from input can be null (unlimited) or a number
-        upstreamRequest.max_budget = input.max_budget ?? undefined;
+        upstreamRequest.max_budget = input.max_budget;
       }
       if (input.tpm_limit !== undefined) {
         upstreamRequest.tpm_limit = input.tpm_limit;
