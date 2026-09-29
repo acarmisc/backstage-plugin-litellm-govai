@@ -1,4 +1,4 @@
-import express, { Router, Request, Response } from 'express';
+import express, { Router, Request, Response, NextFunction } from 'express';
 import { Config } from '@backstage/config';
 import { AuthService, DiscoveryService, PermissionsService } from '@backstage/backend-plugin-api';
 import { AuthorizeResult, BasicPermission } from '@backstage/plugin-permission-common';
@@ -199,6 +199,22 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
   // plugin-router level, so each plugin must attach its own.
   router.use(express.json());
 
+  // User-scoped routes act on the caller's own LiteLLM identity. That identity
+  // comes ONLY from a verified Backstage user principal — never from the query
+  // string or body — so service/external principals (and anonymous callers)
+  // are rejected instead of being allowed to name an arbitrary user_id.
+  const requireUser = async (req: Request, res: Response, next: NextFunction) => {
+    const tokenEntityRef = await resolveUserId(req, auth);
+    if (!tokenEntityRef) {
+      res.status(401).json({ error: 'A Backstage user credential is required' });
+      return;
+    }
+    res.locals.tokenEntityRef = tokenEntityRef;
+    res.locals.userId = toLiteLLMUserId(tokenEntityRef, userIdDomain);
+    next();
+  };
+  router.use(['/user/info', '/keys', '/usage'], requireUser);
+
   router.get('/health', (_req: Request, res: Response) => {
     res.json({ status: 'ok', provisioning: provisioningEnabled });
   });
@@ -286,12 +302,10 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
     }
   });
 
-  router.get('/user/info', async (req: Request, res: Response) => {
+  router.get('/user/info', async (_req: Request, res: Response) => {
     try {
-      const tokenEntityRef = await resolveUserId(req, auth);
-      const userId = tokenEntityRef
-        ? toLiteLLMUserId(tokenEntityRef, userIdDomain)
-        : (req.query.user_id as string | undefined);
+      const tokenEntityRef = res.locals.tokenEntityRef as string;
+      const userId = res.locals.userId as string;
 
       const userInfo = await getOrProvisionUser(
         client,
@@ -325,12 +339,10 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
     }
   });
 
-  router.get('/keys', async (req: Request, res: Response) => {
+  router.get('/keys', async (_req: Request, res: Response) => {
     try {
-      const tokenEntityRef = await resolveUserId(req, auth);
-      const userId = tokenEntityRef
-        ? toLiteLLMUserId(tokenEntityRef, userIdDomain)
-        : (req.query.user_id as string | undefined);
+      const tokenEntityRef = res.locals.tokenEntityRef as string;
+      const userId = res.locals.userId as string;
 
       await getOrProvisionUser(
         client,
@@ -369,17 +381,9 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
   async function authorizeKeyAction(
     req: Request,
     keyId: string,
-  ): Promise<{ tokenEntityRef: string | undefined; userId: string | undefined }> {
-    const tokenEntityRef = await resolveUserId(req, auth);
-    const userId = tokenEntityRef
-      ? toLiteLLMUserId(tokenEntityRef, userIdDomain)
-      : (req.query.user_id as string | undefined);
-    if (!userId) {
-      throw Object.assign(new Error('Cannot verify key ownership without an authenticated user'), {
-        status: 403,
-        body: { error: 'Cannot verify key ownership without an authenticated user' },
-      });
-    }
+  ): Promise<{ tokenEntityRef: string; userId: string }> {
+    const tokenEntityRef = req.res!.locals.tokenEntityRef as string;
+    const userId = req.res!.locals.userId as string;
     const ownKeys = await client.listKeys(userId);
     const owns = ownKeys.some(k => (k.token ?? k.key) === keyId);
     if (!owns) {
@@ -456,10 +460,8 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
         return;
       }
 
-      const tokenEntityRef = await resolveUserId(req, auth);
-      const resolvedUserId = tokenEntityRef
-        ? toLiteLLMUserId(tokenEntityRef, userIdDomain)
-        : undefined;
+      const tokenEntityRef = res.locals.tokenEntityRef as string;
+      const resolvedUserId = res.locals.userId as string;
 
       if (resolvedUserId) {
         await getOrProvisionUser(
@@ -850,12 +852,10 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
     }
   });
 
-  router.get('/teams', async (req: Request, res: Response) => {
+  router.get('/teams', requireUser, async (_req: Request, res: Response) => {
     try {
-      const tokenEntityRef = await resolveUserId(req, auth);
-      const userId = tokenEntityRef
-        ? toLiteLLMUserId(tokenEntityRef, userIdDomain)
-        : (req.query.user_id as string | undefined);
+      const tokenEntityRef = res.locals.tokenEntityRef as string;
+      const userId = res.locals.userId as string;
 
       const userInfo = await getOrProvisionUser(
         client,
@@ -1657,24 +1657,20 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
         res.status(400).json({ error: 'start_date and end_date are required' });
         return;
       }
-      const tokenEntityRef = await resolveUserId(req, auth);
-      const userId = tokenEntityRef
-        ? toLiteLLMUserId(tokenEntityRef, userIdDomain)
-        : (req.query.user_id as string | undefined);
+      const tokenEntityRef = res.locals.tokenEntityRef as string;
+      const userId = res.locals.userId as string;
 
-      if (userId) {
-        await getOrProvisionUser(
-          client,
-          tokenEntityRef,
-          userId,
-          provisioningEnabled,
-          provisioningDefaults,
-          roleConfigs,
-          catalogClient,
-          auth,
-          logger,
-        );
-      }
+      await getOrProvisionUser(
+        client,
+        tokenEntityRef,
+        userId,
+        provisioningEnabled,
+        provisioningDefaults,
+        roleConfigs,
+        catalogClient,
+        auth,
+        logger,
+      );
 
       const usage: UsageMetrics = await client.getUsage(
         start_date as string,

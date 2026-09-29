@@ -4,7 +4,7 @@ import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import express from 'express';
 import { createRouter } from './router';
-import { LiteLLMUpstreamError } from './client';
+import { LiteLLMUpstreamError, LiteLLMClient } from './client';
 import { VirtualKey, ModelInfo, UsageMetrics } from './types';
 import { AuthorizeResult } from '@backstage/plugin-permission-common';
 
@@ -275,6 +275,7 @@ async function startHarness(opts: {
   client?: any;
   permissions?: any;
   catalogClient?: any;
+  auth?: any;
 }): Promise<Harness> {
   const cfg = mockConfig({
     'litellm.baseUrl': 'http://litellm.local',
@@ -285,7 +286,7 @@ async function startHarness(opts: {
   const router = await createRouter({
     config: cfg,
     logger: silentLogger(),
-    auth: mockAuth(),
+    auth: opts.auth ?? mockAuth(),
     discovery: mockDiscovery(),
     permissions: opts.permissions ?? mockPermissions(),
     client,
@@ -2848,5 +2849,82 @@ describe('router /opencode/connect — enabled', () => {
   test('/config exposes opencode.enabled for the frontend', async () => {
     const { body } = await req(h.baseUrl, 'GET', '/config');
     assert.strictEqual(body.opencode.enabled, true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// PR-1: user-scoped routes require a verified user principal; a client-supplied
+// user_id must never select the identity.
+// ---------------------------------------------------------------------------
+describe('user principal enforcement', () => {
+  let h: Harness;
+  const servicePrincipalAuth = {
+    authenticate: async (token: string) => ({
+      principal:
+        token === 'svc'
+          ? { type: 'service', subject: 'plugin:other' }
+          : { type: 'user', userEntityRef: token },
+    }),
+    getPluginRequestToken: async () => ({ token: 'catalog-token' }),
+    getOwnServiceCredentials: async () => ({}),
+  };
+
+  before(async () => {
+    h = await startHarness({ auth: servicePrincipalAuth });
+  });
+  after(() => h.server.close());
+
+  const cases: Array<[string, string]> = [
+    ['GET', '/user/info?user_id=alice@example.com'],
+    ['GET', '/keys?user_id=alice@example.com'],
+    ['GET', '/teams?user_id=alice@example.com'],
+    ['GET', '/usage?start_date=2026-01-01&end_date=2026-01-31&user_id=alice@example.com'],
+    ['POST', '/keys/generate?user_id=alice@example.com'],
+    ['POST', '/keys/hash-own/update?user_id=alice@example.com'],
+    ['DELETE', '/keys/hash-own?user_id=alice@example.com'],
+  ];
+
+  for (const [method, path] of cases) {
+    test(`service principal → 401 on ${method} ${path.split('?')[0]}`, async () => {
+      const { status } = await req(h.baseUrl, method, path, {
+        authRef: 'svc',
+        body: method === 'POST' ? { alias: 'x', max_budget: 1 } : undefined,
+      });
+      assert.strictEqual(status, 401);
+    });
+    test(`anonymous caller → 401 on ${method} ${path.split('?')[0]}`, async () => {
+      const { status } = await req(h.baseUrl, method, path, {
+        body: method === 'POST' ? { alias: 'x', max_budget: 1 } : undefined,
+      });
+      assert.strictEqual(status, 401);
+    });
+  }
+
+  test('user_id query param cannot override the token identity', async () => {
+    const client = h.client;
+    const before = client.calls.listKeys?.length ?? 0;
+    await req(h.baseUrl, 'GET', '/keys?user_id=victim@example.com', {
+      authRef: 'user:default/bob',
+    });
+    const last = client.calls.listKeys?.[client.calls.listKeys.length - 1];
+    assert.ok((client.calls.listKeys?.length ?? 0) > before);
+    assert.strictEqual(last, 'bob');
+  });
+
+  test('bob cannot update a key owned by alice via user_id', async () => {
+    const { status } = await req(
+      h.baseUrl,
+      'POST',
+      '/keys/hash-alice/update?user_id=alice@example.com',
+      { authRef: 'user:default/bob', body: { key_alias: 'x' } },
+    );
+    assert.strictEqual(status, 403);
+  });
+});
+
+describe('client.getUsage', () => {
+  test('rejects an empty user_id instead of querying org-wide', async () => {
+    const c = new LiteLLMClient({ baseUrl: 'http://litellm.local', masterKey: 'mk' } as any);
+    await assert.rejects(() => c.getUsage('2026-01-01', '2026-01-31', ''), /user_id/);
   });
 });

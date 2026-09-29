@@ -690,14 +690,18 @@ export class LiteLLMClient {
   async getUsage(
     startDate: string,
     endDate: string,
-    userId?: string,
+    userId: string,
   ): Promise<UsageMetrics> {
+    if (!userId) {
+      // An empty user_id makes LiteLLM return org-wide activity.
+      throw new Error('getUsage requires a user_id');
+    }
     const params = new URLSearchParams({
       start_date: startDate,
       end_date: endDate,
       page_size: '100',
     });
-    if (userId) params.append('user_id', userId);
+    params.append('user_id', userId);
     try {
       const response = await this.request<any>(
         `/user/daily/activity?${params.toString()}`,
