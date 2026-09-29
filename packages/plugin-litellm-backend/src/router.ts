@@ -1830,7 +1830,7 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
     },
   );
 
-  router.get('/teams/:teamId/usage', async (req: Request, res: Response) => {
+  router.get('/teams/:teamId/usage', requireUser, async (req: Request, res: Response) => {
     try {
       const { teamId } = req.params;
       const { start_date, end_date } = req.query;
@@ -1838,6 +1838,45 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
         res.status(400).json({ error: 'start_date and end_date are required' });
         return;
       }
+
+      // Authorize: member of the team OR a team manager
+      const tokenEntityRef = res.locals.tokenEntityRef as string;
+      const userId = res.locals.userId as string;
+
+      const userInfo = await getOrProvisionUser(
+        client,
+        tokenEntityRef,
+        userId,
+        provisioningEnabled,
+        provisioningDefaults,
+        roleConfigs,
+        catalogClient,
+        auth,
+        logger,
+      );
+
+      // Check membership: user must be in the team OR be a team manager
+      const isMember = userInfo?.teams?.includes(teamId) ?? false;
+      let isManager = false;
+      if (teamAdminCfg.group) {
+        try {
+          isManager = await isUserMemberOfGroup(
+            tokenEntityRef,
+            teamAdminCfg.group,
+            catalogClient,
+            auth,
+            logger,
+          );
+        } catch (err: any) {
+          logger.warn(`Team-manager check failed: ${err.message}`);
+        }
+      }
+
+      if (!isMember && !isManager) {
+        res.status(404).json({ error: 'Team not found' });
+        return;
+      }
+
       const usage: UsageMetrics = await client.getTeamUsage(
         teamId,
         start_date as string,
@@ -1848,28 +1887,15 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
       // Which flag applies depends on whether the caller is a team manager;
       // catalog failures fail closed to the member rule.
       let hide = teamBudgetVisibility.hideTeamBudgetForMembers;
-      if (teamAdminCfg.group) {
-        try {
-          const tokenEntityRef = await resolveUserId(req, auth);
-          const isManager =
-            !!tokenEntityRef &&
-            (await isUserMemberOfGroup(
-              tokenEntityRef,
-              teamAdminCfg.group,
-              catalogClient,
-              auth,
-              logger,
-            ));
-          hide = isManager
-            ? teamBudgetVisibility.hideTeamBudgetForManagers
-            : teamBudgetVisibility.hideTeamBudgetForMembers;
-        } catch (err: any) {
-          logger.warn(`Team-manager check failed, hiding team spend: ${err.message}`);
-          hide = teamBudgetVisibility.hideTeamBudgetForMembers;
-        }
+      if (isManager) {
+        hide = teamBudgetVisibility.hideTeamBudgetForManagers;
       }
       res.json(hide ? redactTeamUsage(usage) : usage);
     } catch (error: any) {
+      if (error instanceof ProvisioningError) {
+        res.status(error.status).json(error.body);
+        return;
+      }
       logger.error('Failed to fetch team usage', error);
       res.status(500).json({ error: error.message });
     }
