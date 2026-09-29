@@ -22,7 +22,9 @@ import Tab from '@mui/material/Tab';
 import Tooltip from '@mui/material/Tooltip';
 import InputAdornment from '@mui/material/InputAdornment';
 import { ContentCopy, Code, ExpandMore, Check } from '@mui/icons-material';
+import { usePermission } from '@backstage/plugin-permission-react';
 import { VirtualKey, ModelInfo, TeamInfo, GenerateKeyRequest, GenerateKeyResponse, UpdateKeyRequest, LiteLlmConfig } from '../types';
+import { DEFAULT_KEY_DURATIONS, litellmKeyResetSpendPermission, formatDurationLabel } from '@acarmisc/backstage-plugin-litellm-common';
 import { estimateTokensFromBudget, fmtInt } from '../format';
 import { useCopyToClipboard } from '../hooks';
 import { validateKeyForm, firstInvalidField, expiryPreview, priciestInputPrice } from '../keyFormValidation';
@@ -333,6 +335,10 @@ export const KeyFormDialog: React.FC<KeyFormDialogProps> = ({
   const clipboardSnippet = useCopyToClipboard();
   const clipboardEndpoint = useCopyToClipboard();
 
+  // Permission check for reset spend
+  const resetSpendPermission = usePermission({ permission: litellmKeyResetSpendPermission });
+  const canResetSpend = !resetSpendPermission.loading && resetSpendPermission.allowed;
+
   // Re-arm the form each time the dialog opens so a stale result from a
   // previous run (or another user's session) is never shown.
   useEffect(() => {
@@ -639,8 +645,8 @@ export const KeyFormDialog: React.FC<KeyFormDialogProps> = ({
 
   const renderDangerZone = () => {
     if (isCreate || !onResetKeySpend) return null;
-    // Hide the danger zone if allowOwnerResetSpend is false
-    if (!config?.keyActions?.allowOwnerResetSpend) return null;
+    // Hide the danger zone if allowOwnerResetSpend is false or permission not granted
+    if (!config?.keyActions?.allowOwnerResetSpend || !canResetSpend) return null;
     return (
       <Box mt={1} pt={2} borderTop="1px solid" sx={{ borderColor: 'divider' }}>
         <Typography variant="caption" color="text.secondary" display="block" mb={1}>
@@ -911,10 +917,11 @@ export const KeyFormDialog: React.FC<KeyFormDialogProps> = ({
                   onChange={(e) => setFormData({ duration: e.target.value })}
                   fullWidth
                 >
-                  <MenuItem value="1d">1 Day</MenuItem>
-                  <MenuItem value="7d">7 Days</MenuItem>
-                  <MenuItem value="30d">30 Days</MenuItem>
-                  <MenuItem value="90d">90 Days</MenuItem>
+                  {DEFAULT_KEY_DURATIONS.map((duration) => (
+                    <MenuItem key={duration} value={duration}>
+                      {formatDurationLabel(duration)}
+                    </MenuItem>
+                  ))}
                 </TextField>
                 {generateForm.duration && (
                   <Typography variant="caption" color="text.secondary">

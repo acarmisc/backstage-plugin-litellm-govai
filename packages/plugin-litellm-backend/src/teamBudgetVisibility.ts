@@ -1,5 +1,6 @@
 import { Config } from '@backstage/config';
 import { TeamInfo, UsageMetrics } from './types';
+import { budgetStatusForPct, BudgetStatus } from '@acarmisc/backstage-plugin-litellm-common';
 
 /**
  * Independent "hide team budget" switches for the two team audiences.
@@ -25,15 +26,15 @@ export interface TeamBudgetVisibility {
  * Consumption status derived from spend vs. cap. Mirrors the frontend
  * `budgetTone` thresholds (80% near, 100% over) so both sides agree.
  */
-export type TeamBudgetStatus = 'ok' | 'near' | 'over';
+export type TeamBudgetStatus = BudgetStatus;
 
 export function teamBudgetStatusFor(
   spend: number,
   budget: number,
 ): TeamBudgetStatus {
-  if (budget > 0 && spend >= budget) return 'over';
-  if (budget > 0 && spend >= budget * 0.8) return 'near';
-  return 'ok';
+  if (budget <= 0) return 'ok';
+  const pct = (spend / budget) * 100;
+  return budgetStatusForPct(pct);
 }
 
 export function readTeamBudgetVisibility(

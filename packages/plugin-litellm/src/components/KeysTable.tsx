@@ -21,6 +21,11 @@ import InputAdornment from '@mui/material/InputAdornment';
 import Tooltip from '@mui/material/Tooltip';
 import { alpha } from '@mui/material/styles';
 import { ContentCopy, Delete, Edit, Autorenew, Search, Lock, LockOpen, Check } from '@mui/icons-material';
+import { usePermission } from '@backstage/plugin-permission-react';
+import {
+  litellmKeyManagePermission,
+  litellmKeyRevokePermission,
+} from '@acarmisc/backstage-plugin-litellm-common';
 import { useCopyToClipboard } from '../hooks';
 import { expiryStatus } from '../api';
 import { GenerateKeyButton } from './GenerateKeyButton';
@@ -162,6 +167,12 @@ export const KeysTable: React.FC<KeysTableProps> = ({
   onDeleteKey,
   onPruneExpiredKeys,
 }) => {
+  // Permission checks
+  const managePermission = usePermission({ permission: litellmKeyManagePermission });
+  const revokePermission = usePermission({ permission: litellmKeyRevokePermission });
+  const canManageKeys = !managePermission.loading && managePermission.allowed;
+  const canRevokeKeys = !revokePermission.loading && revokePermission.allowed;
+
   // Block/unblock
   const [blockingKeyId, setBlockingKeyId] = useState<string | null>(null);
 
@@ -384,7 +395,8 @@ export const KeysTable: React.FC<KeysTableProps> = ({
               <IconButton
                 size="small"
                 onClick={() => handleOpenEdit(key)}
-                title="Edit key"
+                disabled={!canManageKeys}
+                title={canManageKeys ? 'Edit key' : 'No permission to edit keys'}
                 sx={quietIconButtonSx('accent')}
               >
                 <Edit fontSize="small" />
@@ -392,8 +404,8 @@ export const KeysTable: React.FC<KeysTableProps> = ({
               <IconButton
                 size="small"
                 onClick={() => handleToggleBlock(key)}
-                disabled={isBlocking}
-                title={key.blocked ? 'Unblock key' : 'Block key — suspends without revoking'}
+                disabled={isBlocking || !canManageKeys}
+                title={!canManageKeys ? 'No permission to block keys' : (key.blocked ? 'Unblock key' : 'Block key — suspends without revoking')}
                 sx={quietIconButtonSx('warning')}
               >
                 {keyBlockIcon(isBlocking, key.blocked)}
@@ -401,7 +413,8 @@ export const KeysTable: React.FC<KeysTableProps> = ({
               <IconButton
                 size="small"
                 onClick={() => setDeleteConfirmId(keyId)}
-                title="Revoke key"
+                disabled={!canRevokeKeys}
+                title={canRevokeKeys ? 'Revoke key' : 'No permission to revoke keys'}
                 sx={quietIconButtonSx('danger')}
               >
                 <Delete fontSize="small" />

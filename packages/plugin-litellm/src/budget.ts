@@ -1,5 +1,6 @@
 import { UserInfo, TeamInfo, VirtualKey } from './types';
 import { Tone } from './components/ui';
+import { budgetStatusForPct } from '@acarmisc/backstage-plugin-litellm-common';
 
 /** One concrete budget limit the signed-in user is subject to. */
 export interface BudgetLimit {
@@ -230,8 +231,9 @@ export function fmtBudgetDuration(duration?: string): string | null {
 
 /** status pill tone + meter tone for a budget at `pct`. */
 export function budgetTone(pct: number): Tone {
-  if (pct >= 100) return 'danger';
-  if (pct >= 80) return 'warning';
+  const status = budgetStatusForPct(pct);
+  if (status === 'over') return 'danger';
+  if (status === 'near') return 'warning';
   return 'accent';
 }
 
