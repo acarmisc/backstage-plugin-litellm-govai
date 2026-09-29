@@ -30,17 +30,20 @@ import Button from '@mui/material/Button';
 import Typography from '@mui/material/Typography';
 import Skeleton from '@mui/material/Skeleton';
 import Collapse from '@mui/material/Collapse';
+import { useTheme } from '@mui/material/styles';
+import useMediaQuery from '@mui/material/useMediaQuery';
 import { ExpandMore } from '@mui/icons-material';
-import { AreaChart, Area, ResponsiveContainer, Tooltip } from 'recharts';
+import { AreaChart, Area, ResponsiveContainer, Tooltip, ReferenceLine, XAxis } from 'recharts';
 import { useApi } from '@backstage/core-plugin-api';
 import { Link } from '@backstage/core-components';
 import { useLiteLLMProfile } from '../hooks/useLiteLLMProfile';
 import { liteLlmApiRef } from '../api';
 import { UserInfo, TeamInfo, VirtualKey } from '../types';
-import { fmtUsd, fmtInt } from '../format';
+import { fmtUsd } from '../format';
 import { monthToDateRange } from '../dates';
+import { resolveCtas, type BudgetCtaKind, type BudgetCtaSpec, type BudgetCta } from '../ctas';
 import { widgetViewState, USAGE_UNAVAILABLE_MSG, UNPROVISIONED_MSG } from '../widgetState';
-import { Gauge, StatusPill, ChartTooltip, SERIES, fmtCompact } from './ui';
+import { Gauge, StatusPill, ChartTooltip, SERIES } from './ui';
 import { GenerateKeyButton } from './GenerateKeyButton';
 import { BudgetLimitList, LimitListPanel } from './BudgetLimitList';
 import {
@@ -54,16 +57,9 @@ import {
   fmtBudgetDuration,
 } from '../budget';
 import { rootRouteRef } from '../routes';
+import { mtdCaption, sparklineAriaLabel } from '../homeWidgetHelpers';
 
-/** Preset action-bar buttons. `label` overrides the default copy. */
-export type BudgetCtaKind = 'new-key' | 'module' | 'all-limits';
-export interface BudgetCtaSpec {
-  kind: BudgetCtaKind;
-  /** Override the default label. */
-  label?: string;
-}
-/** Either a bare kind (`'module'`) or a spec object (`{ kind: 'module' }`). */
-export type BudgetCta = BudgetCtaKind | BudgetCtaSpec;
+export type { BudgetCtaKind, BudgetCtaSpec, BudgetCta } from '../ctas';
 
 export interface LiteLLMBudgetGaugesProps {
   /** Optional title override. Defaults to 'Budget'. */
@@ -87,7 +83,7 @@ export interface LiteLLMBudgetGaugesProps {
   onCreateKey?: () => void;
   /**
    * Action-bar buttons to render, in order. Defaults to
-   * `['new-key', 'module', 'all-limits']`. Pass `[]` to hide the bar; the
+   * `['module', 'all-limits']`; 'new-key' is added automatically for users with no keys. Pass `[]` to hide the bar; the
    * `all-limits` entry is dropped automatically when the user has no limits.
    */
   ctas?: BudgetCta[];
@@ -117,11 +113,9 @@ const LEVEL: Record<BudgetGauge['kind'], { name: string; none: string }> = {
   team: { name: 'Team', none: 'No team budget' },
 };
 
-const DEFAULT_CTAS: BudgetCtaKind[] = ['new-key', 'module', 'all-limits'];
-
 const CTA_LABELS: Record<BudgetCtaKind, string> = {
   'new-key': 'Generate New Key',
-  module: 'Open module',
+  module: 'Open LiteLLM',
   'all-limits': 'All limits',
 };
 
@@ -154,6 +148,10 @@ const LevelGauge: React.FC<{ gauge: BudgetGauge; size: number; keysHref?: string
   const tone = limit ? budgetTone(limit.pct) : 'neutral';
   const extra = gauge.kind === 'key' ? Math.max(0, gauge.count - 1) : 0;
 
+  const gaugeAriaLabel = limit
+    ? `${name} budget used: ${Math.round(limit.pct)}%`
+    : `${name} — no cap`;
+
   return (
     <Box
       sx={{
@@ -161,7 +159,6 @@ const LevelGauge: React.FC<{ gauge: BudgetGauge; size: number; keysHref?: string
         flexDirection: 'column',
         alignItems: 'center',
         minWidth: 0,
-        flex: 1,
       }}
     >
       <Gauge
@@ -169,6 +166,7 @@ const LevelGauge: React.FC<{ gauge: BudgetGauge; size: number; keysHref?: string
         tone={tone}
         size={size}
         label={limit ? `${Math.round(limit.pct)}%` : '—'}
+        ariaLabel={gaugeAriaLabel}
       />
       <Typography
         sx={theme => ({
@@ -247,25 +245,24 @@ const LevelGauge: React.FC<{ gauge: BudgetGauge; size: number; keysHref?: string
 // monthToDateRange is imported from dates.ts above; re-export for backwards compatibility
 export { monthToDateRange } from '../dates';
 
-interface DailyTokens {
+interface DailySpend {
   date: string;
-  input: number;
-  output: number;
+  spend: number;
 }
 
 /**
- * Fourth column of the budget card: a sparkline of daily token usage
- * (stacked input/output) frozen to month-to-date, with the MTD token total
- * underneath. Same column width and label language as the gauges so the
- * four-column row stays aligned.
+ * Fourth column of the budget card: a sparkline of daily spend (MTD),
+ * with an optional dashed cap line. Same column width and label language as
+ * the gauges so the four-column row stays aligned.
  */
 const UsageMiniChart: React.FC<{
-  data: DailyTokens[];
-  totalTokens: number;
+  data: DailySpend[];
+  totalSpend: number;
   loading: boolean;
   height: number;
   usageUnavailable?: boolean;
-}> = ({ data, totalTokens, loading, height, usageUnavailable = false }) => {
+  maxBudget?: number;
+}> = ({ data, totalSpend, loading, height, usageUnavailable = false, maxBudget }) => {
   const renderPlot = () => {
     if (loading) {
       return (
@@ -288,27 +285,23 @@ const UsageMiniChart: React.FC<{
     return (
       <ResponsiveContainer width="100%" height="100%">
         <AreaChart data={data} margin={{ top: 4, right: 0, bottom: 0, left: 0 }}>
-          <Tooltip content={<ChartTooltip valueFormatter={fmtInt} />} />
+          <XAxis dataKey="date" hide />
+          <Tooltip content={<ChartTooltip valueFormatter={fmtUsd} />} />
+          {maxBudget !== undefined && (
+            <ReferenceLine
+              y={maxBudget}
+              stroke={SERIES.budget}
+              strokeDasharray="4 4"
+              strokeWidth={1}
+            />
+          )}
           <Area
             type="monotone"
-            dataKey="input"
-            name="Input"
-            stackId="tok"
-            stroke={SERIES.input}
+            dataKey="spend"
+            name="Spend"
+            stroke={SERIES.spend}
             strokeWidth={1.5}
-            fill={SERIES.input}
-            fillOpacity={0.25}
-            dot={false}
-            isAnimationActive={false}
-          />
-          <Area
-            type="monotone"
-            dataKey="output"
-            name="Output"
-            stackId="tok"
-            stroke={SERIES.output}
-            strokeWidth={1.5}
-            fill={SERIES.output}
+            fill={SERIES.spend}
             fillOpacity={0.25}
             dot={false}
             isAnimationActive={false}
@@ -344,7 +337,7 @@ const UsageMiniChart: React.FC<{
           color="text.secondary"
           sx={{ mt: 0.25, fontSize: 10.5, textAlign: 'center' }}
         >
-          No usage this month
+          No spend this month
         </Typography>
       );
     }
@@ -352,7 +345,7 @@ const UsageMiniChart: React.FC<{
       <>
         <Typography
           variant="caption"
-          title={`${fmtInt(totalTokens)} tokens month to date`}
+          title={`${fmtUsd(totalSpend)} spent month to date`}
           sx={{
             mt: 0.25,
             fontSize: 11,
@@ -364,7 +357,7 @@ const UsageMiniChart: React.FC<{
             fontVariantNumeric: 'tabular-nums',
           }}
         >
-          {fmtCompact(totalTokens)} tokens
+          {fmtUsd(totalSpend)}
         </Typography>
         <Typography variant="caption" color="text.secondary" sx={{ fontSize: 10.5 }}>
           month to date
@@ -380,8 +373,9 @@ const UsageMiniChart: React.FC<{
         flexDirection: 'column',
         alignItems: 'center',
         minWidth: 0,
-        flex: 1,
       }}
+      role="img"
+      aria-label={sparklineAriaLabel(data)}
     >
       <Box sx={{ height, width: '100%' }}>{renderPlot()}</Box>
       <Typography
@@ -394,7 +388,14 @@ const UsageMiniChart: React.FC<{
           color: theme.palette.text.secondary,
         })}
       >
-        Usage
+        Spend (MTD)
+      </Typography>
+      <Typography
+        variant="caption"
+        color="text.secondary"
+        sx={{ mt: 0.25, fontSize: 10.5 }}
+      >
+        {mtdCaption()}
       </Typography>
       {renderCaption()}
     </Box>
@@ -419,13 +420,17 @@ export const LiteLLMBudgetGauges: React.FC<LiteLLMBudgetGaugesProps> = ({
   keys: propKeys,
 }) => {
   const api = useApi(liteLlmApiRef);
+  const theme = useTheme();
+  const isSmallScreen = useMediaQuery(theme.breakpoints.down('sm'));
+  const gaugeSize = isSmallScreen ? 56 : size;
+  const expandedRegionId = React.useId();
   const moduleRouteRef = useRouteRef(rootRouteRef);
   const moduleHref = propModuleHref ?? moduleRouteRef?.();
   const { userInfo: hookUserInfo, teams: hookTeams, keys: hookKeys, loading: profileLoading, error: profileError } = useLiteLLMProfile();
   const [usageLoading, setUsageLoading] = useState(true);
   const [usageError, setUsageError] = useState<string | null>(null);
-  const [dailyTokens, setDailyTokens] = useState<DailyTokens[]>([]);
-  const [mtdTokens, setMtdTokens] = useState(0);
+  const [dailySpend, setDailySpend] = useState<DailySpend[]>([]);
+  const [mtdSpend, setMtdSpend] = useState(0);
 
   // Use provided props if available, otherwise use hook data
   const user = propUserInfo !== undefined ? propUserInfo : hookUserInfo;
@@ -460,21 +465,20 @@ export const LiteLLMBudgetGauges: React.FC<LiteLLMBudgetGaugesProps> = ({
         // Usage degrades independently: a failed usage fetch leaves the
         // gauges untouched and the chart column renders its empty state.
         const daily = usageResult.daily_usage ?? [];
-        setDailyTokens(
+        setDailySpend(
           daily.map(d => ({
             date: d.date,
-            input: d.prompt_tokens,
-            output: d.completion_tokens,
+            spend: d.spend ?? 0,
           })),
         );
-        setMtdTokens(usageResult.total_tokens ?? 0);
+        setMtdSpend(usageResult.total_spend ?? 0);
         setUsageLoading(false);
       })
       .catch((err) => {
         if (!cancelled) {
           setUsageError(err?.message ?? 'Failed to load usage data');
-          setDailyTokens([]);
-          setMtdTokens(0);
+          setDailySpend([]);
+          setMtdSpend(0);
           setUsageLoading(false);
         }
       });
@@ -521,21 +525,13 @@ export const LiteLLMBudgetGauges: React.FC<LiteLLMBudgetGaugesProps> = ({
       : `${headline.count} limit${headline.count === 1 ? '' : 's'}`;
 
   const resolvedCtas = useMemo<(BudgetCtaSpec & { kind: BudgetCtaKind })[]>(() => {
-    const list = ctas ?? DEFAULT_CTAS;
-    return list
-      .map(cta => (typeof cta === 'string' ? { kind: cta } : cta))
-      .filter(cta => {
-        // Hide 'new-key' CTA when profile has error or user is unprovisioned
-        if (cta.kind === 'new-key' && (viewState.kind === 'error' || viewState.kind === 'unprovisioned')) {
-          return false;
-        }
-        // Hide 'all-limits' when no limits
-        if (cta.kind === 'all-limits' && headline.count === 0) {
-          return false;
-        }
-        return true;
-      });
-  }, [ctas, headline.count, viewState]);
+    return resolveCtas({
+      ctas,
+      hasKeys: (keys?.length ?? 0) > 0,
+      viewState,
+      limitCount: headline.count,
+    });
+  }, [ctas, keys?.length, viewState, headline.count]);
 
   const renderCta = (cta: BudgetCtaSpec & { kind: BudgetCtaKind }, index: number) => {
     const label = cta.label ?? CTA_LABELS[cta.kind];
@@ -555,7 +551,7 @@ export const LiteLLMBudgetGauges: React.FC<LiteLLMBudgetGaugesProps> = ({
         // Hide if route is not mounted
         if (!moduleHref) return null;
         return (
-          <Button key={key} size="small" variant="outlined" component={Link} to={moduleHref}>
+          <Button key={key} size="small" variant="text" component={Link} to={moduleHref}>
             {label}
           </Button>
         );
@@ -566,12 +562,14 @@ export const LiteLLMBudgetGauges: React.FC<LiteLLMBudgetGaugesProps> = ({
             size="small"
             variant="text"
             onClick={toggleExpanded}
+            aria-expanded={isExpanded}
+            aria-controls={expandedRegionId}
             endIcon={
               <ExpandMore
-                sx={{
+                sx={muiTheme => ({
                   transform: isExpanded ? 'rotate(180deg)' : 'none',
-                  transition: theme => theme.transitions.create('transform'),
-                }}
+                  transition: muiTheme.transitions.create('transform'),
+                })}
               />
             }
           >
@@ -632,21 +630,23 @@ export const LiteLLMBudgetGauges: React.FC<LiteLLMBudgetGaugesProps> = ({
 
       {viewState.kind === 'ready' && (
         <>
-          <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
+          <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(76px, 1fr))', gap: 1 }}>
             {gauges.map(gauge => (
-              <LevelGauge key={gauge.kind} gauge={gauge} size={size} keysHref={keysTabHref} />
+              <LevelGauge key={gauge.kind} gauge={gauge} size={gaugeSize} keysHref={keysTabHref} />
             ))}
             <UsageMiniChart
-              data={dailyTokens}
-              totalTokens={mtdTokens}
+              data={dailySpend}
+              totalSpend={mtdSpend}
               loading={usageLoading}
-              height={size}
+              height={gaugeSize}
               usageUnavailable={viewState.usageUnavailable}
+              maxBudget={user?.max_budget ?? undefined}
             />
           </Box>
 
           <Collapse in={isExpanded} unmountOnExit>
             <Box
+              id={expandedRegionId}
               sx={{
                 mt: 1.5,
                 // Bound the expanded list so a user with many limits still
@@ -669,10 +669,10 @@ export const LiteLLMBudgetGauges: React.FC<LiteLLMBudgetGaugesProps> = ({
 
       {hasFooter && (
         <Box
-          sx={theme => ({
+          sx={muiTheme => ({
             mt: 2,
             pt: 2,
-            borderTop: `1px solid ${theme.palette.divider}`,
+            borderTop: `1px solid ${muiTheme.palette.divider}`,
             display: 'flex',
             alignItems: 'center',
             gap: 1,

@@ -11,6 +11,20 @@ export function rangeCaption(startDay: string, endDay: string): string {
 }
 
 /**
+ * Build a month-to-date range caption from a Date.
+ * Example: new Date('2026-09-29') → 'Sep 1 – 29'
+ * Handles same-day (returns date twice) and month/year edge cases.
+ */
+export function mtdCaption(now: Date = new Date()): string {
+  const year = now.getFullYear();
+  const month = now.getMonth();
+  const day = now.getDate();
+  const startDay = `${year}-${String(month + 1).padStart(2, '0')}-01`;
+  const endDay = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+  return rangeCaption(startDay, endDay);
+}
+
+/**
  * Build an aria-label summary for a sparkline chart showing daily spend data.
  * Includes total spend, peak value, and the date it occurred.
  * Example: 'Daily spend over 7 days, total $129.90, peak $41.20 on Sep 27'
@@ -46,4 +60,39 @@ export function usageSummary(usage: UsageMetrics | null | undefined): string {
   const tokenOut = fmtCompact(usage.completion_tokens ?? 0);
 
   return `${spent} spent · ${tokenIn} in · ${tokenOut} out`;
+}
+
+/**
+ * Build ARIA attributes for a meter component showing a percentage value.
+ * When value > 100%, sets aria-valuetext to include "over cap" warning.
+ * Returns an object with role, aria-valuenow, aria-valuemin, aria-valuemax,
+ * aria-label, and optionally aria-valuetext.
+ */
+export function meterAria(
+  pct: number,
+  label?: string,
+): {
+  role: string;
+  'aria-valuenow': number;
+  'aria-valuemin': number;
+  'aria-valuemax': number;
+  'aria-label'?: string;
+  'aria-valuetext'?: string;
+} {
+  const attrs: ReturnType<typeof meterAria> = {
+    role: 'meter',
+    'aria-valuenow': Math.max(0, Math.min(100, pct)),
+    'aria-valuemin': 0,
+    'aria-valuemax': 100,
+  };
+
+  if (label) {
+    attrs['aria-label'] = label;
+  }
+
+  if (pct > 100) {
+    attrs['aria-valuetext'] = `${Math.round(pct)}% — over cap`;
+  }
+
+  return attrs;
 }

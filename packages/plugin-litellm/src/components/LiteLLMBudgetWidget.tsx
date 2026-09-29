@@ -22,7 +22,7 @@
  * When user data is passed via props (userInfo, teams, keys), they are used
  * directly without refetching. Otherwise, the hook fetches them.
  */
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useId } from 'react';
 import { useRouteRef } from '@backstage/frontend-plugin-api';
 import Paper from '@mui/material/Paper';
 import Box from '@mui/material/Box';
@@ -302,6 +302,7 @@ export const LiteLLMBudgetWidget: React.FC<LiteLLMBudgetWidgetProps> = ({
   const moduleRouteRef = useRouteRef(rootRouteRef);
   const keysLink = buildKeysLink(moduleRouteRef?.());
   const [expanded, setExpanded] = useState(defaultExpanded);
+  const collapsibleContentId = useId();
 
   // Use provided props if available, otherwise use hook data
   const user = propUserInfo !== undefined ? propUserInfo : hookUserInfo;
@@ -398,6 +399,7 @@ export const LiteLLMBudgetWidget: React.FC<LiteLLMBudgetWidgetProps> = ({
             size="small"
             aria-label={expanded ? 'Collapse budget policy' : 'Expand budget policy'}
             aria-expanded={expanded}
+            aria-controls={collapsibleContentId}
             onClick={e => {
               e.stopPropagation();
               setExpanded(x => !x);
@@ -422,7 +424,9 @@ export const LiteLLMBudgetWidget: React.FC<LiteLLMBudgetWidgetProps> = ({
 
       {collapsible ? (
         <Collapse in={expanded} unmountOnExit>
-          {body}
+          <Box id={collapsibleContentId}>
+            {body}
+          </Box>
         </Collapse>
       ) : (
         body
