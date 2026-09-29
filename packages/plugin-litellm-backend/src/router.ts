@@ -61,6 +61,8 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
   // snippets in the frontend. Only exposed if explicitly configured.
   // When unset, returned as null to the FE.
   const publicBaseUrl = config.getOptionalString('litellm.publicBaseUrl') ?? null;
+  // Support contact for unprovisioned users (optional).
+  const supportContact = config.getOptionalString('litellm.supportContact');
   const baseClient = options.client ?? new LiteLLMClient({ baseUrl, masterKey });
 
   // Wrap client with userInfoCache. TTL is configurable (default 10s, 0 disables).
@@ -130,6 +132,7 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
     logger,
     baseUrl,
     publicBaseUrl,
+    supportContact,
     userIdDomain,
     provisioningEnabled,
     provisioningDefaults,

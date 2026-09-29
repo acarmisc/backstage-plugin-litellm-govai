@@ -4,10 +4,13 @@ import Alert from '@mui/material/Alert';
 import Button from '@mui/material/Button';
 import CircularProgress from '@mui/material/CircularProgress';
 import Typography from '@mui/material/Typography';
-import Paper from '@mui/material/Paper';
 import Tabs from '@mui/material/Tabs';
 import Tab from '@mui/material/Tab';
 import Grid from '@mui/material/Grid';
+import Accordion from '@mui/material/Accordion';
+import AccordionSummary from '@mui/material/AccordionSummary';
+import AccordionDetails from '@mui/material/AccordionDetails';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import { useSearchParams } from 'react-router-dom';
 import { useAsync, useAsyncRetry } from 'react-use';
 import { useApi, alertApiRef } from '@backstage/core-plugin-api';
@@ -31,6 +34,12 @@ import {
 } from '../permissions';
 import { DateRange, GenerateKeyRequest, GenerateKeyResponse, UpdateKeyRequest, UsageMetrics, CreateTeamRequest, UpdateTeamRequest, TeamInfo, VirtualKey } from '../types';
 import { toastFor } from '../feedback';
+import {
+  getUnprovisionedTitle,
+  getUnprovisionedMessage,
+  getAdminDetailsTitle,
+  getAdminDetailsMessage,
+} from '../unprovisionedCopy';
 
 const PERIOD_LS_KEY = 'litellm_usage_period';
 type DatePreset = 'today' | '24h' | '7d' | '30d';
@@ -388,25 +397,40 @@ export const LiteLLMPage: React.FC = () => {
 
   // User exists in Backstage but has no LiteLLM account
   if (userError || !userInfo) {
-    const isProvisioningEnabled = (userError as any)?.body?.provisioning === true;
     const hint = (userError as any)?.body?.hint;
     return (
-      <Box p={3}>
-        <Paper sx={{ p: 3 }}>
-          <Typography variant="h6" gutterBottom>Account not provisioned</Typography>
-          <Typography color="text.secondary" paragraph>
-            Your Backstage account is not linked to a LiteLLM user.
+      <Box sx={{ p: 3, display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <Box
+          sx={{
+            maxWidth: 600,
+            mx: 'auto',
+            py: 6,
+            textAlign: 'center',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: 2,
+          }}
+        >
+          <Typography variant="h5" sx={{ fontWeight: 600 }}>
+            {getUnprovisionedTitle()}
           </Typography>
-          {hint ? (
-            <Typography variant="body2" color="text.secondary">{hint}</Typography>
-          ) : (
-            <Typography variant="body2" color="text.secondary">
-              {isProvisioningEnabled
-                ? 'Auto-provisioning is enabled but failed. Check the backend logs.'
-                : 'Set litellm.provisioning.enabled: true in app-config.yaml to enable auto-provisioning, or ask your administrator to create the account manually.'}
-            </Typography>
-          )}
-        </Paper>
+          <Typography color="text.secondary">
+            {hint || getUnprovisionedMessage(liteLlmConfig?.supportContact)}
+          </Typography>
+          <Accordion sx={{ width: '100%', maxWidth: 500, mt: 2 }}>
+            <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+              <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                {getAdminDetailsTitle()}
+              </Typography>
+            </AccordionSummary>
+            <AccordionDetails>
+              <Typography variant="caption" color="text.secondary">
+                {getAdminDetailsMessage()}
+              </Typography>
+            </AccordionDetails>
+          </Accordion>
+        </Box>
       </Box>
     );
   }

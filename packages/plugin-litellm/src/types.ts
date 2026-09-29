@@ -34,6 +34,8 @@ export interface McpServerInfo {
 export interface LiteLlmConfig {
   /** Publicly reachable LiteLLM proxy base URL (for snippet generation). Null if not configured. */
   baseUrl: string | null;
+  /** Support contact for unprovisioned users (optional, e.g. 'admin@example.com' or 'Slack #support'). */
+  supportContact?: string;
   /** Controls for the "Generate New Key" form, set via litellm.keyGeneration in app-config.yaml. */
   keyGeneration?: {
     /** When false (default), the "Unlimited budget" checkbox is hidden and a budget is always required. */
