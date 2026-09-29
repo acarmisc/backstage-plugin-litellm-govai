@@ -1,6 +1,6 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert';
-import { fmtUsd, fmtInt, estimateTokensFromBudget } from './format';
+import { fmtUsd, fmtInt, formatCount, estimateTokensFromBudget } from './format';
 
 describe('fmtUsd', () => {
   test('uses 2 decimal places for amounts >= 1', () => {
@@ -36,6 +36,22 @@ describe('fmtInt', () => {
   test('treats null/undefined as 0', () => {
     assert.strictEqual(fmtInt(null as unknown as number), '0');
     assert.strictEqual(fmtInt(undefined as unknown as number), '0');
+  });
+});
+
+describe('formatCount', () => {
+  test('formats a number with digit-group separators', () => {
+    assert.strictEqual(formatCount(0), '0');
+    assert.strictEqual(formatCount(5), '5');
+    assert.strictEqual(formatCount(1000), '1,000');
+  });
+
+  test('returns "–" for null', () => {
+    assert.strictEqual(formatCount(null), '–');
+  });
+
+  test('returns "–" for undefined', () => {
+    assert.strictEqual(formatCount(undefined), '–');
   });
 });
 

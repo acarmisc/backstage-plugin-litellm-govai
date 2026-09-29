@@ -50,6 +50,8 @@ export interface KeyFormDialogProps {
   keyToEdit?: VirtualKey | null;
   keys: VirtualKey[];
   models: ModelInfo[];
+  modelsError?: Error;
+  onRetryModels?: () => void;
   teams: TeamInfo[];
   /** Current user's LiteLLM user id, used to pre-fill a default key alias. */
   username?: string;
@@ -291,6 +293,8 @@ export const KeyFormDialog: React.FC<KeyFormDialogProps> = ({
   keyToEdit = null,
   keys,
   models,
+  modelsError,
+  onRetryModels,
   teams,
   username,
   keyGenerationSettings,
@@ -783,30 +787,47 @@ export const KeyFormDialog: React.FC<KeyFormDialogProps> = ({
 
             {renderTeamField()}
 
-            {availableModels.length > 0 && (
-              <Autocomplete
-                multiple
-                options={availableModels}
-                groupBy={m => m.mode || 'other'}
-                getOptionLabel={m => m.model_name}
-                value={selectedModels}
-                onChange={(_e, selected) =>
-                  setFormData({ models: selected.map(m => m.model_name) })
-                }
-                renderOption={(props, m) => <li {...props}>{modelOption(m)}</li>}
-                renderInput={params => (
+            {(availableModels.length > 0 || modelsError) && (
+              <>
+                {modelsError ? (
                   <TextField
-                    {...params}
                     label="Models"
-                    helperText={
-                      selectedTeam
-                        ? 'Leave empty to allow all models available to this team'
-                        : 'Leave empty to allow all models'
-                    }
+                    disabled
+                    value=""
+                    helperText="Couldn't load models. Retry"
                     fullWidth
                   />
+                ) : (
+                  <Autocomplete
+                    multiple
+                    options={availableModels}
+                    groupBy={m => m.mode || 'other'}
+                    getOptionLabel={m => m.model_name}
+                    value={selectedModels}
+                    onChange={(_e, selected) =>
+                      setFormData({ models: selected.map(m => m.model_name) })
+                    }
+                    renderOption={(props, m) => <li {...props}>{modelOption(m)}</li>}
+                    renderInput={params => (
+                      <TextField
+                        {...params}
+                        label="Models"
+                        helperText={
+                          selectedTeam
+                            ? 'Leave empty to allow all models available to this team'
+                            : 'Leave empty to allow all models'
+                        }
+                        fullWidth
+                      />
+                    )}
+                  />
                 )}
-              />
+                {modelsError && onRetryModels && (
+                  <Button size="small" onClick={onRetryModels}>
+                    Retry
+                  </Button>
+                )}
+              </>
             )}
 
             {allowUnlimitedBudget && (

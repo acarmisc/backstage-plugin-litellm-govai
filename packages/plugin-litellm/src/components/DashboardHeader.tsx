@@ -15,6 +15,7 @@ interface DashboardHeaderProps {
   teams: TeamInfo[];
   keys: VirtualKey[];
   loading: boolean;
+  keysError?: Error;
   onGenerateKeyClick: () => void;
   /** Page tab bar, rendered flush with the bottom edge of the header card. */
   tabs?: React.ReactNode;
@@ -28,9 +29,11 @@ function initials(name: string): string {
   return local.slice(0, 2).toUpperCase();
 }
 
-const CountStat: React.FC<{ value: number; label: string; tone: Tone }> = ({ value, label, tone }) => {
+const CountStat: React.FC<{ value: number | null; label: string; tone: Tone }> = ({ value, label, tone }) => {
   // Zero counts stay grey: only a real expiry deserves a colour.
-  const active = value > 0;
+  // Null indicates a fetch error and displays as "–" without a coloured dot.
+  const active = value !== null && value > 0;
+  const display = value === null ? '–' : value;
   return (
     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
       <Box
@@ -50,7 +53,7 @@ const CountStat: React.FC<{ value: number; label: string; tone: Tone }> = ({ val
         component="span"
         sx={{ fontSize: 15, fontWeight: 700, lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}
       >
-        {value}
+        {display}
       </Typography>
       <Typography
         component="span"
@@ -68,14 +71,18 @@ export const DashboardHeader: React.FC<DashboardHeaderProps> = ({
   teams,
   keys,
   loading,
+  keysError,
   onGenerateKeyClick,
   tabs,
 }) => {
   const counts = useMemo(() => {
+    if (keysError) {
+      return { total: null, expired: null, expiringSoon: null };
+    }
     const expired = keys.filter(k => expiryStatus(k.expires_at) === 'expired').length;
     const expiringSoon = keys.filter(k => expiryStatus(k.expires_at) === 'soon').length;
     return { total: keys.length, expired, expiringSoon };
-  }, [keys]);
+  }, [keys, keysError]);
 
   const displayName = userInfo.user_email ?? userInfo.email ?? userInfo.user_id;
 
