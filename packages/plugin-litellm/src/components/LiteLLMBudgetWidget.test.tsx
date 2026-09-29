@@ -14,7 +14,9 @@ import { UserInfo, VirtualKey, TeamInfo } from '../types';
 
 // Mock the route-resolution API for useRouteRef
 const coreRouteResolutionRef = createApiRef<any>({ id: 'core.route-resolution' });
-const mockRouteResolution = () => '/litellm';
+const mockRouteResolution = {
+  resolve: () => '/litellm',
+};
 
 afterEach(() => cleanup());
 
