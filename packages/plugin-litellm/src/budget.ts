@@ -234,3 +234,89 @@ export function budgetTone(pct: number): Tone {
   if (pct >= 80) return 'warning';
   return 'accent';
 }
+
+/** Budget status for the signed-in user's overall spend vs their cap. */
+export interface UserBudgetKpi {
+  /** Total spend in the active budget window (lifetime or reset period). */
+  spend: number;
+  /** The budget cap, or null if unlimited. */
+  max: number | null;
+  /** max - spend, clamped at >= 0 for display. Null if unlimited. */
+  remaining: number | null;
+  /** spend / max * 100, or null if unlimited. Unclamped (can be > 100). */
+  pct: number | null;
+  /** 'capped' when a budget exists, 'unlimited' otherwise. */
+  kind: 'capped' | 'unlimited';
+  /**
+   * Caption for the KPI. When capped: "resets {formatted reset_at}" if reset_at
+   * exists and budget_duration is set, else "lifetime cap". Null if unlimited.
+   */
+  resetLabel: string | null;
+}
+
+/**
+ * Compute the user's budget status: spend vs their personal cap.
+ * Returns { spend, max, remaining, pct, kind, resetLabel } where remaining
+ * is clamped at >= 0 for display purposes but pct and kind reflect the real status.
+ */
+export function userBudgetKpi(userInfo: UserInfo | null): UserBudgetKpi {
+  if (!userInfo) {
+    return {
+      spend: 0,
+      max: null,
+      remaining: null,
+      pct: null,
+      kind: 'unlimited',
+      resetLabel: null,
+    };
+  }
+
+  const spend = userInfo.spend ?? 0;
+  const max = userInfo.max_budget ?? null;
+
+  if (max === null || max <= 0) {
+    return {
+      spend,
+      max: null,
+      remaining: null,
+      pct: null,
+      kind: 'unlimited',
+      resetLabel: null,
+    };
+  }
+
+  const remaining = Math.max(0, max - spend);
+  const pct = (spend / max) * 100;
+
+  // Format reset label
+  let resetLabel: string;
+  if (userInfo.budget_duration && userInfo.budget_reset_at) {
+    try {
+      const resetDate = new Date(userInfo.budget_reset_at);
+      // Format as "MMM D, YYYY HH:MM" (e.g., "Jan 1, 2026 00:00")
+      const fmt = new Intl.DateTimeFormat('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        timeZone: 'UTC',
+      });
+      const formatted = fmt.format(resetDate);
+      resetLabel = `resets ${formatted}`;
+    } catch {
+      resetLabel = 'lifetime cap';
+    }
+  } else {
+    resetLabel = 'lifetime cap';
+  }
+
+  return {
+    spend,
+    max,
+    remaining,
+    pct,
+    kind: 'capped',
+    resetLabel,
+  };
+}

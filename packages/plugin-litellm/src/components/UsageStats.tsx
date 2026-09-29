@@ -39,6 +39,7 @@ import {
   UsageKeyBreakdown,
 } from '../types';
 import { fmtUsd, fmtInt } from '../format';
+import { userBudgetKpi } from '../budget';
 import {
   ChartCard,
   ChartTooltip,
@@ -265,12 +266,11 @@ export const UsageStats: React.FC<UsageStatsProps> = ({
 
   const totalRequests = usage?.api_requests ?? 0;
   const overallSuccessRate = totalRequests > 0 ? (usage?.successful_requests ?? 0) / totalRequests : 0;
-  const maxBudget = userInfo?.max_budget ?? 0;
-  const totalCumSpend = cumulativeData[cumulativeData.length - 1]?.cumulative ?? 0;
+  const budgetKpi = userBudgetKpi(userInfo ?? null);
 
   // Keep the budget reference line inside the plot even when spend is far below it.
-  const cumulativeDomain: any = maxBudget > 0
-    ? [0, (dataMax: number) => Math.max(dataMax, maxBudget) * 1.05]
+  const cumulativeDomain: any = budgetKpi.max && budgetKpi.max > 0
+    ? [0, (dataMax: number) => Math.max(dataMax, budgetKpi.max!) * 1.05]
     : [0, 'auto'];
 
   const successTone: Tone = totalRequests === 0 ? 'neutral' : rateTone(overallSuccessRate);
@@ -279,7 +279,7 @@ export const UsageStats: React.FC<UsageStatsProps> = ({
     {
       label: 'Total spend',
       value: fmtUsd(usage?.total_spend ?? 0),
-      hint: maxBudget > 0 ? `of ${fmtUsd(maxBudget)} budget` : undefined,
+      hint: budgetKpi.max ? budgetKpi.resetLabel ?? undefined : undefined,
       tone: 'accent' as const,
     },
     {
@@ -571,12 +571,7 @@ export const UsageStats: React.FC<UsageStatsProps> = ({
 
           <Grid item xs={12} md={6}>
             <ChartCard
-              title={maxBudget > 0 ? 'Cumulative spend vs budget' : 'Cumulative spend'}
-              meta={
-                maxBudget > 0
-                  ? `${fmtUsd(totalCumSpend)} used · ${fmtUsd(Math.max(0, maxBudget - totalCumSpend))} left`
-                  : undefined
-              }
+              title="Spend in period"
             >
               <ChartOrFallback loading={loading} empty={cumulativeData.length === 0}>
                 <ResponsiveContainer width="100%" height="100%">
@@ -593,12 +588,12 @@ export const UsageStats: React.FC<UsageStatsProps> = ({
                       cursor={chart.cursor}
                       content={<ChartTooltip valueFormatter={fmtUsd} />}
                     />
-                    {maxBudget > 0 && (
+                    {budgetKpi.max && budgetKpi.max > 0 && (
                       <ReferenceLine
-                        y={maxBudget}
+                        y={budgetKpi.max}
                         stroke={SERIES.budget}
                         strokeDasharray="5 4"
-                        label={{ value: `Budget ${fmtUsd(maxBudget)}`, position: 'insideTopRight', fontSize: 10, fill: SERIES.budget }}
+                        label={{ value: `Budget ${fmtUsd(budgetKpi.max)}`, position: 'insideTopRight', fontSize: 10, fill: SERIES.budget }}
                       />
                     )}
                     <Area

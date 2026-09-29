@@ -11,6 +11,8 @@ export interface UserInfo {
   hard_limit?: number;
   /** Spend-reset period for max_budget, e.g. "30d". */
   budget_duration?: string;
+  /** ISO timestamp when max_budget resets (present when budget_duration is set). */
+  budget_reset_at?: string;
   /** Backstage-computed: true when the user belongs to litellm.audit.group */
   can_view_audit?: boolean;
 }
