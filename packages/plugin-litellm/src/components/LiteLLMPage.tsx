@@ -25,6 +25,7 @@ import { TeamUsage } from './TeamUsage';
 import { ModelsTable } from './ModelsTable';
 import { AuditLog } from './AuditLog';
 import { liteLlmApiRef } from '../api';
+import { toLocalDay } from '../dates';
 import {
   litellmTeamCreatePermission,
   litellmTeamManagePermission,
@@ -222,8 +223,8 @@ export const LiteLLMPage: React.FC = () => {
   }, [allTeams, userInfo]);
 
   const { value: usage, loading: usageLoading, error: usageError, retry: refreshUsage } = useAsyncRetry(async () => {
-    const startDate = dateRange.start.toISOString().split('T')[0];
-    const endDate = dateRange.end.toISOString().split('T')[0];
+    const startDate = toLocalDay(dateRange.start);
+    const endDate = toLocalDay(dateRange.end);
     return api.getUsage(startDate, endDate);
   }, [api, dateRange]);
 
@@ -242,8 +243,8 @@ export const LiteLLMPage: React.FC = () => {
     if (teamUsageCache[teamId] !== undefined || teamUsageLoading[teamId]) return;
     setTeamUsageLoading(prev => ({ ...prev, [teamId]: true }));
     try {
-      const startDate = dateRange.start.toISOString().split('T')[0];
-      const endDate = dateRange.end.toISOString().split('T')[0];
+      const startDate = toLocalDay(dateRange.start);
+      const endDate = toLocalDay(dateRange.end);
       const data = await api.getTeamUsage(teamId, startDate, endDate);
       setTeamUsageCache(prev => ({ ...prev, [teamId]: data }));
     } catch {

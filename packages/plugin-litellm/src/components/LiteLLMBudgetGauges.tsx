@@ -38,6 +38,7 @@ import { useLiteLLMProfile } from '../hooks/useLiteLLMProfile';
 import { liteLlmApiRef } from '../api';
 import { UserInfo, TeamInfo, VirtualKey } from '../types';
 import { fmtUsd, fmtInt } from '../format';
+import { monthToDateRange } from '../dates';
 import { Gauge, StatusPill, ChartTooltip, SERIES, fmtCompact } from './ui';
 import { GenerateKeyButton } from './GenerateKeyButton';
 import { BudgetLimitList, LimitListPanel } from './BudgetLimitList';
@@ -239,18 +240,8 @@ const LevelGauge: React.FC<{ gauge: BudgetGauge; size: number; keysHref: string 
   );
 };
 
-/** Month-to-date range as `YYYY-MM-DD` strings: the 1st of the current month through today. */
-export function monthToDateRange(now: Date = new Date()): { startDate: string; endDate: string } {
-  // Local calendar days, not UTC slices: `toISOString().split('T')[0]` shifts
-  // the date at month boundaries for non-UTC hosts, which would either clip
-  // today off the chart or pull in a day from the previous month.
-  const toDay = (d: Date) =>
-    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(
-      d.getDate(),
-    ).padStart(2, '0')}`;
-  const start = new Date(now.getFullYear(), now.getMonth(), 1);
-  return { startDate: toDay(start), endDate: toDay(now) };
-}
+// monthToDateRange is imported from dates.ts above; re-export for backwards compatibility
+export { monthToDateRange } from '../dates';
 
 interface DailyTokens {
   date: string;
