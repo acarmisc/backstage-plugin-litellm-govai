@@ -23,6 +23,7 @@
  * one on the plugin page.
  */
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useRouteRef } from '@backstage/frontend-plugin-api';
 import Paper from '@mui/material/Paper';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
@@ -52,9 +53,7 @@ import {
   budgetTone,
   fmtBudgetDuration,
 } from '../budget';
-
-/** The module page; `?tab=` picks the tab and `?generate=1` opens the dialog. */
-const MODULE_PATH = '/litellm';
+import { rootRouteRef } from '../routes';
 
 /** Preset action-bar buttons. `label` overrides the default copy. */
 export type BudgetCtaKind = 'new-key' | 'module' | 'all-limits';
@@ -391,7 +390,7 @@ export const LiteLLMBudgetGauges: React.FC<LiteLLMBudgetGaugesProps> = ({
   title = 'Budget',
   size = 72,
   keysHref,
-  moduleHref = MODULE_PATH,
+  moduleHref: propModuleHref,
   onCreateKey,
   ctas,
   maxExpandedKeys = 8,
@@ -404,6 +403,8 @@ export const LiteLLMBudgetGauges: React.FC<LiteLLMBudgetGaugesProps> = ({
   keys: propKeys,
 }) => {
   const api = useApi(liteLlmApiRef);
+  const moduleRouteRef = useRouteRef(rootRouteRef);
+  const moduleHref = propModuleHref ?? moduleRouteRef?.();
   const { userInfo: hookUserInfo, teams: hookTeams, keys: hookKeys, loading: profileLoading, error: profileError } = useLiteLLMProfile();
   const [usageLoading, setUsageLoading] = useState(true);
   const [usageError, setUsageError] = useState<string | null>(null);
@@ -429,7 +430,7 @@ export const LiteLLMBudgetGauges: React.FC<LiteLLMBudgetGaugesProps> = ({
     onExpandedChange?.(next);
   }, [isControlled, isExpanded, onExpandedChange]);
 
-  const keysTabHref = keysHref ?? `${moduleHref}?tab=keys`;
+  const keysTabHref = keysHref ?? (moduleHref ? `${moduleHref}?tab=keys` : undefined);
 
   useEffect(() => {
     let cancelled = false;

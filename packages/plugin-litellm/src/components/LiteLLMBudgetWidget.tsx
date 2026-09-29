@@ -23,6 +23,7 @@
  * directly without refetching. Otherwise, the hook fetches them.
  */
 import React, { useMemo, useState } from 'react';
+import { useRouteRef } from '@backstage/frontend-plugin-api';
 import Paper from '@mui/material/Paper';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
@@ -48,6 +49,8 @@ import {
   BudgetSummary,
   budgetTone,
 } from '../budget';
+import { rootRouteRef } from '../routes';
+import { buildKeysLink } from '../routeHelpers';
 
 export interface LiteLLMBudgetWidgetProps {
   /** Optional title override. Defaults to 'Budget Policy'. */
@@ -173,11 +176,6 @@ const CLOSEST_LEVEL_LABEL: Record<BudgetLimit['kind'], string> = {
   team: 'team',
 };
 
-/**
- * Where "see the rest of my keys" points. The plugin route is mounted at
- * `/litellm`; `LiteLLMPage` reads `?tab=` to open the Keys tab directly.
- */
-const KEYS_PATH = '/litellm?tab=keys';
 
 /**
  * The one thing that's easy to get wrong about LiteLLM budgets: the order
@@ -204,7 +202,7 @@ const HierarchyNote: React.FC<{ withReset?: boolean }> = ({ withReset }) => (
 );
 
 /** Full body: the numbered key→personal→team→global rail plus the policy footnote. */
-const FullBody: React.FC<{ summary: BudgetSummary }> = ({ summary }) => {
+const FullBody: React.FC<{ summary: BudgetSummary; keysLink?: string }> = ({ summary, keysLink }) => {
   const hasBudgetedKeys = summary.keys.length + summary.hiddenBudgetedKeys > 0;
   return (
     <>
@@ -220,8 +218,8 @@ const FullBody: React.FC<{ summary: BudgetSummary }> = ({ summary }) => {
         {summary.keys.map(k => (
           <LimitCard key={k.sublabel ?? k.label} limit={k} />
         ))}
-        {summary.hiddenBudgetedKeys > 0 && (
-          <MoreKeysNote count={summary.hiddenBudgetedKeys} href={KEYS_PATH} />
+        {summary.hiddenBudgetedKeys > 0 && keysLink && (
+          <MoreKeysNote count={summary.hiddenBudgetedKeys} href={keysLink} />
         )}
       </LevelFrame>
 
@@ -263,7 +261,7 @@ const FullBody: React.FC<{ summary: BudgetSummary }> = ({ summary }) => {
 };
 
 /** Compact body: only the limits the user actually has, as a tagged meter list. */
-const CompactBody: React.FC<{ summary: BudgetSummary }> = ({ summary }) => {
+const CompactBody: React.FC<{ summary: BudgetSummary; keysLink?: string }> = ({ summary, keysLink }) => {
   const { count } = budgetHeadline(summary);
   if (count === 0) {
     return (
@@ -278,8 +276,8 @@ const CompactBody: React.FC<{ summary: BudgetSummary }> = ({ summary }) => {
       {summary.keys.map(k => (
         <TaggedLimit key={k.sublabel ?? k.label} limit={k} />
       ))}
-      {summary.hiddenBudgetedKeys > 0 && (
-        <MoreKeysNote count={summary.hiddenBudgetedKeys} href={KEYS_PATH} />
+      {summary.hiddenBudgetedKeys > 0 && keysLink && (
+        <MoreKeysNote count={summary.hiddenBudgetedKeys} href={keysLink} />
       )}
       {summary.user && <TaggedLimit limit={summary.user} />}
       {summary.teams.map(t => (
@@ -301,6 +299,8 @@ export const LiteLLMBudgetWidget: React.FC<LiteLLMBudgetWidgetProps> = ({
   keys: propKeys,
 }) => {
   const { userInfo: hookUserInfo, teams: hookTeams, keys: hookKeys, loading, error } = useLiteLLMProfile();
+  const moduleRouteRef = useRouteRef(rootRouteRef);
+  const keysLink = buildKeysLink(moduleRouteRef?.());
   const [expanded, setExpanded] = useState(defaultExpanded);
 
   // Use provided props if available, otherwise use hook data
@@ -339,7 +339,7 @@ export const LiteLLMBudgetWidget: React.FC<LiteLLMBudgetWidgetProps> = ({
       )}
 
       {!loading && !error &&
-        (compact ? <CompactBody summary={summary} /> : <FullBody summary={summary} />)}
+        (compact ? <CompactBody summary={summary} keysLink={keysLink} /> : <FullBody summary={summary} keysLink={keysLink} />)}
     </>
   );
 
