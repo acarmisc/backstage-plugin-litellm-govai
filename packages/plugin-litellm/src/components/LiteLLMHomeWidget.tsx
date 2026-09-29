@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import Paper from '@mui/material/Paper';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
@@ -6,8 +6,7 @@ import FormControl from '@mui/material/FormControl';
 import Select from '@mui/material/Select';
 import MenuItem from '@mui/material/MenuItem';
 import Grid from '@mui/material/Grid';
-import CircularProgress from '@mui/material/CircularProgress';
-import Alert from '@mui/material/Alert';
+import Skeleton from '@mui/material/Skeleton';
 import { AreaChart, Area, ResponsiveContainer } from 'recharts';
 import { useApi } from '@backstage/core-plugin-api';
 import { useLiteLLMProfile } from '../hooks/useLiteLLMProfile';
@@ -15,6 +14,7 @@ import { liteLlmApiRef } from '../api';
 import { UsageMetrics } from '../types';
 import { fmtUsd, fmtInt } from '../format';
 import { toLocalDay } from '../dates';
+import { widgetViewState, USAGE_UNAVAILABLE_MSG, UNPROVISIONED_MSG } from '../widgetState';
 
 export interface LiteLLMHomeWidgetProps {
   /** Default period when the widget mounts. Defaults to '7d'. */
@@ -66,10 +66,10 @@ export const LiteLLMHomeWidget: React.FC<LiteLLMHomeWidgetProps> = ({
   bare = false,
 }) => {
   const api = useApi(liteLlmApiRef);
-  const { keys } = useLiteLLMProfile();
+  const { userInfo, keys, loading: profileLoading, error: profileError } = useLiteLLMProfile();
   const [period, setPeriod] = useState<DatePreset>(defaultPeriod);
   const [usageLoading, setUsageLoading] = useState(true);
-  const [usageError, setUsageError] = useState<string | null>(null);
+  const [usageError, setUsageError] = useState<unknown>(null);
   const [usage, setUsage] = useState<UsageMetrics | null>(null);
 
   useEffect(() => {
@@ -89,7 +89,7 @@ export const LiteLLMHomeWidget: React.FC<LiteLLMHomeWidgetProps> = ({
       })
       .catch((err) => {
         if (!cancelled) {
-          setUsageError(err?.message ?? 'Failed to load usage data');
+          setUsageError(err);
           setUsage(null);
           setUsageLoading(false);
         }
@@ -100,10 +100,20 @@ export const LiteLLMHomeWidget: React.FC<LiteLLMHomeWidgetProps> = ({
     };
   }, [api, period]);
 
+  const viewState = useMemo(
+    () => widgetViewState({
+      loading: profileLoading || usageLoading,
+      error: profileError,
+      userInfo,
+      usageError,
+      hasKeys: (keys?.length ?? 0) > 0,
+    }),
+    [profileLoading, usageLoading, profileError, userInfo, usageError, keys],
+  );
+
   const Wrapper: React.ElementType = bare ? Box : Paper;
 
   const partialFailure = !usageLoading && usageError && usage;
-  const totalFailure = !usageLoading && usageError;
 
   const dailyData = (usage?.daily_usage ?? []).map(d => ({
     date: d.date,
@@ -131,39 +141,81 @@ export const LiteLLMHomeWidget: React.FC<LiteLLMHomeWidgetProps> = ({
       </Box>
 
       {/* Loading state */}
-      {usageLoading && (
-        <Box display="flex" justifyContent="center" alignItems="center" minHeight={120}>
-          <CircularProgress size={32} />
+      {viewState.kind === 'loading' && (
+        <Box sx={{ minHeight: 120 }}>
+          <Grid container spacing={2} sx={{ mb: 1.5 }}>
+            <Grid item xs={6}>
+              <Box>
+                <Skeleton variant="text" width="60%" height={12} sx={{ mb: 0.5 }} />
+                <Skeleton variant="text" width="80%" height={18} />
+              </Box>
+            </Grid>
+            <Grid item xs={6}>
+              <Box>
+                <Skeleton variant="text" width="60%" height={12} sx={{ mb: 0.5 }} />
+                <Skeleton variant="text" width="80%" height={18} />
+              </Box>
+            </Grid>
+            <Grid item xs={6}>
+              <Box>
+                <Skeleton variant="text" width="60%" height={12} sx={{ mb: 0.5 }} />
+                <Skeleton variant="text" width="80%" height={18} />
+              </Box>
+            </Grid>
+            <Grid item xs={6}>
+              <Box>
+                <Skeleton variant="text" width="60%" height={12} sx={{ mb: 0.5 }} />
+                <Skeleton variant="text" width="80%" height={18} />
+              </Box>
+            </Grid>
+          </Grid>
+          <Skeleton variant="rectangular" width="100%" height={120} />
         </Box>
       )}
 
       {/* Error state */}
-      {!usageLoading && totalFailure && (
-        <Alert severity="error" sx={{ mt: 1 }}>
-          {usageError ?? 'Failed to load usage data'}
-        </Alert>
+      {viewState.kind === 'error' && (
+        <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+          {viewState.message}
+        </Typography>
+      )}
+
+      {/* Unprovisioned state */}
+      {viewState.kind === 'unprovisioned' && (
+        <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+          {UNPROVISIONED_MSG}
+        </Typography>
       )}
 
       {/* Content */}
-      {!usageLoading && !totalFailure && (
-        <>
-          {partialFailure && (
-            <Alert severity="warning" sx={{ mt: 1, mb: 1 }}>
-              {usageError
-                ? `Usage data unavailable (${usageError}).`
-                : 'Showing what loaded.'}
-            </Alert>
-          )}
+      {viewState.kind === 'ready' && partialFailure && (
+        <Box sx={{ mt: 1, mb: 1, p: 1, backgroundColor: 'action.hover', borderRadius: 1 }}>
+          <Typography variant="body2" color="text.secondary">
+            {USAGE_UNAVAILABLE_MSG}
+          </Typography>
+        </Box>
+      )}
 
+      {viewState.kind === 'ready' && (
+        <>
           <Grid container spacing={2} sx={{ mb: hasSparkline ? 1.5 : 0 }}>
             <Grid item xs={6}>
-              <Kpi label="USD Spent" value={fmtUsd(usage?.total_spend ?? 0)} />
+              <Kpi
+                label="USD Spent"
+                value={viewState.usageUnavailable ? USAGE_UNAVAILABLE_MSG : fmtUsd(usage?.total_spend ?? 0)}
+              />
             </Grid>
             <Grid item xs={6}>
-              <Kpi label="Tokens In" value={fmtInt(usage?.prompt_tokens ?? 0)} />
+              <Kpi
+                label="Tokens In"
+                value={viewState.usageUnavailable ? USAGE_UNAVAILABLE_MSG : fmtInt(usage?.prompt_tokens ?? 0)}
+              />
             </Grid>
             <Grid item xs={6}>
-              <Kpi label="Tokens Out" value={fmtInt(usage?.completion_tokens ?? 0)} />
+              <Kpi
+                label="Tokens Out"
+                value={viewState.usageUnavailable ? USAGE_UNAVAILABLE_MSG : fmtInt(usage?.completion_tokens ?? 0)}
+              />
             </Grid>
             <Grid item xs={6}>
               <Kpi label="Keys" value={fmtInt(keys.length)} />
@@ -171,7 +223,7 @@ export const LiteLLMHomeWidget: React.FC<LiteLLMHomeWidgetProps> = ({
           </Grid>
 
           {/* Sparkline */}
-          {hasSparkline && (
+          {hasSparkline && !viewState.usageUnavailable && (
             <Box height={120}>
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={dailyData} margin={{ top: 4, right: 0, bottom: 0, left: 0 }}>

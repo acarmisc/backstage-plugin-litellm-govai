@@ -28,8 +28,7 @@ import Paper from '@mui/material/Paper';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Typography from '@mui/material/Typography';
-import CircularProgress from '@mui/material/CircularProgress';
-import Alert from '@mui/material/Alert';
+import Skeleton from '@mui/material/Skeleton';
 import Collapse from '@mui/material/Collapse';
 import { ExpandMore } from '@mui/icons-material';
 import { AreaChart, Area, ResponsiveContainer, Tooltip } from 'recharts';
@@ -40,6 +39,7 @@ import { liteLlmApiRef } from '../api';
 import { UserInfo, TeamInfo, VirtualKey } from '../types';
 import { fmtUsd, fmtInt } from '../format';
 import { monthToDateRange } from '../dates';
+import { widgetViewState, USAGE_UNAVAILABLE_MSG, UNPROVISIONED_MSG } from '../widgetState';
 import { Gauge, StatusPill, ChartTooltip, SERIES, fmtCompact } from './ui';
 import { GenerateKeyButton } from './GenerateKeyButton';
 import { BudgetLimitList, LimitListPanel } from './BudgetLimitList';
@@ -112,7 +112,7 @@ export interface LiteLLMBudgetGaugesProps {
 
 /** One-word level names, and the note shown when the level has no cap. */
 const LEVEL: Record<BudgetGauge['kind'], { name: string; none: string }> = {
-  key: { name: 'Key', none: 'No key budget' },
+  key: { name: 'Key', none: 'No cap (unlimited)' },
   user: { name: 'User', none: 'No personal budget' },
   team: { name: 'Team', none: 'No team budget' },
 };
@@ -264,13 +264,12 @@ const UsageMiniChart: React.FC<{
   totalTokens: number;
   loading: boolean;
   height: number;
-}> = ({ data, totalTokens, loading, height }) => {
+  usageUnavailable?: boolean;
+}> = ({ data, totalTokens, loading, height, usageUnavailable = false }) => {
   const renderPlot = () => {
     if (loading) {
       return (
-        <Box display="flex" justifyContent="center" alignItems="center" height="100%">
-          <CircularProgress size={20} />
-        </Box>
+        <Skeleton variant="rectangular" width="100%" height="100%" />
       );
     }
     if (data.length === 0) {
@@ -324,6 +323,17 @@ const UsageMiniChart: React.FC<{
       return (
         <Typography variant="caption" color="text.secondary" sx={{ mt: 0.25, fontSize: 11 }}>
           …
+        </Typography>
+      );
+    }
+    if (usageUnavailable) {
+      return (
+        <Typography
+          variant="caption"
+          color="text.secondary"
+          sx={{ mt: 0.25, fontSize: 10.5, textAlign: 'center' }}
+        >
+          {USAGE_UNAVAILABLE_MSG}
         </Typography>
       );
     }
@@ -493,6 +503,18 @@ export const LiteLLMBudgetGauges: React.FC<LiteLLMBudgetGaugesProps> = ({
     [expandedSummary],
   );
 
+  // Determine the overall widget state
+  const viewState = useMemo(
+    () => widgetViewState({
+      loading,
+      error: profileError,
+      userInfo: user,
+      usageError,
+      hasKeys: (keys?.length ?? 0) > 0,
+    }),
+    [loading, profileError, user, usageError, keys],
+  );
+
   const summaryText =
     headline.count === 0
       ? 'no limits apply'
@@ -502,8 +524,18 @@ export const LiteLLMBudgetGauges: React.FC<LiteLLMBudgetGaugesProps> = ({
     const list = ctas ?? DEFAULT_CTAS;
     return list
       .map(cta => (typeof cta === 'string' ? { kind: cta } : cta))
-      .filter(cta => cta.kind !== 'all-limits' || headline.count > 0);
-  }, [ctas, headline.count]);
+      .filter(cta => {
+        // Hide 'new-key' CTA when profile has error or user is unprovisioned
+        if (cta.kind === 'new-key' && (viewState.kind === 'error' || viewState.kind === 'unprovisioned')) {
+          return false;
+        }
+        // Hide 'all-limits' when no limits
+        if (cta.kind === 'all-limits' && headline.count === 0) {
+          return false;
+        }
+        return true;
+      });
+  }, [ctas, headline.count, viewState]);
 
   const renderCta = (cta: BudgetCtaSpec & { kind: BudgetCtaKind }, index: number) => {
     const label = cta.label ?? CTA_LABELS[cta.kind];
@@ -573,19 +605,32 @@ export const LiteLLMBudgetGauges: React.FC<LiteLLMBudgetGaugesProps> = ({
         )}
       </Box>
 
-      {loading && (
-        <Box display="flex" justifyContent="center" alignItems="center" minHeight={110}>
-          <CircularProgress size={28} />
+      {viewState.kind === 'loading' && (
+        <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, minHeight: size }}>
+          {[0, 1, 2, 3].map(i => (
+            <Box key={i} sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flex: 1 }}>
+              <Skeleton variant="circular" width={size} height={size} sx={{ mb: 0.75 }} />
+              <Skeleton variant="text" width="100%" height={12} sx={{ mb: 0.25 }} />
+              <Skeleton variant="text" width="80%" height={11} sx={{ mb: 0.25 }} />
+              <Skeleton variant="text" width="70%" height={10.5} />
+            </Box>
+          ))}
         </Box>
       )}
 
-      {!loading && error && (
-        <Alert severity="error" sx={{ mt: 0.5 }}>
-          {error}
-        </Alert>
+      {viewState.kind === 'error' && (
+        <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+          {viewState.message}
+        </Typography>
       )}
 
-      {!loading && !error && (
+      {viewState.kind === 'unprovisioned' && (
+        <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+          {UNPROVISIONED_MSG}
+        </Typography>
+      )}
+
+      {viewState.kind === 'ready' && (
         <>
           <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
             {gauges.map(gauge => (
@@ -596,6 +641,7 @@ export const LiteLLMBudgetGauges: React.FC<LiteLLMBudgetGaugesProps> = ({
               totalTokens={mtdTokens}
               loading={usageLoading}
               height={size}
+              usageUnavailable={viewState.usageUnavailable}
             />
           </Box>
 
