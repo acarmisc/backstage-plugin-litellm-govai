@@ -5,6 +5,8 @@ import Typography from '@mui/material/Typography';
 import TextField from '@mui/material/TextField';
 import MenuItem from '@mui/material/MenuItem';
 import Grid from '@mui/material/Grid';
+import Alert from '@mui/material/Alert';
+import Button from '@mui/material/Button';
 import Table from '@mui/material/Table';
 import TableBody from '@mui/material/TableBody';
 import TableCell from '@mui/material/TableCell';
@@ -59,6 +61,8 @@ import {
 
 interface UsageStatsProps {
   usage: UsageMetrics | null;
+  usageError?: Error;
+  onRetryUsage?: () => void;
   models: ModelInfo[];
   dateRange: DateRange;
   currentPreset: DatePreset;
@@ -128,6 +132,8 @@ const SuccessRateCell: React.FC<{ rate: number; requests: number }> = ({ rate, r
 
 export const UsageStats: React.FC<UsageStatsProps> = ({
   usage,
+  usageError,
+  onRetryUsage,
   models,
   dateRange,
   currentPreset,
@@ -396,6 +402,25 @@ export const UsageStats: React.FC<UsageStatsProps> = ({
       ))}
     </TextField>
   );
+
+  if (usageError) {
+    return (
+      <SectionCard
+        title="Usage Analytics"
+        subtitle={`${PRESET_LABELS[currentPreset]} · ${dateRange.start.toLocaleDateString()} – ${dateRange.end.toLocaleDateString()}`}
+        actions={periodSelect}
+      >
+        <Alert severity="error">
+          Failed to load usage data: {(usageError as any).message || 'Unknown error'}
+          {onRetryUsage && (
+            <Box sx={{ mt: 1 }}>
+              <Button size="small" onClick={onRetryUsage}>Retry</Button>
+            </Box>
+          )}
+        </Alert>
+      </SectionCard>
+    );
+  }
 
   return (
     <SectionCard

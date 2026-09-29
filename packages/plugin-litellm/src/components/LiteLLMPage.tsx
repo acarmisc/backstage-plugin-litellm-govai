@@ -2,6 +2,7 @@ import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import Box from '@mui/material/Box';
 import Snackbar from '@mui/material/Snackbar';
 import Alert from '@mui/material/Alert';
+import Button from '@mui/material/Button';
 import CircularProgress from '@mui/material/CircularProgress';
 import Typography from '@mui/material/Typography';
 import Paper from '@mui/material/Paper';
@@ -116,25 +117,18 @@ export const LiteLLMPage: React.FC = () => {
     [api],
   );
 
-  const { value: keys, loading: keysLoading, retry: refreshKeys } = useAsyncRetry(
-    async () => {
-      try {
-        return await api.listKeys();
-      } catch (e: any) {
-        setSnackbar({ message: `Failed to load keys: ${e.message}`, severity: 'error' });
-        return [];
-      }
-    },
+  const { value: keys, loading: keysLoading, error: keysError, retry: refreshKeys } = useAsyncRetry(
+    () => api.listKeys(),
     [api],
   );
 
-  const { value: allModels, loading: modelsLoading } = useAsync(
-    () => api.listModels().catch(() => []),
+  const { value: allModels, loading: modelsLoading, error: modelsError, retry: refreshModels } = useAsyncRetry(
+    () => api.listModels(),
     [api],
   );
 
-  const { value: allTeams, loading: teamsLoading, retry: refreshTeams } = useAsyncRetry(
-    () => api.getTeams().catch(() => []),
+  const { value: allTeams, loading: teamsLoading, error: teamsError, retry: refreshTeams } = useAsyncRetry(
+    () => api.getTeams(),
     [api],
   );
 
@@ -183,7 +177,7 @@ export const LiteLLMPage: React.FC = () => {
     return byMembership.length > 0 ? byMembership : allTeams;
   }, [allTeams, userInfo]);
 
-  const { value: usage, loading: usageLoading } = useAsync(async () => {
+  const { value: usage, loading: usageLoading, error: usageError, retry: refreshUsage } = useAsyncRetry(async () => {
     const startDate = dateRange.start.toISOString().split('T')[0];
     const endDate = dateRange.end.toISOString().split('T')[0];
     return api.getUsage(startDate, endDate);
@@ -395,6 +389,7 @@ export const LiteLLMPage: React.FC = () => {
         teams={teams ?? []}
         keys={keys ?? []}
         loading={userLoading || teamsLoading}
+        keysError={keysError}
         onGenerateKeyClick={() => setGenerateDialogOpen(true)}
         tabs={pageTabs}
       />
@@ -404,6 +399,8 @@ export const LiteLLMPage: React.FC = () => {
           <Grid item xs={12} lg={8}>
             <UsageStats
               usage={usage ?? null}
+              usageError={usageError}
+              onRetryUsage={refreshUsage}
               models={allModels ?? []}
               dateRange={dateRange}
               currentPreset={currentPreset}
@@ -418,20 +415,42 @@ export const LiteLLMPage: React.FC = () => {
         </Grid>
       )}
 
-      {activeTab === 'keys' && (
-        <KeysTable
-          keys={keys ?? []}
-          loading={keysLoading || modelsLoading}
-          onGenerateKeyClick={() => setGenerateDialogOpen(true)}
-          onEditKey={setKeyToEdit}
-          onBlockKey={handleBlockKey}
-          onUnblockKey={handleUnblockKey}
-          onDeleteKey={handleDeleteKey}
-          onPruneExpiredKeys={handlePruneExpiredKeys}
-        />
-      )}
+      {activeTab === 'keys' && (() => {
+        if (keysError) {
+          return (
+            <Alert severity="error">
+              Failed to load keys: {(keysError as any).message || 'Unknown error'}
+              <Box sx={{ mt: 1 }}>
+                <Button size="small" onClick={refreshKeys}>Retry</Button>
+              </Box>
+            </Alert>
+          );
+        }
+        return (
+          <KeysTable
+            keys={keys ?? []}
+            loading={keysLoading || modelsLoading}
+            onGenerateKeyClick={() => setGenerateDialogOpen(true)}
+            onEditKey={setKeyToEdit}
+            onBlockKey={handleBlockKey}
+            onUnblockKey={handleUnblockKey}
+            onDeleteKey={handleDeleteKey}
+            onPruneExpiredKeys={handlePruneExpiredKeys}
+          />
+        );
+      })()}
 
       {activeTab === 'teams' && (() => {
+        if (teamsError) {
+          return (
+            <Alert severity="error">
+              Failed to load teams: {(teamsError as any).message || 'Unknown error'}
+              <Box sx={{ mt: 1 }}>
+                <Button size="small" onClick={refreshTeams}>Retry</Button>
+              </Box>
+            </Alert>
+          );
+        }
         // Union of teams the user is a member of and teams their group owns,
         // de-duplicated by team_id (membership entries win on conflict).
         const teamsById = new Map<string, TeamInfo>();
@@ -455,13 +474,25 @@ export const LiteLLMPage: React.FC = () => {
         );
       })()}
 
-      {activeTab === 'models' && (
-        <ModelsTable
-          allModels={allModels ?? []}
-          teams={teams ?? []}
-          loading={modelsLoading}
-        />
-      )}
+      {activeTab === 'models' && (() => {
+        if (modelsError) {
+          return (
+            <Alert severity="error">
+              Failed to load models: {(modelsError as any).message || 'Unknown error'}
+              <Box sx={{ mt: 1 }}>
+                <Button size="small" onClick={refreshModels}>Retry</Button>
+              </Box>
+            </Alert>
+          );
+        }
+        return (
+          <ModelsTable
+            allModels={allModels ?? []}
+            teams={teams ?? []}
+            loading={modelsLoading}
+          />
+        );
+      })()}
 
       {activeTab === 'audit' && userInfo.can_view_audit && <AuditLog api={api} />}
 
@@ -475,6 +506,8 @@ export const LiteLLMPage: React.FC = () => {
         keyToEdit={keyToEdit}
         keys={keys ?? []}
         models={allowedModels}
+        modelsError={modelsError}
+        onRetryModels={refreshModels}
         teams={teams ?? []}
         username={userInfo.user_id}
         keyGenerationSettings={liteLlmConfig?.keyGeneration}
