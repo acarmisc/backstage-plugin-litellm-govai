@@ -19,9 +19,11 @@ import AccordionSummary from '@mui/material/AccordionSummary';
 import AccordionDetails from '@mui/material/AccordionDetails';
 import Tabs from '@mui/material/Tabs';
 import Tab from '@mui/material/Tab';
-import { ContentCopy, Code, ExpandMore } from '@mui/icons-material';
+import Tooltip from '@mui/material/Tooltip';
+import { ContentCopy, Code, ExpandMore, Check } from '@mui/icons-material';
 import { VirtualKey, ModelInfo, TeamInfo, GenerateKeyRequest, GenerateKeyResponse, UpdateKeyRequest, LiteLlmConfig } from '../types';
 import { estimateTokensFromBudget, fmtInt } from '../format';
+import { useCopyToClipboard } from '../hooks';
 
 /**
  * Single form dialog for both key creation (`mode="create"`) and key editing
@@ -214,7 +216,7 @@ function budgetHelperText(budgetInvalid: boolean, budgetEstimate: number | null,
 interface SnippetTabsProps {
   snippets: Snippets;
   model: string;
-  onCopy: (text: string) => void;
+  copyState: { copy: (text: string) => Promise<boolean>; copied: boolean };
 }
 
 type SnippetTab = 'curl' | 'openai' | 'opencode' | 'pi' | 'claude-code';
@@ -225,7 +227,7 @@ const SNIPPET_FILE_HINTS: Partial<Record<SnippetTab, string>> = {
   'claude-code': 'Store the key in your OS keychain and point apiKeyHelper at it in ~/.claude/settings.json',
 };
 
-const SnippetTabs: React.FC<SnippetTabsProps> = ({ snippets, model, onCopy }) => {
+const SnippetTabs: React.FC<SnippetTabsProps> = ({ snippets, model, copyState }) => {
   const [tab, setTab] = useState<SnippetTab>('curl');
   const snippetKey = tab === 'claude-code' ? 'claudeCode' : tab;
   const code = snippets[snippetKey as keyof Snippets];
@@ -249,14 +251,16 @@ const SnippetTabs: React.FC<SnippetTabsProps> = ({ snippets, model, onCopy }) =>
         p={1.5}
         sx={{ backgroundColor: 'action.hover', border: '1px solid', borderColor: 'divider', borderRadius: 1 }}
       >
-        <IconButton
-          size="small"
-          onClick={() => onCopy(code)}
-          title="Copy snippet"
-          sx={{ position: 'absolute', top: 4, right: 4 }}
-        >
-          <ContentCopy fontSize="small" />
-        </IconButton>
+        <Tooltip title={copyState.copied ? 'Copied' : 'Copy snippet'} placement="top">
+          <IconButton
+            size="small"
+            onClick={() => copyState.copy(code)}
+            aria-label="Copy snippet"
+            sx={{ position: 'absolute', top: 4, right: 4 }}
+          >
+            {copyState.copied ? <Check fontSize="small" /> : <ContentCopy fontSize="small" />}
+          </IconButton>
+        </Tooltip>
         <Typography
           component="pre"
           sx={{
@@ -308,6 +312,13 @@ export const KeyFormDialog: React.FC<KeyFormDialogProps> = ({
   const [resetSpendConfirm, setResetSpendConfirm] = useState(false);
   const [resetSpendSubmitting, setResetSpendSubmitting] = useState(false);
   const [config, setConfig] = useState<LiteLlmConfig | null>(null);
+  const [secretCopied, setSecretCopied] = useState(false);
+  const [closeWithoutCopyConfirm, setCloseWithoutCopyConfirm] = useState(false);
+
+  // Clipboard hook for all copy operations
+  const clipboardSecret = useCopyToClipboard();
+  const clipboardSnippet = useCopyToClipboard();
+  const clipboardEndpoint = useCopyToClipboard();
 
   // Re-arm the form each time the dialog opens so a stale result from a
   // previous run (or another user's session) is never shown.
@@ -331,6 +342,8 @@ export const KeyFormDialog: React.FC<KeyFormDialogProps> = ({
       setGenerateError(null);
       setEditError(null);
       setResetSpendConfirm(false);
+      setSecretCopied(false);
+      setCloseWithoutCopyConfirm(false);
       // Fetch config to check key action capabilities
       onGetConfig().then(setConfig).catch(() => setConfig(null));
     }
@@ -410,9 +423,9 @@ export const KeyFormDialog: React.FC<KeyFormDialogProps> = ({
       setNewKeyModel(model);
       setNewKeySnippets(null);
       try {
-        const config = await onGetConfig();
-        if (config.baseUrl) {
-          setNewKeySnippets(buildSnippets(config.baseUrl, response.key, model));
+        const fetchedConfig = await onGetConfig();
+        if (fetchedConfig.baseUrl) {
+          setNewKeySnippets(buildSnippets(fetchedConfig.baseUrl, response.key, model));
         }
       } catch {
         // Snippets are a nice-to-have; the raw key is still shown.
@@ -456,7 +469,7 @@ export const KeyFormDialog: React.FC<KeyFormDialogProps> = ({
     }
   };
 
-  const handleClose = () => {
+  const handleCloseWithoutConfirm = () => {
     onClose();
     setGenerateError(null);
     setEditError(null);
@@ -466,10 +479,32 @@ export const KeyFormDialog: React.FC<KeyFormDialogProps> = ({
     setEditFormState({});
     setUnlimitedBudget(false);
     setResetSpendConfirm(false);
+    setSecretCopied(false);
+    setCloseWithoutCopyConfirm(false);
   };
 
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text);
+  // Handle close when showing the secret — check if copied first
+  const handleCloseSecretDialog = () => {
+    if (newKeyValue && !secretCopied) {
+      // Show confirmation before closing
+      setCloseWithoutCopyConfirm(true);
+    } else {
+      handleCloseWithoutConfirm();
+    }
+  };
+
+  const handleConfirmCloseWithoutCopy = () => {
+    setCloseWithoutCopyConfirm(false);
+    handleCloseWithoutConfirm();
+  };
+
+  // Handle Dialog close events (Escape, backdrop click)
+  const handleDialogClose = (_event: unknown, reason: string) => {
+    // If showing a secret, ignore backdrop and escape
+    if (newKeyValue && (reason === 'backdropClick' || reason === 'escapeKeyDown')) {
+      return;
+    }
+    handleCloseSecretDialog();
   };
 
   const modelOption = (m: ModelInfo) => {
@@ -591,14 +626,20 @@ export const KeyFormDialog: React.FC<KeyFormDialogProps> = ({
 
   const submitLabel = isCreate ? 'Generate' : 'Save';
   return (
-    <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
+    <Dialog
+      open={open}
+      onClose={handleDialogClose}
+      disableEscapeKeyDown={!!newKeyValue}
+      maxWidth="sm"
+      fullWidth
+    >
       <DialogTitle>{dialogTitle}</DialogTitle>
       <DialogContent>
         {newKeyValue ? (
           <Box>
-            <Typography variant="body2" color="text.secondary" gutterBottom>
-              Copy this key now. You won't be able to see it again.
-            </Typography>
+            <Alert severity="warning" sx={{ mb: 2 }}>
+              Copy this key now. It will never be shown again.
+            </Alert>
             <Box
               display="flex"
               alignItems="center"
@@ -619,9 +660,19 @@ export const KeyFormDialog: React.FC<KeyFormDialogProps> = ({
               >
                 {newKeyValue}
               </Typography>
-              <IconButton onClick={() => copyToClipboard(newKeyValue)}>
-                <ContentCopy />
-              </IconButton>
+              <Tooltip title={clipboardSecret.copied ? 'Copied' : 'Copy API key'} placement="top">
+                <IconButton
+                  aria-label="Copy API key"
+                  onClick={async () => {
+                    const success = await clipboardSecret.copy(newKeyValue);
+                    if (success) {
+                      setSecretCopied(true);
+                    }
+                  }}
+                >
+                  {clipboardSecret.copied ? <Check /> : <ContentCopy />}
+                </IconButton>
+              </Tooltip>
             </Box>
 
             {newKeyValue && !newKeySnippets && (
@@ -659,9 +710,15 @@ export const KeyFormDialog: React.FC<KeyFormDialogProps> = ({
                   >
                     {newKeySnippets.publicEndpoint}
                   </Typography>
-                  <IconButton size="small" onClick={() => copyToClipboard(newKeySnippets.publicEndpoint)}>
-                    <ContentCopy fontSize="small" />
-                  </IconButton>
+                  <Tooltip title={clipboardEndpoint.copied ? 'Copied' : 'Copy endpoint'} placement="top">
+                    <IconButton
+                      size="small"
+                      aria-label="Copy endpoint"
+                      onClick={() => clipboardEndpoint.copy(newKeySnippets.publicEndpoint)}
+                    >
+                      {clipboardEndpoint.copied ? <Check fontSize="small" /> : <ContentCopy fontSize="small" />}
+                    </IconButton>
+                  </Tooltip>
                 </Box>
               </Box>
             )}
@@ -674,7 +731,7 @@ export const KeyFormDialog: React.FC<KeyFormDialogProps> = ({
                     Start calling the proxy — paste and run
                   </Typography>
                 </Box>
-                <SnippetTabs snippets={newKeySnippets} model={newKeyModel} onCopy={copyToClipboard} />
+                <SnippetTabs snippets={newKeySnippets} model={newKeyModel} copyState={clipboardSnippet} />
               </Box>
             )}
           </Box>
@@ -816,12 +873,12 @@ export const KeyFormDialog: React.FC<KeyFormDialogProps> = ({
       </DialogContent>
       <DialogActions>
         {newKeyValue ? (
-          <Button onClick={handleClose} variant="contained" color="success">
+          <Button onClick={handleCloseSecretDialog} variant="contained" color="success">
             Done
           </Button>
         ) : (
           <>
-            <Button onClick={handleClose}>Cancel</Button>
+            <Button onClick={handleCloseWithoutConfirm}>Cancel</Button>
             <Button
               onClick={isCreate ? handleGenerate : handleUpdate}
               variant="contained"
@@ -833,6 +890,28 @@ export const KeyFormDialog: React.FC<KeyFormDialogProps> = ({
           </>
         )}
       </DialogActions>
+
+      {/* Confirm close without copying the secret */}
+      <Dialog open={closeWithoutCopyConfirm} onClose={() => setCloseWithoutCopyConfirm(false)} maxWidth="xs" fullWidth>
+        <DialogTitle>Close Without Copying?</DialogTitle>
+        <DialogContent>
+          <Typography>
+            You haven't copied the key. Close anyway?
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setCloseWithoutCopyConfirm(false)}>
+            Go back
+          </Button>
+          <Button
+            onClick={handleConfirmCloseWithoutCopy}
+            variant="contained"
+            color="error"
+          >
+            Close anyway
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Dialog>
   );
 };

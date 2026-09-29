@@ -18,8 +18,10 @@ import TextField from '@mui/material/TextField';
 import CircularProgress from '@mui/material/CircularProgress';
 import Skeleton from '@mui/material/Skeleton';
 import InputAdornment from '@mui/material/InputAdornment';
+import Tooltip from '@mui/material/Tooltip';
 import { alpha } from '@mui/material/styles';
-import { ContentCopy, Delete, Edit, Autorenew, Search, Lock, LockOpen } from '@mui/icons-material';
+import { ContentCopy, Delete, Edit, Autorenew, Search, Lock, LockOpen, Check } from '@mui/icons-material';
+import { useCopyToClipboard } from '../hooks';
 import { expiryStatus } from '../api';
 import { GenerateKeyButton } from './GenerateKeyButton';
 import {
@@ -169,6 +171,8 @@ export const KeysTable: React.FC<KeysTableProps> = ({
 
   // Reset spend moved into the shared KeyFormDialog (edit mode)
 
+  // Clipboard
+  const clipboard = useCopyToClipboard();
 
   // Filter
   const [filterText, setFilterText] = useState('');
@@ -228,9 +232,6 @@ export const KeysTable: React.FC<KeysTableProps> = ({
     }
   };
 
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text);
-  };
 
   // Prune expired keys
   const [pruneConfirmCount, setPruneConfirmCount] = useState<number | null>(null);
@@ -334,14 +335,16 @@ export const KeysTable: React.FC<KeysTableProps> = ({
               >
                 {shortKeyId(keyId)}
               </Typography>
-              <IconButton
-                size="small"
-                onClick={() => copyToClipboard(keyId)}
-                title="Copy Key ID"
-                sx={quietIconButtonSx('accent')}
-              >
-                <ContentCopy sx={{ fontSize: 15 }} />
-              </IconButton>
+              <Tooltip title={clipboard.copied ? 'Copied' : 'Copy Key ID'} placement="top">
+                <IconButton
+                  size="small"
+                  onClick={() => clipboard.copy(keyId)}
+                  aria-label="Copy API key"
+                  sx={quietIconButtonSx('accent')}
+                >
+                  {clipboard.copied ? <Check sx={{ fontSize: 15 }} /> : <ContentCopy sx={{ fontSize: 15 }} />}
+                </IconButton>
+              </Tooltip>
             </Box>
           </TableCell>
           <TableCell>
