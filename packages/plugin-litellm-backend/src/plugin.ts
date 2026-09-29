@@ -1,7 +1,7 @@
 import { coreServices, createBackendPlugin } from '@backstage/backend-plugin-api';
 import { createRouter } from './router';
 import { readBridgeConfig } from './bridge';
-import { litellmPermissions } from './permissions';
+import { litellmPermissions } from '@acarmisc/backstage-plugin-litellm-common';
 
 export const litellmPlugin = createBackendPlugin({
   pluginId: 'litellm',

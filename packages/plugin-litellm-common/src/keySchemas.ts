@@ -121,3 +121,8 @@ export function createUpdateKeyInputSchema(config: KeyValidationConfig) {
 export type UpdateKeyInput = z.infer<
   ReturnType<typeof createUpdateKeyInputSchema>
 >;
+
+/**
+ * Default key duration presets. Used as server-side defaults and UI options.
+ */
+export const DEFAULT_KEY_DURATIONS = ['1d', '7d', '30d', '90d'];

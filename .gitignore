@@ -5,8 +5,7 @@ node_modules
 .pnp.cjs
 .yarn/
 
-# Root has no real dependency tree of its own (see package.json) — nothing
-# to lock. Each package under packages/* commits its own package-lock.json
+# The repo is an npm workspace: the single root package-lock.json is committed
 # so `npm ci` gets reproducible, non-floating installs in CI and publish.
 yarn.lock
 

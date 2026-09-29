@@ -1,8 +1,11 @@
 name: Publish to npm
 
 # Release process:
-#   git tag litellm@X.Y.Z          # or litellm-backend@X.Y.Z
+#   git tag litellm@X.Y.Z          # or litellm-backend@X.Y.Z / litellm-common@X.Y.Z
 #   git push origin litellm@X.Y.Z
+#
+# Publish litellm-common FIRST when its version changed: the frontend and
+# backend depend on it at an exact version.
 #
 # The tag prefix selects which workspace package gets published, and its
 # version must match the version already committed in that package's
@@ -13,6 +16,7 @@ on:
     tags:
       - "litellm@*"
       - "litellm-backend@*"
+      - "litellm-common@*"
 
 permissions:
   contents: write
@@ -36,6 +40,10 @@ jobs:
         run: |
           TAG="${GITHUB_REF_NAME}"
           case "$TAG" in
+            litellm-common@*)
+              echo "dir=packages/plugin-litellm-common" >> "$GITHUB_OUTPUT"
+              echo "version=${TAG#litellm-common@}" >> "$GITHUB_OUTPUT"
+              ;;
             litellm-backend@*)
               echo "dir=packages/plugin-litellm-backend" >> "$GITHUB_OUTPUT"
               echo "version=${TAG#litellm-backend@}" >> "$GITHUB_OUTPUT"
@@ -60,7 +68,8 @@ jobs:
           fi
 
       - name: Install dependencies
-        working-directory: ${{ steps.pkg.outputs.dir }}
+        # Workspace install from the repo root so the packages resolve each
+        # other locally and the single root lockfile is honoured.
         # npm ci installs exactly what's in the committed lockfile instead of
         # re-resolving the whole tree — reproducible, and avoids surprise
         # breakage from floating transitive deps (see the v0.12.2 postmortem:
@@ -70,8 +79,10 @@ jobs:
         run: npm ci --no-audit --no-fund --legacy-peer-deps
 
       - name: Build
-        working-directory: ${{ steps.pkg.outputs.dir }}
-        run: npm run build
+        # Common first: the backend and frontend compile against its output.
+        run: |
+          npm run build -w @acarmisc/backstage-plugin-litellm-common
+          npm run build --workspace "${{ steps.pkg.outputs.dir }}" --if-present
 
       - name: Publish to npm
         working-directory: ${{ steps.pkg.outputs.dir }}

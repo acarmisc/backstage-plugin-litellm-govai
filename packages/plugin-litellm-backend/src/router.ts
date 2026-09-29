@@ -48,14 +48,13 @@ import {
   litellmTeamKnowledgebaseManagePermission,
   litellmTeamMcpManagePermission,
   litellmTeamDeletePermission,
-} from './permissions';
-import {
   createGenerateKeyInputSchema,
   createUpdateKeyInputSchema,
   type KeyValidationConfig,
   type GenerateKeyInput,
   type UpdateKeyInput,
-} from './validation/keySchemas';
+  DEFAULT_KEY_DURATIONS,
+} from '@acarmisc/backstage-plugin-litellm-common';
 import {
   createKeyForUser,
   KeyServiceError,
@@ -179,7 +178,7 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
   const keyMaxBudget = config.getOptionalNumber('litellm.keys.maxBudget') ?? 100;
   const keyMaxTpm = config.getOptionalNumber('litellm.keys.maxTpm') ?? 100000;
   const keyMaxRpm = config.getOptionalNumber('litellm.keys.maxRpm') ?? 1000;
-  const keyAllowedDurations = config.getOptionalStringArray('litellm.keys.allowedDurations') ?? ['1d', '7d', '30d', '90d'];
+  const keyAllowedDurations = config.getOptionalStringArray('litellm.keys.allowedDurations') ?? DEFAULT_KEY_DURATIONS;
   const keyValidationConfig: KeyValidationConfig = {
     maxBudget: keyMaxBudget,
     maxTpm: keyMaxTpm,

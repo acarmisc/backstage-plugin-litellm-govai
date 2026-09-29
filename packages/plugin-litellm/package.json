@@ -40,6 +40,7 @@
     "postpack": ""
   },
   "dependencies": {
+    "@acarmisc/backstage-plugin-litellm-common": "0.1.0",
     "@backstage/catalog-model": "^1.9.0",
     "@backstage/core-components": "^0.18.10",
     "@backstage/core-plugin-api": "^1.12.6",
