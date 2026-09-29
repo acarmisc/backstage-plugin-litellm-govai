@@ -139,7 +139,7 @@ function resetLabel(limit: BudgetLimit): string {
   return window ? `resets ${window}` : 'never resets';
 }
 
-const LevelGauge: React.FC<{ gauge: BudgetGauge; size: number; keysHref: string }> = ({
+const LevelGauge: React.FC<{ gauge: BudgetGauge; size: number; keysHref?: string }> = ({
   gauge,
   size,
   keysHref,
@@ -206,7 +206,7 @@ const LevelGauge: React.FC<{ gauge: BudgetGauge; size: number; keysHref: string 
           >
             {spendCaption(limit)}
           </Typography>
-          {extra > 0 ? (
+          {extra > 0 && keysHref ? (
             <Typography
               component={Link}
               to={keysHref}
@@ -507,12 +507,15 @@ export const LiteLLMBudgetGauges: React.FC<LiteLLMBudgetGaugesProps> = ({
         // The shared plugin-page CTA — identical copy, icon and styling
         // everywhere. Deep-links to the module's generate-key dialog unless
         // the host takes over with `onCreateKey`.
+        if (!onCreateKey && !moduleHref) return null;
         return onCreateKey ? (
           <GenerateKeyButton key={key} size="small" label={label} onClick={onCreateKey} />
         ) : (
           <GenerateKeyButton key={key} size="small" label={label} to={`${moduleHref}?generate=1`} />
         );
       case 'module':
+        // Hide if route is not mounted
+        if (!moduleHref) return null;
         return (
           <Button key={key} size="small" variant="outlined" component={Link} to={moduleHref}>
             {label}

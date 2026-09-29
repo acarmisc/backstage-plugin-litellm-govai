@@ -14,7 +14,7 @@ describe('routeHelpers', () => {
       assert.strictEqual(result, undefined);
     });
 
-    it('returns undefined when baseUrl is empty string', () => {
+    it('builds a URL even with empty baseUrl', () => {
       const result = buildKeysLink('');
       assert.strictEqual(result, '?tab=keys');
     });
