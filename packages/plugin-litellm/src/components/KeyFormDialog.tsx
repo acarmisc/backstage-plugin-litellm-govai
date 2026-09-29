@@ -700,7 +700,6 @@ export const KeyFormDialog: React.FC<KeyFormDialogProps> = ({
                 <MenuItem value="7d">7 Days</MenuItem>
                 <MenuItem value="30d">30 Days</MenuItem>
                 <MenuItem value="90d">90 Days</MenuItem>
-                <MenuItem value="1y">1 Year</MenuItem>
               </TextField>
             )}
 

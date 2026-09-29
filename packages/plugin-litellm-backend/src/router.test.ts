@@ -3089,3 +3089,42 @@ describe('client.getUsage', () => {
     await assert.rejects(() => c.getUsage('2026-01-01', '2026-01-31', ''), /user_id/);
   });
 });
+
+describe('PR-2 review follow-ups', () => {
+  test('UI payload with key_type llm_api is accepted and forwarded', async () => {
+    const h = await startHarness({
+      config: { 'litellm.keyGeneration.teamRequired': false, 'litellm.keyGeneration.allowUnlimitedBudget': true },
+    });
+    try {
+      const { status } = await req(h.baseUrl, 'POST', '/keys/generate', {
+        authRef: 'user:default/alice',
+        body: { alias: 'k', key_type: 'llm_api', duration: '30d', max_budget: 10 },
+      });
+      assert.strictEqual(status, 200);
+      const last = h.client.calls.generateKey[h.client.calls.generateKey.length - 1];
+      assert.strictEqual(last.key_type, 'llm_api');
+    } finally {
+      h.server.close();
+    }
+  });
+
+  test('fails closed when the team cannot be fetched for the model check', async () => {
+    const h = await startHarness({
+      config: { 'litellm.keyGeneration.allowUnlimitedBudget': true },
+      client: mockClient({
+        userInfo: { user_id: 'alice@example.com', teams: ['t1'] },
+        getTeamInfo: () => Promise.reject(new Error('boom')),
+      }),
+    });
+    try {
+      const { status } = await req(h.baseUrl, 'POST', '/keys/generate', {
+        authRef: 'user:default/alice',
+        body: { alias: 'k', team_id: 't1', models: ['gpt-4'], max_budget: 5 },
+      });
+      assert.ok(status >= 400);
+      assert.strictEqual(h.client.calls.generateKey.length, 0);
+    } finally {
+      h.server.close();
+    }
+  });
+});

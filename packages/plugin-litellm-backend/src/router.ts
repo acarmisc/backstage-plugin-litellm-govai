@@ -518,13 +518,10 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
         let allowedModels: string[] = [];
         if (input.team_id) {
           // Fetch team info to get its allowed models
-          try {
-            const teamInfo = await client.getTeamInfo(input.team_id);
-            allowedModels = teamInfo?.models ?? [];
-          } catch {
-            // If team fetch fails, skip the check
-            allowedModels = [];
-          }
+          // Fail closed: if the team can't be fetched the error propagates
+          // rather than silently skipping the model check.
+          const teamInfo = await client.getTeamInfo(input.team_id);
+          allowedModels = teamInfo?.models ?? [];
         } else {
           allowedModels = userInfo?.models ?? [];
         }
@@ -591,6 +588,9 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
       }
       if (input.team_id !== undefined) {
         upstreamRequest.team_id = input.team_id;
+      }
+      if (input.key_type !== undefined) {
+        upstreamRequest.key_type = input.key_type;
       }
       upstreamRequest.metadata = enrichedMetadata;
 

@@ -62,6 +62,8 @@ export function createGenerateKeyInputSchema(config: KeyValidationConfig) {
         .max(config.maxRpm, `rpm_limit must not exceed ${config.maxRpm}`)
         .optional(),
       team_id: z.string().optional(),
+      // The UI always sends 'llm_api'; no other key type may be requested.
+      key_type: z.literal('llm_api').optional(),
       metadata: z
         .record(z.string(), z.string())
         .optional(),
