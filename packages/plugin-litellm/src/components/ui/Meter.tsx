@@ -22,6 +22,7 @@ export const Meter: React.FC<{
   const isOverCap = value > 100;
 
   return (
+    <Box>
     <Box
       sx={theme => ({
         height,
@@ -45,6 +46,7 @@ export const Meter: React.FC<{
           transition: theme.transitions.create('width'),
         })}
       />
+    </Box>
       {isOverCap && (
         <Box
           sx={{

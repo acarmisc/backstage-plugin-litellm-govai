@@ -1,6 +1,6 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert';
-import { rangeCaption, sparklineAriaLabel, usageSummary } from './homeWidgetHelpers';
+import { rangeCaption, sparklineAriaLabel, usageSummary, mtdCaption, meterAria } from './homeWidgetHelpers';
 import type { UsageMetrics } from './types';
 
 describe('rangeCaption', () => {
@@ -123,5 +123,36 @@ describe('usageSummary', () => {
     };
     const summary = usageSummary(usage as UsageMetrics);
     assert.strictEqual(summary, '$0.05 spent · 500 in · 250 out');
+  });
+});
+
+
+describe('mtdCaption', () => {
+  test('same-month range', () => {
+    assert.strictEqual(mtdCaption(new Date(2026, 8, 29)), 'Sep 1 – Sep 29');
+  });
+  test('first of the month', () => {
+    assert.strictEqual(mtdCaption(new Date(2026, 0, 1)), 'Jan 1 – Jan 1');
+  });
+  test('year boundary stays inside the current month', () => {
+    assert.strictEqual(mtdCaption(new Date(2026, 11, 31)), 'Dec 1 – Dec 31');
+  });
+});
+
+describe('meterAria', () => {
+  test('clamps the value and sets the meter role', () => {
+    const a = meterAria(42, 'Key budget');
+    assert.strictEqual(a.role, 'meter');
+    assert.strictEqual(a['aria-valuenow'], 42);
+    assert.strictEqual(a['aria-label'], 'Key budget');
+    assert.strictEqual(a['aria-valuetext'], undefined);
+  });
+  test('over 100 clamps valuenow and flags over cap in valuetext', () => {
+    const a = meterAria(120);
+    assert.strictEqual(a['aria-valuenow'], 100);
+    assert.strictEqual(a['aria-valuetext'], '120% — over cap');
+  });
+  test('negative clamps to zero', () => {
+    assert.strictEqual(meterAria(-5)['aria-valuenow'], 0);
   });
 });

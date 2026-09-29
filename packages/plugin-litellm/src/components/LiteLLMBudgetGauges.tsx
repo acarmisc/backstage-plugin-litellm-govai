@@ -41,6 +41,7 @@ import { liteLlmApiRef } from '../api';
 import { UserInfo, TeamInfo, VirtualKey } from '../types';
 import { fmtUsd } from '../format';
 import { monthToDateRange } from '../dates';
+import { resolveCtas, type BudgetCtaKind, type BudgetCtaSpec, type BudgetCta } from '../ctas';
 import { widgetViewState, USAGE_UNAVAILABLE_MSG, UNPROVISIONED_MSG } from '../widgetState';
 import { Gauge, StatusPill, ChartTooltip, SERIES } from './ui';
 import { GenerateKeyButton } from './GenerateKeyButton';
@@ -58,15 +59,7 @@ import {
 import { rootRouteRef } from '../routes';
 import { mtdCaption, sparklineAriaLabel } from '../homeWidgetHelpers';
 
-/** Preset action-bar buttons. `label` overrides the default copy. */
-export type BudgetCtaKind = 'new-key' | 'module' | 'all-limits';
-export interface BudgetCtaSpec {
-  kind: BudgetCtaKind;
-  /** Override the default label. */
-  label?: string;
-}
-/** Either a bare kind (`'module'`) or a spec object (`{ kind: 'module' }`). */
-export type BudgetCta = BudgetCtaKind | BudgetCtaSpec;
+export type { BudgetCtaKind, BudgetCtaSpec, BudgetCta } from '../ctas';
 
 export interface LiteLLMBudgetGaugesProps {
   /** Optional title override. Defaults to 'Budget'. */
@@ -90,7 +83,7 @@ export interface LiteLLMBudgetGaugesProps {
   onCreateKey?: () => void;
   /**
    * Action-bar buttons to render, in order. Defaults to
-   * `['new-key', 'module', 'all-limits']`. Pass `[]` to hide the bar; the
+   * `['module', 'all-limits']`; 'new-key' is added automatically for users with no keys. Pass `[]` to hide the bar; the
    * `all-limits` entry is dropped automatically when the user has no limits.
    */
   ctas?: BudgetCta[];
@@ -120,48 +113,11 @@ const LEVEL: Record<BudgetGauge['kind'], { name: string; none: string }> = {
   team: { name: 'Team', none: 'No team budget' },
 };
 
-const DEFAULT_CTAS: BudgetCtaKind[] = ['module', 'all-limits'];
-
 const CTA_LABELS: Record<BudgetCtaKind, string> = {
   'new-key': 'Generate New Key',
   module: 'Open LiteLLM',
   'all-limits': 'All limits',
 };
-
-/**
- * Resolve which CTAs should be rendered based on props and state.
- * Returns a list of CTA specs ready for rendering.
- */
-export function resolveCtas(spec: {
-  ctas?: BudgetCta[];
-  hasKeys: boolean;
-  viewState: { kind: string };
-  limitCount: number;
-}): (BudgetCtaSpec & { kind: BudgetCtaKind })[] {
-  const list = spec.ctas ?? DEFAULT_CTAS;
-  return list
-    .map(cta => (typeof cta === 'string' ? { kind: cta } : cta))
-    .filter(cta => {
-      // Show 'new-key' only when explicitly listed or when user has zero keys
-      if (cta.kind === 'new-key') {
-        const isExplicit = spec.ctas && spec.ctas.some(
-          c => (typeof c === 'string' ? c : c.kind) === 'new-key'
-        );
-        if (!isExplicit && !(!spec.hasKeys)) {
-          return false;
-        }
-        // Hide when error or unprovisioned
-        if (spec.viewState.kind === 'error' || spec.viewState.kind === 'unprovisioned') {
-          return false;
-        }
-      }
-      // Hide 'all-limits' when no limits
-      if (cta.kind === 'all-limits' && spec.limitCount === 0) {
-        return false;
-      }
-      return true;
-    });
-}
 
 /** Compact USD for the tight gauge caption — drops trailing cents. */
 function fmtUsdShort(n: number): string {
