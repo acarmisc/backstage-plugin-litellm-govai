@@ -10,8 +10,9 @@ import CircularProgress from '@mui/material/CircularProgress';
 import Alert from '@mui/material/Alert';
 import { AreaChart, Area, ResponsiveContainer } from 'recharts';
 import { useApi } from '@backstage/core-plugin-api';
+import { useLiteLLMProfile } from '../hooks/useLiteLLMProfile';
 import { liteLlmApiRef } from '../api';
-import { UsageMetrics, VirtualKey } from '../types';
+import { UsageMetrics } from '../types';
 import { fmtUsd, fmtInt } from '../format';
 
 export interface LiteLLMHomeWidgetProps {
@@ -58,50 +59,42 @@ export const LiteLLMHomeWidget: React.FC<LiteLLMHomeWidgetProps> = ({
   title = 'LiteLLM Usage',
 }) => {
   const api = useApi(liteLlmApiRef);
+  const { keys } = useLiteLLMProfile();
   const [period, setPeriod] = useState<DatePreset>(defaultPeriod);
-  const [loading, setLoading] = useState(true);
+  const [usageLoading, setUsageLoading] = useState(true);
   const [usageError, setUsageError] = useState<string | null>(null);
-  const [keysError, setKeysError] = useState<string | null>(null);
   const [usage, setUsage] = useState<UsageMetrics | null>(null);
-  const [keys, setKeys] = useState<VirtualKey[]>([]);
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
+    setUsageLoading(true);
     setUsageError(null);
-    setKeysError(null);
 
     const { start, end } = presetToDateRange(period);
     const startDate = start.toISOString().split('T')[0];
     const endDate = end.toISOString().split('T')[0];
 
-    Promise.allSettled([api.getUsage(startDate, endDate), api.listKeys()]).then(
-      ([usageResult, keysResult]) => {
+    api.getUsage(startDate, endDate)
+      .then((usageResult) => {
         if (cancelled) return;
-        if (usageResult.status === 'fulfilled') {
-          setUsage(usageResult.value);
-        } else {
+        setUsage(usageResult);
+        setUsageLoading(false);
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setUsageError(err?.message ?? 'Failed to load usage data');
           setUsage(null);
-          setUsageError(usageResult.reason?.message ?? 'Failed to load usage data');
+          setUsageLoading(false);
         }
-        if (keysResult.status === 'fulfilled') {
-          setKeys(keysResult.value);
-        } else {
-          setKeys([]);
-          setKeysError(keysResult.reason?.message ?? 'Failed to load keys');
-        }
-        setLoading(false);
-      },
-    );
+      });
 
     return () => {
       cancelled = true;
     };
   }, [api, period]);
 
-  const partialFailure =
-    !loading && (usageError || keysError) && (usage || keys.length > 0);
-  const totalFailure = !loading && usageError && keysError;
+  const partialFailure = !usageLoading && usageError && usage;
+  const totalFailure = !usageLoading && usageError;
 
   const dailyData = (usage?.daily_usage ?? []).map(d => ({
     date: d.date,
@@ -129,30 +122,27 @@ export const LiteLLMHomeWidget: React.FC<LiteLLMHomeWidgetProps> = ({
       </Box>
 
       {/* Loading state */}
-      {loading && (
+      {usageLoading && (
         <Box display="flex" justifyContent="center" alignItems="center" minHeight={120}>
           <CircularProgress size={32} />
         </Box>
       )}
 
       {/* Error state */}
-      {!loading && totalFailure && (
+      {!usageLoading && totalFailure && (
         <Alert severity="error" sx={{ mt: 1 }}>
           {usageError ?? 'Failed to load usage data'}
         </Alert>
       )}
 
       {/* Content */}
-      {!loading && !totalFailure && (
+      {!usageLoading && !totalFailure && (
         <>
           {partialFailure && (
             <Alert severity="warning" sx={{ mt: 1, mb: 1 }}>
               {usageError
                 ? `Usage data unavailable (${usageError}).`
-                : ''}
-              {keysError
-                ? ` Key list unavailable (${keysError}).` : ''}
-              {' Showing what loaded.'}
+                : 'Showing what loaded.'}
             </Alert>
           )}
 

@@ -315,15 +315,18 @@ export const LiteLLMPage: React.FC = () => {
     async () => {
       try {
         const result = await api.pruneExpiredKeys();
-        setSnackbar({ message: `Pruned ${result.pruned} expired key${result.pruned !== 1 ? 's' : ''}`, severity: 'success' });
+        const msg = `Pruned ${result.pruned} expired key${result.pruned !== 1 ? 's' : ''}`;
+        const severity: 'success' | 'warning' = result.failed > 0 ? 'warning' : 'success';
+        const detail = result.failed > 0 ? ` (${result.failed} failed to delete)` : '';
+        setSnackbar({ message: msg + detail, severity });
         refreshKeys();
       } catch (e: any) {
         setSnackbar({ message: `Failed to prune expired keys: ${e.message}`, severity: 'error' });
       }
-      return { pruned: 0 };
+      return { pruned: 0, failed: 0 };
     },
     [api, refreshKeys],
-  ) as () => Promise<{ pruned: number }>;
+  ) as () => Promise<{ pruned: number; failed: number }>;
 
   const isInitialLoading = userLoading && !userInfo;
 
@@ -410,7 +413,7 @@ export const LiteLLMPage: React.FC = () => {
             />
           </Grid>
           <Grid item xs={12} lg={4}>
-            <LiteLLMBudgetWidget compact collapsible />
+            <LiteLLMBudgetWidget compact collapsible userInfo={userInfo ?? null} teams={teams} keys={keys ?? []} />
           </Grid>
         </Grid>
       )}
@@ -461,15 +464,13 @@ export const LiteLLMPage: React.FC = () => {
           <TeamUsage
             teams={visibleTeams}
             loading={teamsLoading}
-            getTeamUsage={teamId => {
-              if (teamUsageCache[teamId] === undefined) loadTeamUsage(teamId);
-              return teamUsageCache[teamId] ?? null;
-            }}
+            getTeamUsage={teamId => teamUsageCache[teamId] ?? null}
             getTeamUsageLoading={teamId => teamUsageLoading[teamId] ?? false}
             canManage={teamMgmtEnabled && canManageTeam}
             onEditTeam={t => setManageTeam({ mode: 'edit', team: t })}
             canCreate={teamMgmtEnabled && canCreateTeam}
             onCreateTeam={() => setManageTeam({ mode: 'create' })}
+            onTeamExpand={team => loadTeamUsage(team.team_id)}
           />
         );
       })()}

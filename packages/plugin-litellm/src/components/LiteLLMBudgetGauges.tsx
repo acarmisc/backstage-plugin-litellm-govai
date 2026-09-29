@@ -34,6 +34,7 @@ import { ExpandMore } from '@mui/icons-material';
 import { AreaChart, Area, ResponsiveContainer, Tooltip } from 'recharts';
 import { useApi } from '@backstage/core-plugin-api';
 import { Link } from '@backstage/core-components';
+import { useLiteLLMProfile } from '../hooks/useLiteLLMProfile';
 import { liteLlmApiRef } from '../api';
 import { UserInfo, TeamInfo, VirtualKey } from '../types';
 import { fmtUsd, fmtInt } from '../format';
@@ -95,6 +96,13 @@ export interface LiteLLMBudgetGaugesProps {
   onExpandedChange?: (expanded: boolean) => void;
   /** Fully custom node pinned below the CTAs, below a divider. */
   action?: React.ReactNode;
+  /**
+   * Optional preloaded data to use instead of fetching via the hook.
+   * When provided, the component uses these values directly without refetching.
+   */
+  userInfo?: UserInfo | null;
+  teams?: TeamInfo[];
+  keys?: VirtualKey[];
 }
 
 /** One-word level names, and the note shown when the level has no cap. */
@@ -400,16 +408,25 @@ export const LiteLLMBudgetGauges: React.FC<LiteLLMBudgetGaugesProps> = ({
   defaultExpanded = false,
   onExpandedChange,
   action,
+  userInfo: propUserInfo,
+  teams: propTeams,
+  keys: propKeys,
 }) => {
   const api = useApi(liteLlmApiRef);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [user, setUser] = useState<UserInfo | null>(null);
-  const [teams, setTeams] = useState<TeamInfo[]>([]);
-  const [keys, setKeys] = useState<VirtualKey[]>([]);
+  const { userInfo: hookUserInfo, teams: hookTeams, keys: hookKeys, loading: profileLoading, error: profileError } = useLiteLLMProfile();
   const [usageLoading, setUsageLoading] = useState(true);
+  const [usageError, setUsageError] = useState<string | null>(null);
   const [dailyTokens, setDailyTokens] = useState<DailyTokens[]>([]);
   const [mtdTokens, setMtdTokens] = useState(0);
+
+  // Use provided props if available, otherwise use hook data
+  const user = propUserInfo !== undefined ? propUserInfo : hookUserInfo;
+  const teams = propTeams !== undefined ? propTeams : hookTeams;
+  const keys = propKeys !== undefined ? propKeys : hookKeys;
+
+  // Combine loading states: if props are provided, only usage matters; otherwise both profile and usage
+  const loading = propUserInfo === undefined ? profileLoading : usageLoading;
+  const error = propUserInfo === undefined ? profileError : usageError;
 
   const isControlled = expanded !== undefined;
   const [uncontrolledExpanded, setUncontrolledExpanded] = useState(defaultExpanded);
@@ -425,33 +442,16 @@ export const LiteLLMBudgetGauges: React.FC<LiteLLMBudgetGaugesProps> = ({
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
     setUsageLoading(true);
-    setError(null);
+    setUsageError(null);
     // The usage chart is frozen to month-to-date — no period selector.
     const { startDate, endDate } = monthToDateRange();
-    Promise.allSettled([
-      api.getUserInfo(),
-      api.getTeams(),
-      api.listKeys(),
-      api.getUsage(startDate, endDate),
-    ]).then(([userResult, teamsResult, keysResult, usageResult]) => {
-      if (cancelled) return;
-      if (userResult.status === 'fulfilled') {
-        setUser(userResult.value);
-      } else {
-        setUser(null);
-        setError(
-          userResult.reason?.message ?? 'Failed to load your LiteLLM profile',
-        );
-      }
-      setTeams(teamsResult.status === 'fulfilled' ? teamsResult.value : []);
-      setKeys(keysResult.status === 'fulfilled' ? keysResult.value : []);
-      setLoading(false);
-      // Usage degrades independently: a failed usage fetch leaves the
-      // gauges untouched and the chart column renders its empty state.
-      if (usageResult.status === 'fulfilled') {
-        const daily = usageResult.value.daily_usage ?? [];
+    api.getUsage(startDate, endDate)
+      .then((usageResult) => {
+        if (cancelled) return;
+        // Usage degrades independently: a failed usage fetch leaves the
+        // gauges untouched and the chart column renders its empty state.
+        const daily = usageResult.daily_usage ?? [];
         setDailyTokens(
           daily.map(d => ({
             date: d.date,
@@ -459,13 +459,17 @@ export const LiteLLMBudgetGauges: React.FC<LiteLLMBudgetGaugesProps> = ({
             output: d.completion_tokens,
           })),
         );
-        setMtdTokens(usageResult.value.total_tokens ?? 0);
-      } else {
-        setDailyTokens([]);
-        setMtdTokens(0);
-      }
-      setUsageLoading(false);
-    });
+        setMtdTokens(usageResult.total_tokens ?? 0);
+        setUsageLoading(false);
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setUsageError(err?.message ?? 'Failed to load usage data');
+          setDailyTokens([]);
+          setMtdTokens(0);
+          setUsageLoading(false);
+        }
+      });
     return () => {
       cancelled = true;
     };

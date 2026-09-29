@@ -203,63 +203,22 @@ describe('getAuditLogs', () => {
 // ---------------------------------------------------------------------------
 
 describe('pruneExpiredKeys', () => {
-  test('returns 0 when no keys are expired', async () => {
-    const future = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
-    const { api } = makeApi(200, [{ key: 'sk-...1', token: 'sk-full', spend: 0, created_at: '', expires_at: future }]);
+  test('calls POST /keys/prune-expired and returns result', async () => {
+    const { api, calls } = makeApi(200, { pruned: 3, failed: 1, failures: [{ keyId: 'sk-abc', error: 'deletion failed' }] });
+    const result = await api.pruneExpiredKeys();
+    assert.strictEqual(calls.length, 1);
+    assert.ok(calls[0].url.endsWith('/keys/prune-expired'), calls[0].url);
+    assert.strictEqual(calls[0].init?.method, 'POST');
+    assert.strictEqual(result.pruned, 3);
+    assert.strictEqual(result.failed, 1);
+    assert.deepStrictEqual(result.failures, [{ keyId: 'sk-abc', error: 'deletion failed' }]);
+  });
+
+  test('returns 0 pruned, 0 failed when no expired keys', async () => {
+    const { api } = makeApi(200, { pruned: 0, failed: 0 });
     const result = await api.pruneExpiredKeys();
     assert.strictEqual(result.pruned, 0);
-  });
-
-  test('deletes expired keys and returns count', async () => {
-    const past = new Date(Date.now() - 1000).toISOString();
-    const future = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
-    const calls: FetchCall[] = [];
-    let requestCount = 0;
-    const fetchApi = {
-      fetch: async (input: URL | RequestInfo, init?: RequestInit) => {
-        const url = input.toString();
-        calls.push({ url, init });
-        requestCount++;
-        // First call is listKeys, subsequent calls are deletes
-        const body = requestCount === 1
-          ? [
-              { key: 'sk-...a', token: 'sk-hash-a', spend: 0, created_at: '', expires_at: past },
-              { key: 'sk-...b', token: 'sk-hash-b', spend: 0, created_at: '', expires_at: future },
-            ]
-          : { success: true };
-        return {
-          ok: true, status: 200, statusText: 'OK',
-          json: async () => body,
-          text: async () => '',
-        } as unknown as Response;
-      },
-    };
-    const api = new LiteLlmApi(fetchApi, 'http://localhost/api/litellm');
-    const result = await api.pruneExpiredKeys();
-    assert.strictEqual(result.pruned, 1);
-    // The delete should use token (sk-hash-a), not the masked key (sk-...a)
-    assert.ok(calls[1].url.includes('sk-hash-a'), calls[1].url);
-    assert.strictEqual(calls[1].init?.method, 'DELETE');
-  });
-
-  test('falls back to key when token is absent', async () => {
-    const past = new Date(Date.now() - 1000).toISOString();
-    const calls: FetchCall[] = [];
-    let req = 0;
-    const fetchApi = {
-      fetch: async (input: URL | RequestInfo, init?: RequestInit) => {
-        const url = input.toString();
-        calls.push({ url, init });
-        req++;
-        const body = req === 1
-          ? [{ key: 'sk-...c', spend: 0, created_at: '', expires_at: past }]  // no token
-          : { success: true };
-        return { ok: true, status: 200, statusText: 'OK', json: async () => body, text: async () => '' } as unknown as Response;
-      },
-    };
-    const api = new LiteLlmApi(fetchApi, 'http://localhost/api/litellm');
-    await api.pruneExpiredKeys();
-    assert.ok(calls[1].url.includes('sk-...c'), calls[1].url);
+    assert.strictEqual(result.failed, 0);
   });
 });
 
@@ -393,5 +352,33 @@ describe('base URL resolution', () => {
     const api = new LiteLlmApi(fetchApi, { getBaseUrl: async () => 'https://b.example.com/api/litellm' });
     await api.blockKey('k1');
     assert.strictEqual(calls[0].url, 'https://b.example.com/api/litellm/keys/k1/block');
+  });
+});
+
+describe('profile cache invalidation on writes', () => {
+  test('a successful write drops the cached profile for that API instance', async () => {
+    const { profileCacheInstance } = await import('./profileCache');
+    const { fetchApi } = makeFetch(200, {});
+    const api = new LiteLlmApi(fetchApi, 'http://localhost/api/litellm');
+    let loads = 0;
+    const load = () => profileCacheInstance.memoize(api, 'profile', async () => ++loads);
+    await load();
+    await load();
+    assert.strictEqual(loads, 1);
+    await api.blockKey('k1');
+    await load();
+    assert.strictEqual(loads, 2);
+  });
+
+  test('a failed write keeps the cached profile', async () => {
+    const { profileCacheInstance } = await import('./profileCache');
+    const { fetchApi } = makeFetch(500, { error: 'boom' });
+    const api = new LiteLlmApi(fetchApi, 'http://localhost/api/litellm');
+    let loads = 0;
+    const load = () => profileCacheInstance.memoize(api, 'profile', async () => ++loads);
+    await load();
+    await assert.rejects(() => api.blockKey('k1'));
+    await load();
+    assert.strictEqual(loads, 1);
   });
 });

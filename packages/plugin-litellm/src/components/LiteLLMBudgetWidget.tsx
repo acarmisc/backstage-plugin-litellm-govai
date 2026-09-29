@@ -18,8 +18,11 @@
  *   - `collapsible` folds the body under a one-line summary header.
  * `action` renders a host-supplied node (e.g. a button) pinned to the card
  * bottom, always visible.
+ *
+ * When user data is passed via props (userInfo, teams, keys), they are used
+ * directly without refetching. Otherwise, the hook fetches them.
  */
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import Paper from '@mui/material/Paper';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
@@ -29,8 +32,7 @@ import Collapse from '@mui/material/Collapse';
 import IconButton from '@mui/material/IconButton';
 import { ExpandMore } from '@mui/icons-material';
 import { alpha } from '@mui/material/styles';
-import { useApi } from '@backstage/core-plugin-api';
-import { liteLlmApiRef } from '../api';
+import { useLiteLLMProfile } from '../hooks/useLiteLLMProfile';
 import { UserInfo, TeamInfo, VirtualKey } from '../types';
 import { StatusPill, Tone } from './ui';
 import {
@@ -67,6 +69,13 @@ export interface LiteLLMBudgetWidgetProps {
    * "create key" button.
    */
   action?: React.ReactNode;
+  /**
+   * Optional preloaded data to use instead of fetching via the hook.
+   * When provided, the component uses these values directly without refetching.
+   */
+  userInfo?: UserInfo | null;
+  teams?: TeamInfo[];
+  keys?: VirtualKey[];
 }
 
 interface LevelFrameProps {
@@ -287,39 +296,17 @@ export const LiteLLMBudgetWidget: React.FC<LiteLLMBudgetWidgetProps> = ({
   collapsible = false,
   defaultExpanded = true,
   action,
+  userInfo: propUserInfo,
+  teams: propTeams,
+  keys: propKeys,
 }) => {
-  const api = useApi(liteLlmApiRef);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [user, setUser] = useState<UserInfo | null>(null);
-  const [teams, setTeams] = useState<TeamInfo[]>([]);
-  const [keys, setKeys] = useState<VirtualKey[]>([]);
+  const { userInfo: hookUserInfo, teams: hookTeams, keys: hookKeys, loading, error } = useLiteLLMProfile();
   const [expanded, setExpanded] = useState(defaultExpanded);
 
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    setError(null);
-    Promise.allSettled([api.getUserInfo(), api.getTeams(), api.listKeys()]).then(
-      ([userResult, teamsResult, keysResult]) => {
-        if (cancelled) return;
-        if (userResult.status === 'fulfilled') {
-          setUser(userResult.value);
-        } else {
-          setUser(null);
-          setError(
-            userResult.reason?.message ?? 'Failed to load your LiteLLM profile',
-          );
-        }
-        setTeams(teamsResult.status === 'fulfilled' ? teamsResult.value : []);
-        setKeys(keysResult.status === 'fulfilled' ? keysResult.value : []);
-        setLoading(false);
-      },
-    );
-    return () => {
-      cancelled = true;
-    };
-  }, [api]);
+  // Use provided props if available, otherwise use hook data
+  const user = propUserInfo !== undefined ? propUserInfo : hookUserInfo;
+  const teams = propTeams !== undefined ? propTeams : hookTeams;
+  const keys = propKeys !== undefined ? propKeys : hookKeys;
 
   const summary = useMemo(
     () => buildBudgetSummary(user, teams, keys, maxKeys),
