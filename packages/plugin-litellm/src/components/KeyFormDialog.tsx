@@ -21,6 +21,7 @@ import Tabs from '@mui/material/Tabs';
 import Tab from '@mui/material/Tab';
 import Tooltip from '@mui/material/Tooltip';
 import InputAdornment from '@mui/material/InputAdornment';
+import Chip from '@mui/material/Chip';
 import { ContentCopy, Code, ExpandMore, Check } from '@mui/icons-material';
 import { usePermission } from '@backstage/plugin-permission-react';
 import { VirtualKey, ModelInfo, TeamInfo, GenerateKeyRequest, GenerateKeyResponse, UpdateKeyRequest, LiteLlmConfig } from '../types';
@@ -580,9 +581,11 @@ export const KeyFormDialog: React.FC<KeyFormDialogProps> = ({
     const ctx = formatContextWindow(m.max_input_tokens, m.max_output_tokens);
     return (
       <Box>
-        <span>{m.model_name}</span>
-        {m.supports_function_calling && ' 🔧'}
-        {m.supports_vision && ' 👁️'}
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
+          <span>{m.model_name}</span>
+          {m.supports_function_calling && <Chip size="small" variant="outlined" label="Tools" />}
+          {m.supports_vision && <Chip size="small" variant="outlined" label="Vision" />}
+        </Box>
         {ctx && (
           <Typography variant="caption" color="text.secondary" sx={{ ml: 1 }}>
             {ctx}

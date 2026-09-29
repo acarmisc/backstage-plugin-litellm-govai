@@ -47,6 +47,7 @@ const CountStat: React.FC<{
   const content = (
     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
       <Box
+        aria-hidden="true"
         sx={theme => ({
           width: 7,
           height: 7,
@@ -194,7 +195,7 @@ export const DashboardHeader: React.FC<DashboardHeaderProps> = ({
         }}
       >
         <CountStat value={counts.total} label="keys" tone="accent" />
-        <Divider orientation="vertical" flexItem sx={{ my: 0.25 }} />
+        <Divider orientation="vertical" flexItem sx={{ my: 0.25 }} aria-hidden="true" />
         <CountStat
           value={counts.expired}
           label="expired"
@@ -202,7 +203,7 @@ export const DashboardHeader: React.FC<DashboardHeaderProps> = ({
           clickable
           onClick={() => onNavigateToFilter?.('expired')}
         />
-        <Divider orientation="vertical" flexItem sx={{ my: 0.25 }} />
+        <Divider orientation="vertical" flexItem sx={{ my: 0.25 }} aria-hidden="true" />
         <CountStat
           value={counts.expiringSoon}
           label="expiring soon"

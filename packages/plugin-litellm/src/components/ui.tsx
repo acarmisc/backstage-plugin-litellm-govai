@@ -63,10 +63,10 @@ export const CHART_COLORS = [
 export const SERIES = {
   input: '#6366F1',
   output: '#14B8A6',
-  success: '#10B981',
-  failure: '#EF4444',
+  success: '#0d9488',
+  failure: '#ea580c',
   spend: '#F59E0B',
-  budget: '#EF4444',
+  budget: '#ea580c',
 } as const;
 
 const OTHER_COLOR = '#94A3B8';
