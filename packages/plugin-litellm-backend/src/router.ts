@@ -1,4 +1,4 @@
-import express, { Router, Request, Response, NextFunction } from 'express';
+import express, { Router, Request, Response } from 'express';
 import { Config } from '@backstage/config';
 import { AuthService, DiscoveryService, PermissionsService } from '@backstage/backend-plugin-api';
 import { AuthorizeResult, BasicPermission } from '@backstage/plugin-permission-common';
@@ -75,6 +75,8 @@ import {
 } from './teamBudgetVisibility';
 import { readOpencodeConfig } from './opencode';
 import { sendError } from './errors';
+import type { RouterContext } from './routes/context';
+import { createRequireUser } from './routes/middleware/withUser';
 
 export { ProvisioningError };
 
@@ -221,6 +223,170 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
     );
   }
 
+  // Build shared RouterContext with config and helpers
+  const ctx: RouterContext = {
+    client,
+    catalogClient,
+    auth,
+    permissions,
+    logger,
+    baseUrl,
+    publicBaseUrl,
+    userIdDomain,
+    provisioningEnabled,
+    provisioningDefaults,
+    roleConfigs,
+    auditGroup,
+    allowUnlimitedBudget,
+    teamRequired,
+    allowOwnerResetSpend,
+    keyValidationConfig,
+    teamMgmtEnabled,
+    objectPermsEnabled,
+    teamAdminCfg,
+    teamBudgetVisibility,
+    opencodeCfg,
+
+    // Helper functions - defined inline below this object
+    authorizeKeyAction: async (req: Request, keyId: string) => {
+      const tokenEntityRef = req.res!.locals.tokenEntityRef as string;
+      const userId = req.res!.locals.userId as string;
+      const ownKeys = await client.listKeys(userId);
+      const key = ownKeys.find(k => (k.token ?? k.key) === keyId);
+      if (!key) {
+        throw Object.assign(new Error('Access denied: key does not belong to the caller'), {
+          status: 403,
+          body: { error: 'Access denied: key does not belong to the caller' },
+        });
+      }
+      return { tokenEntityRef, userId, key };
+    },
+
+    sendOwnershipError: (err: any, res: Response): boolean => {
+      if (err && typeof err.status === 'number' && err.body) {
+        res.status(err.status).json(err.body);
+        return true;
+      }
+      return false;
+    },
+
+    assertPermission: async (req: Request, permission: BasicPermission): Promise<boolean> => {
+      const credentials = await resolveCredentials(req, auth);
+      if (!credentials) return false;
+      const [decision] = await permissions.authorize([{ permission }], {
+        credentials,
+      });
+      return decision.result === AuthorizeResult.ALLOW;
+    },
+
+    sendPermissionDenied: (res: Response, permission: BasicPermission): void => {
+      res.status(403).json({
+        error: `Access denied: missing permission "${permission.name}"`,
+      });
+    },
+
+    requireTeamMgmt: (res: Response): boolean => {
+      if (!teamMgmtEnabled) {
+        res.status(403).json({
+          error: 'Team management is disabled (requires permission.enabled and litellm.teamAdmin.group)',
+        });
+        return false;
+      }
+      return true;
+    },
+
+    requireObjectPerms: (res: Response): boolean => {
+      if (!ctx.requireTeamMgmt(res)) return false;
+      if (!objectPermsEnabled) {
+        res.status(403).json({
+          error:
+            'Knowledge-base / MCP management is disabled (set litellm.teamAdmin.objectPermissions.enabled: true, with a permission policy and the allowlists in place)',
+        });
+        return false;
+      }
+      return true;
+    },
+
+    sendTeamError: (err: any, res: Response): void => {
+      sendError(res, err, logger, 'team operation');
+    },
+
+    authorizeTeamSubresource: async (
+      req: Request,
+      res: Response,
+      permission: BasicPermission,
+    ): Promise<
+      | { teamId: string; owningGroup: string; actor: string; team: TeamInfo }
+      | null
+    > => {
+      if (!ctx.requireTeamMgmt(res)) return null;
+
+      const check = await assertTeamAdmin({
+        req,
+        auth,
+        permissions,
+        catalogClient,
+        teamAdminGroup: teamAdminCfg.group!,
+        permission,
+        logger,
+      });
+      if (!check.ok) {
+        res.status(check.status).json({ error: check.error });
+        return null;
+      }
+
+      const { teamId } = req.params;
+      if (!teamId) {
+        res.status(400).json({ error: 'teamId is required' });
+        return null;
+      }
+
+      let existing;
+      try {
+        existing = await withTeamFetchRetry(() => client.getTeamInfo(teamId));
+      } catch (err: any) {
+        if (err instanceof LiteLLMUpstreamError && err.status === 404) {
+          res.status(404).json({ error: 'Team not found' });
+          return null;
+        }
+        ctx.sendTeamError(err, res);
+        return null;
+      }
+
+      const owningGroup =
+        typeof existing.metadata?.owning_group === 'string'
+          ? existing.metadata.owning_group
+          : undefined;
+      if (!owningGroup) {
+        res.status(403).json({
+          error:
+            'This team is not managed by Backstage team admins and cannot be edited here',
+        });
+        return null;
+      }
+      const owns = await isUserMemberOfGroup(
+        check.userEntityRef,
+        owningGroup,
+        catalogClient,
+        auth,
+        logger,
+      );
+      if (!owns) {
+        res
+          .status(403)
+          .json({ error: `Access denied: team is owned by ${owningGroup}` });
+        return null;
+      }
+
+      return {
+        teamId,
+        owningGroup,
+        actor: check.userEntityRef,
+        team: existing,
+      };
+    },
+  };
+
   const router = Router();
   // JSON body parser. Without this, every POST/PUT endpoint sees an empty
   // req.body. Backstage's httpRouter does not apply a body parser at the
@@ -233,16 +399,7 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
   // comes ONLY from a verified Backstage user principal — never from the query
   // string or body — so service/external principals (and anonymous callers)
   // are rejected instead of being allowed to name an arbitrary user_id.
-  const requireUser = async (req: Request, res: Response, next: NextFunction) => {
-    const tokenEntityRef = await resolveUserId(req, auth);
-    if (!tokenEntityRef) {
-      res.status(401).json({ error: 'A Backstage user credential is required' });
-      return;
-    }
-    res.locals.tokenEntityRef = tokenEntityRef;
-    res.locals.userId = toLiteLLMUserId(tokenEntityRef, userIdDomain);
-    next();
-  };
+  const requireUser = createRequireUser(ctx);
   router.use(['/user/info', '/keys', '/usage'], requireUser);
 
   router.get('/health', (_req: Request, res: Response) => {
