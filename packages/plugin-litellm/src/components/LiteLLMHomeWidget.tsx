@@ -5,16 +5,20 @@ import Typography from '@mui/material/Typography';
 import FormControl from '@mui/material/FormControl';
 import Select from '@mui/material/Select';
 import MenuItem from '@mui/material/MenuItem';
-import Grid from '@mui/material/Grid';
 import Skeleton from '@mui/material/Skeleton';
-import { AreaChart, Area, ResponsiveContainer } from 'recharts';
+import { AreaChart, Area, XAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { useApi } from '@backstage/core-plugin-api';
+import { useRouteRef } from '@backstage/frontend-plugin-api';
+import { Link } from '@backstage/core-components';
 import { useLiteLLMProfile } from '../hooks/useLiteLLMProfile';
 import { liteLlmApiRef } from '../api';
+import { rootRouteRef } from '../routes';
 import { UsageMetrics } from '../types';
-import { fmtUsd, fmtInt } from '../format';
+import { fmtUsd } from '../format';
 import { toLocalDay } from '../dates';
+import { SERIES, ChartTooltip } from './ui';
 import { widgetViewState, USAGE_UNAVAILABLE_MSG, UNPROVISIONED_MSG } from '../widgetState';
+import { rangeCaption, sparklineAriaLabel, usageSummary } from '../homeWidgetHelpers';
 
 export interface LiteLLMHomeWidgetProps {
   /** Default period when the widget mounts. Defaults to '7d'. */
@@ -44,21 +48,6 @@ function presetToDateRange(preset: DatePreset): { start: Date; end: Date } {
   return { start, end };
 }
 
-interface KpiProps {
-  label: string;
-  value: string;
-}
-
-const Kpi: React.FC<KpiProps> = ({ label, value }) => (
-  <Box>
-    <Typography variant="caption" color="text.secondary" display="block">
-      {label}
-    </Typography>
-    <Typography variant="subtitle1" fontWeight={600}>
-      {value}
-    </Typography>
-  </Box>
-);
 
 export const LiteLLMHomeWidget: React.FC<LiteLLMHomeWidgetProps> = ({
   defaultPeriod = '7d',
@@ -66,6 +55,7 @@ export const LiteLLMHomeWidget: React.FC<LiteLLMHomeWidgetProps> = ({
   bare = false,
 }) => {
   const api = useApi(liteLlmApiRef);
+  const moduleRouteRef = useRouteRef(rootRouteRef);
   const { userInfo, keys, loading: profileLoading, error: profileError } = useLiteLLMProfile();
   const [period, setPeriod] = useState<DatePreset>(defaultPeriod);
   const [usageLoading, setUsageLoading] = useState(true);
@@ -112,7 +102,6 @@ export const LiteLLMHomeWidget: React.FC<LiteLLMHomeWidgetProps> = ({
   );
 
   const Wrapper: React.ElementType = bare ? Box : Paper;
-
   const partialFailure = !usageLoading && usageError && usage;
 
   const dailyData = (usage?.daily_usage ?? []).map(d => ({
@@ -121,6 +110,12 @@ export const LiteLLMHomeWidget: React.FC<LiteLLMHomeWidgetProps> = ({
   }));
 
   const hasSparkline = dailyData.length > 0;
+
+  const { start, end } = presetToDateRange(period);
+  const startDate = toLocalDay(start);
+  const endDate = toLocalDay(end);
+  const dateRangeCaption = rangeCaption(startDate, endDate);
+  const sparklineAriaLabelText = sparklineAriaLabel(dailyData);
 
   return (
     <Wrapper sx={bare ? { height: '100%' } : { p: 2, height: '100%' }}>
@@ -132,6 +127,7 @@ export const LiteLLMHomeWidget: React.FC<LiteLLMHomeWidgetProps> = ({
             value={period}
             onChange={e => setPeriod(e.target.value as DatePreset)}
             displayEmpty
+            inputProps={{ 'aria-label': 'Usage period' }}
           >
             <MenuItem value="today">Today</MenuItem>
             <MenuItem value="7d">7d</MenuItem>
@@ -143,33 +139,8 @@ export const LiteLLMHomeWidget: React.FC<LiteLLMHomeWidgetProps> = ({
       {/* Loading state */}
       {viewState.kind === 'loading' && (
         <Box sx={{ minHeight: 120 }}>
-          <Grid container spacing={2} sx={{ mb: 1.5 }}>
-            <Grid item xs={6}>
-              <Box>
-                <Skeleton variant="text" width="60%" height={12} sx={{ mb: 0.5 }} />
-                <Skeleton variant="text" width="80%" height={18} />
-              </Box>
-            </Grid>
-            <Grid item xs={6}>
-              <Box>
-                <Skeleton variant="text" width="60%" height={12} sx={{ mb: 0.5 }} />
-                <Skeleton variant="text" width="80%" height={18} />
-              </Box>
-            </Grid>
-            <Grid item xs={6}>
-              <Box>
-                <Skeleton variant="text" width="60%" height={12} sx={{ mb: 0.5 }} />
-                <Skeleton variant="text" width="80%" height={18} />
-              </Box>
-            </Grid>
-            <Grid item xs={6}>
-              <Box>
-                <Skeleton variant="text" width="60%" height={12} sx={{ mb: 0.5 }} />
-                <Skeleton variant="text" width="80%" height={18} />
-              </Box>
-            </Grid>
-          </Grid>
-          <Skeleton variant="rectangular" width="100%" height={120} />
+          <Skeleton variant="text" width="60%" height={20} sx={{ mb: 1 }} />
+          <Skeleton variant="rectangular" width="100%" height={100} />
         </Box>
       )}
 
@@ -198,47 +169,57 @@ export const LiteLLMHomeWidget: React.FC<LiteLLMHomeWidgetProps> = ({
 
       {viewState.kind === 'ready' && (
         <>
-          <Grid container spacing={2} sx={{ mb: hasSparkline ? 1.5 : 0 }}>
-            <Grid item xs={6}>
-              <Kpi
-                label="USD Spent"
-                value={viewState.usageUnavailable ? USAGE_UNAVAILABLE_MSG : fmtUsd(usage?.total_spend ?? 0)}
-              />
-            </Grid>
-            <Grid item xs={6}>
-              <Kpi
-                label="Tokens In"
-                value={viewState.usageUnavailable ? USAGE_UNAVAILABLE_MSG : fmtInt(usage?.prompt_tokens ?? 0)}
-              />
-            </Grid>
-            <Grid item xs={6}>
-              <Kpi
-                label="Tokens Out"
-                value={viewState.usageUnavailable ? USAGE_UNAVAILABLE_MSG : fmtInt(usage?.completion_tokens ?? 0)}
-              />
-            </Grid>
-            <Grid item xs={6}>
-              <Kpi label="Keys" value={fmtInt(keys.length)} />
-            </Grid>
-          </Grid>
+          {/* Summary line */}
+          <Typography
+            variant="body2"
+            sx={{
+              fontWeight: 500,
+              mb: hasSparkline ? 1.5 : 1,
+              color: viewState.usageUnavailable ? 'text.secondary' : 'text.primary',
+            }}
+          >
+            {viewState.usageUnavailable ? USAGE_UNAVAILABLE_MSG : usageSummary(usage)}
+          </Typography>
 
-          {/* Sparkline */}
+          {/* Sparkline with caption */}
           {hasSparkline && !viewState.usageUnavailable && (
-            <Box height={120}>
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={dailyData} margin={{ top: 4, right: 0, bottom: 0, left: 0 }}>
-                  <Area
-                    type="monotone"
-                    dataKey="spend"
-                    stroke="#8884d8"
-                    fill="#8884d8"
-                    fillOpacity={0.3}
-                    dot={false}
-                    isAnimationActive={false}
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
-            </Box>
+            <>
+              <Box
+                height={80}
+                role="img"
+                aria-label={sparklineAriaLabelText}
+                sx={{ mb: 0.5 }}
+              >
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={dailyData} margin={{ top: 4, right: 0, bottom: 0, left: 0 }}>
+                    <XAxis dataKey="date" hide />
+                    <Tooltip content={<ChartTooltip valueFormatter={fmtUsd} />} />
+                    <Area
+                      type="monotone"
+                      dataKey="spend"
+                      name="Spend"
+                      stroke={SERIES.spend}
+                      fill={SERIES.spend}
+                      fillOpacity={0.3}
+                      dot={false}
+                      isAnimationActive={false}
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </Box>
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+                daily spend ({dateRangeCaption})
+              </Typography>
+            </>
+          )}
+
+          {/* Footer link */}
+          {moduleRouteRef?.() && (
+            <Typography variant="caption" sx={{ mt: 1, display: 'block' }}>
+              <Link to={moduleRouteRef()} color="primary">
+                Open LiteLLM →
+              </Link>
+            </Typography>
           )}
         </>
       )}
