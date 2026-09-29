@@ -68,6 +68,11 @@ export type BudgetCta = BudgetCtaKind | BudgetCtaSpec;
 export interface LiteLLMBudgetGaugesProps {
   /** Optional title override. Defaults to 'Budget'. */
   title?: string;
+  /**
+   * Render without the card's own chrome and title, for hosts (such as the
+   * home page grid) that already provide a titled card. Defaults to false.
+   */
+  bare?: boolean;
   /** Ring diameter in px. Defaults to 72. */
   size?: number;
   /** Where the "+N more" key link points. Defaults to the Keys tab. */
@@ -388,6 +393,7 @@ const UsageMiniChart: React.FC<{
 
 export const LiteLLMBudgetGauges: React.FC<LiteLLMBudgetGaugesProps> = ({
   title = 'Budget',
+  bare = false,
   size = 72,
   keysHref,
   moduleHref: propModuleHref,
@@ -548,12 +554,16 @@ export const LiteLLMBudgetGauges: React.FC<LiteLLMBudgetGaugesProps> = ({
 
   const hasFooter = resolvedCtas.length > 0 || !!action;
 
+  const Wrapper: React.ElementType = bare ? Box : Paper;
+
   return (
-    <Paper sx={{ p: 2 }}>
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5, minWidth: 0 }}>
-        <Typography variant="h6" lineHeight={1.2} sx={{ minWidth: 0, flex: 1 }}>
-          {title}
-        </Typography>
+    <Wrapper sx={bare ? { height: '100%' } : { p: 2, height: '100%' }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5, minWidth: 0, justifyContent: bare ? 'flex-end' : undefined }}>
+        {!bare && (
+          <Typography variant="h6" lineHeight={1.2} sx={{ minWidth: 0, flex: 1 }}>
+            {title}
+          </Typography>
+        )}
         {!loading && !error && (
           <StatusPill
             label={summaryText}
@@ -627,6 +637,6 @@ export const LiteLLMBudgetGauges: React.FC<LiteLLMBudgetGaugesProps> = ({
           {action}
         </Box>
       )}
-    </Paper>
+    </Wrapper>
   );
 };

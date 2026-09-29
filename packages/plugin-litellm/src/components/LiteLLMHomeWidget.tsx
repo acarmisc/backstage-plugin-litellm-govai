@@ -21,6 +21,11 @@ export interface LiteLLMHomeWidgetProps {
   defaultPeriod?: 'today' | '7d' | '30d';
   /** Optional title override. Defaults to 'LiteLLM Usage'. */
   title?: string;
+  /**
+   * Render without the widget's own card chrome and title, for hosts (such as
+   * the home page grid) that already provide a titled card. Defaults to false.
+   */
+  bare?: boolean;
 }
 
 type DatePreset = 'today' | '7d' | '30d';
@@ -58,6 +63,7 @@ const Kpi: React.FC<KpiProps> = ({ label, value }) => (
 export const LiteLLMHomeWidget: React.FC<LiteLLMHomeWidgetProps> = ({
   defaultPeriod = '7d',
   title = 'LiteLLM Usage',
+  bare = false,
 }) => {
   const api = useApi(liteLlmApiRef);
   const { keys } = useLiteLLMProfile();
@@ -94,6 +100,8 @@ export const LiteLLMHomeWidget: React.FC<LiteLLMHomeWidgetProps> = ({
     };
   }, [api, period]);
 
+  const Wrapper: React.ElementType = bare ? Box : Paper;
+
   const partialFailure = !usageLoading && usageError && usage;
   const totalFailure = !usageLoading && usageError;
 
@@ -105,10 +113,10 @@ export const LiteLLMHomeWidget: React.FC<LiteLLMHomeWidgetProps> = ({
   const hasSparkline = dailyData.length > 0;
 
   return (
-    <Paper sx={{ p: 2 }}>
+    <Wrapper sx={bare ? { height: '100%' } : { p: 2, height: '100%' }}>
       {/* Card header */}
-      <Box display="flex" justifyContent="space-between" alignItems="center" mb={1.5}>
-        <Typography variant="h6">{title}</Typography>
+      <Box display="flex" justifyContent={bare ? 'flex-end' : 'space-between'} alignItems="center" mb={1.5}>
+        {!bare && <Typography variant="h6">{title}</Typography>}
         <FormControl size="small" sx={{ minWidth: 90 }}>
           <Select
             value={period}
@@ -182,6 +190,6 @@ export const LiteLLMHomeWidget: React.FC<LiteLLMHomeWidgetProps> = ({
           )}
         </>
       )}
-    </Paper>
+    </Wrapper>
   );
 };
