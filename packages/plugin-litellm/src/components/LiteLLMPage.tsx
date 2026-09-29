@@ -278,8 +278,7 @@ export const LiteLLMPage: React.FC = () => {
         refreshKeys();
         return response;
       } catch (e: any) {
-        const alert = toastFor('generateError', e.message);
-        if (alert) alertApi.post(alert);
+        // The dialog renders this error inline; don't toast it as well.
         throw e;
       }
     },
@@ -294,8 +293,7 @@ export const LiteLLMPage: React.FC = () => {
         if (alert) alertApi.post(alert);
         refreshKeys();
       } catch (e: any) {
-        const alert = toastFor('updateError', e.message);
-        if (alert) alertApi.post(alert);
+        // The dialog renders this error inline; don't toast it as well.
         throw e;
       }
     },

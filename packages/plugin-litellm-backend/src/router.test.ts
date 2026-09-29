@@ -4028,3 +4028,26 @@ describe('user info cache (router level)', () => {
     }
   });
 });
+
+describe('GET /config supportContact', () => {
+  test('returns the configured support contact', async () => {
+    const h = await startHarness({ config: { 'litellm.supportContact': '#ai-platform' } });
+    try {
+      const { status, body } = await req(h.baseUrl, 'GET', '/config', { authRef: 'user:default/alice' });
+      assert.strictEqual(status, 200);
+      assert.strictEqual(body.supportContact, '#ai-platform');
+    } finally {
+      h.server.close();
+    }
+  });
+
+  test('omits it when not configured', async () => {
+    const h = await startHarness({});
+    try {
+      const { body } = await req(h.baseUrl, 'GET', '/config', { authRef: 'user:default/alice' });
+      assert.ok(body.supportContact === undefined || body.supportContact === null);
+    } finally {
+      h.server.close();
+    }
+  });
+});

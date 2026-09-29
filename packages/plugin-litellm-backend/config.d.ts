@@ -15,6 +15,13 @@ export interface Config {
     publicBaseUrl?: string;
 
     /**
+     * Who end users should contact when their LiteLLM account isn't set up
+     * (an email address, chat channel or URL). Served to the frontend via
+     * GET /config and shown in the "account isn't set up" panel.
+     */
+    supportContact?: string;
+
+    /**
      * LiteLLM master key for admin operations. Never exposed to the frontend.
      * @visibility secret
      */
