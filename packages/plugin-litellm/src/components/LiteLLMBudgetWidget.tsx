@@ -27,8 +27,7 @@ import { useRouteRef } from '@backstage/frontend-plugin-api';
 import Paper from '@mui/material/Paper';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
-import CircularProgress from '@mui/material/CircularProgress';
-import Alert from '@mui/material/Alert';
+import Skeleton from '@mui/material/Skeleton';
 import Collapse from '@mui/material/Collapse';
 import IconButton from '@mui/material/IconButton';
 import { ExpandMore } from '@mui/icons-material';
@@ -36,6 +35,7 @@ import { alpha } from '@mui/material/styles';
 import { useLiteLLMProfile } from '../hooks/useLiteLLMProfile';
 import { UserInfo, TeamInfo, VirtualKey } from '../types';
 import { StatusPill, Tone } from './ui';
+import { widgetViewState, UNPROVISIONED_MSG } from '../widgetState';
 import {
   levelToneColor,
   LimitCard,
@@ -308,6 +308,17 @@ export const LiteLLMBudgetWidget: React.FC<LiteLLMBudgetWidgetProps> = ({
   const teams = propTeams !== undefined ? propTeams : hookTeams;
   const keys = propKeys !== undefined ? propKeys : hookKeys;
 
+  const viewState = useMemo(
+    () => widgetViewState({
+      loading,
+      error,
+      userInfo: user,
+      usageError: null, // budget widget doesn't fetch usage
+      hasKeys: (keys?.length ?? 0) > 0,
+    }),
+    [loading, error, user, keys],
+  );
+
   const summary = useMemo(
     () => buildBudgetSummary(user, teams, keys, maxKeys),
     [user, teams, keys, maxKeys],
@@ -326,19 +337,34 @@ export const LiteLLMBudgetWidget: React.FC<LiteLLMBudgetWidgetProps> = ({
 
   const body = (
     <>
-      {loading && (
-        <Box display="flex" justifyContent="center" alignItems="center" minHeight={140}>
-          <CircularProgress size={32} />
+      {viewState.kind === 'loading' && (
+        <Box sx={{ minHeight: 140 }}>
+          {[0, 1, 2, 3].map(i => (
+            <Box key={i} sx={{ display: 'flex', gap: 1, mb: 1 }}>
+              <Skeleton variant="rectangular" width={24} height={24} sx={{ flexShrink: 0, mt: 0.5 }} />
+              <Box sx={{ flex: 1 }}>
+                <Skeleton variant="text" width="60%" height={18} sx={{ mb: 0.5 }} />
+                <Skeleton variant="rectangular" width="100%" height={8} sx={{ mb: 0.5 }} />
+                <Skeleton variant="text" width="40%" height={12} />
+              </Box>
+            </Box>
+          ))}
         </Box>
       )}
 
-      {!loading && error && (
-        <Alert severity="error" sx={{ mt: 0.5 }}>
-          {error}
-        </Alert>
+      {viewState.kind === 'error' && (
+        <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+          {viewState.message}
+        </Typography>
       )}
 
-      {!loading && !error &&
+      {viewState.kind === 'unprovisioned' && (
+        <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+          {UNPROVISIONED_MSG}
+        </Typography>
+      )}
+
+      {viewState.kind === 'ready' &&
         (compact ? <CompactBody summary={summary} keysLink={keysLink} /> : <FullBody summary={summary} keysLink={keysLink} />)}
     </>
   );
@@ -359,7 +385,7 @@ export const LiteLLMBudgetWidget: React.FC<LiteLLMBudgetWidgetProps> = ({
         >
           <Box sx={{ minWidth: 0, flex: 1 }}>
             <Typography variant="h6" lineHeight={1.2}>{title}</Typography>
-            {!loading && !error && (
+            {viewState.kind === 'ready' && (
               <Box sx={{ mt: 0.5 }}>
                 <StatusPill
                   label={summaryText}

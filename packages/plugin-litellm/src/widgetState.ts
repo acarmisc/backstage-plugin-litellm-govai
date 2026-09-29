@@ -63,9 +63,9 @@ export interface WidgetStateParams {
 export function widgetViewState({
   loading,
   error,
-  userInfo,
+  userInfo: _userInfo,
   usageError,
-  hasKeys,
+  hasKeys: _hasKeys,
 }: WidgetStateParams): WidgetViewState {
   if (loading) {
     return { kind: 'loading' };
@@ -80,6 +80,6 @@ export function widgetViewState({
 
   return {
     kind: 'ready',
-    usageUnavailable: usageError != null,
+    usageUnavailable: usageError !== null && usageError !== undefined,
   };
 }
