@@ -14,6 +14,7 @@ import { useLiteLLMProfile } from '../hooks/useLiteLLMProfile';
 import { liteLlmApiRef } from '../api';
 import { UsageMetrics } from '../types';
 import { fmtUsd, fmtInt } from '../format';
+import { toLocalDay } from '../dates';
 
 export interface LiteLLMHomeWidgetProps {
   /** Default period when the widget mounts. Defaults to '7d'. */
@@ -71,8 +72,8 @@ export const LiteLLMHomeWidget: React.FC<LiteLLMHomeWidgetProps> = ({
     setUsageError(null);
 
     const { start, end } = presetToDateRange(period);
-    const startDate = start.toISOString().split('T')[0];
-    const endDate = end.toISOString().split('T')[0];
+    const startDate = toLocalDay(start);
+    const endDate = toLocalDay(end);
 
     api.getUsage(startDate, endDate)
       .then((usageResult) => {

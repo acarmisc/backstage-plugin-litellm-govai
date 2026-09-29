@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import Paper from '@mui/material/Paper';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
@@ -38,7 +38,7 @@ import {
   UsageModelBreakdown,
   UsageKeyBreakdown,
 } from '../types';
-import { fmtUsd, fmtInt } from '../format';
+import { fmtUsd, fmtInt, modelsWithUsage } from '../format';
 import { userBudgetKpi } from '../budget';
 import {
   ChartCard,
@@ -145,6 +145,19 @@ export const UsageStats: React.FC<UsageStatsProps> = ({
   const chart = useChartTheme();
   const [selectedModel, setSelectedModel] = useState<string>('all');
   const [tab, setTab] = useState<TabKey>('costs');
+
+  // Filter to only models that have usage in the current period
+  const modelsInPeriod = useMemo(
+    () => modelsWithUsage(usage, models),
+    [usage, models],
+  );
+
+  // If the currently selected model is no longer in the list, reset to 'all'
+  useEffect(() => {
+    if (selectedModel !== 'all' && !modelsInPeriod.includes(selectedModel)) {
+      setSelectedModel('all');
+    }
+  }, [modelsInPeriod, selectedModel]);
 
   const handlePresetChange = (preset: DatePreset) => {
     const end = new Date();
@@ -470,9 +483,11 @@ export const UsageStats: React.FC<UsageStatsProps> = ({
             sx={{ minWidth: 220 }}
           >
             <MenuItem value="all">All models</MenuItem>
-            {models.map(m => (
-              <MenuItem key={m.model_name} value={m.model_name}>{m.model_name}</MenuItem>
-            ))}
+            {models
+              .filter(m => modelsInPeriod.includes(m.model_name))
+              .map(m => (
+                <MenuItem key={m.model_name} value={m.model_name}>{m.model_name}</MenuItem>
+              ))}
           </TextField>
         )}
       </Box>
