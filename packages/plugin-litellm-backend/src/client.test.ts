@@ -180,6 +180,34 @@ describe('LiteLLMClient team CRUD methods', () => {
     );
   });
 
+  test('non-JSON response body never embedded in LiteLLMUpstreamError.message', async () => {
+    // Simulate a raw HTML error response (e.g., 502 gateway error from infrastructure)
+    const htmlBody = '<html><body>Bad Gateway</body></html>';
+    fetchCalls = [];
+    globalThis.fetch = async () => ({
+      ok: false,
+      status: 502,
+      statusText: 'Bad Gateway',
+      text: async () => htmlBody,
+      headers: new Headers(),
+    } as any);
+
+    const client = new LiteLLMClient(mockConfig);
+
+    await assert.rejects(
+      client.listTeams(),
+      (err: any) => {
+        assert.ok(err instanceof LiteLLMUpstreamError);
+        assert.strictEqual(err.status, 502);
+        // Message should be generic status+statusText, never contain raw HTML
+        assert.strictEqual(err.message, 'LiteLLM API error: 502 Bad Gateway');
+        assert.ok(!err.message.includes('<html>'));
+        assert.ok(!err.message.includes('Bad Gateway</body>'));
+        return true;
+      },
+    );
+  });
+
   test('Authorization header uses Bearer token', async () => {
     stubFetch({ team_id: 't1' });
 

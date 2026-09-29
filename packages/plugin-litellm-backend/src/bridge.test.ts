@@ -32,7 +32,7 @@ function mockConfig(values: Record<string, any> = {}): any {
 }
 
 function silentLogger(): any {
-  return { info: () => {}, warn: () => {}, error: () => {} };
+  return { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} };
 }
 
 const defaults = {

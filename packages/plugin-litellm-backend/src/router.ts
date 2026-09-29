@@ -75,6 +75,7 @@ import {
   redactTeamUsage,
 } from './teamBudgetVisibility';
 import { readOpencodeConfig } from './opencode';
+import { sendError } from './errors';
 
 export { ProvisioningError };
 
@@ -163,9 +164,9 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
   const masterKey = config.getString('litellm.masterKey');
   const userIdDomain = config.getOptionalString('litellm.userIdDomain');
   // Publicly reachable LiteLLM proxy URL, used to build ready-to-paste
-  // snippets in the frontend. Falls back to baseUrl (the internal URL the
-  // backend calls) when the operator has not configured a public one.
-  const publicBaseUrl = config.getOptionalString('litellm.publicBaseUrl') ?? baseUrl;
+  // snippets in the frontend. Only exposed if explicitly configured.
+  // When unset, returned as null to the FE.
+  const publicBaseUrl = config.getOptionalString('litellm.publicBaseUrl') ?? null;
   const client = options.client ?? new LiteLLMClient({ baseUrl, masterKey });
   const { enabled: provisioningEnabled, defaults: provisioningDefaults } =
     readProvisioningDefaults(config);
@@ -326,8 +327,7 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
         effective_defaults: effective,
       });
     } catch (error: any) {
-      logger.error('Failed to resolve provisioning preview', error);
-      res.status(500).json({ error: error.message });
+      sendError(res, error, logger, 'resolve provisioning preview');
     }
   });
 
@@ -363,8 +363,7 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
         res.status(error.status).json(error.body);
         return;
       }
-      logger.error('Failed to fetch user info', error);
-      res.status(500).json({ error: error.message });
+      sendError(res, error, logger, 'fetch user info');
     }
   });
 
@@ -392,8 +391,7 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
         res.status(error.status).json(error.body);
         return;
       }
-      logger.error('Failed to list keys', error);
-      res.status(500).json({ error: error.message });
+      sendError(res, error, logger, 'list keys');
     }
   });
 
@@ -536,18 +534,7 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
         });
         return;
       }
-      // Preserve upstream LiteLLM status + structured error (e.g. a 400 with
-      // param "key_alias" for a duplicate alias) so the frontend can
-      // distinguish "alias taken" from a genuine server error.
-      if (error instanceof LiteLLMUpstreamError) {
-        res.status(error.status).json({
-          error: error.message,
-          ...(error.param ? { param: error.param } : {}),
-        });
-        return;
-      }
-      logger.error('Failed to generate key', error);
-      res.status(500).json({ error: error.message });
+      sendError(res, error, logger, 'generate key');
     }
   });
 
@@ -687,8 +674,7 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
           res.status(error.status).json(error.body);
           return;
         }
-        logger.error('OpenCode connect failed', error);
-        res.status(500).json({ error: error.message });
+        sendError(res, error, logger, 'OpenCode connect');
       }
     });
   }
@@ -740,10 +726,7 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
             const teamInfo = await client.getTeamInfo(key.team_id);
             allowedModels = teamInfo?.models ?? [];
           } catch (err) {
-            logger.error('Failed to fetch team info for model validation', err);
-            res.status(500).json({
-              error: 'Failed to validate models for the key\'s team',
-            });
+            sendError(res, err, logger, 'fetch team info for model validation');
             return;
           }
         } else {
@@ -793,8 +776,7 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
       res.json(result);
     } catch (error: any) {
       if (sendOwnershipError(error, res)) return;
-      logger.error('Failed to update key', error);
-      res.status(500).json({ error: error.message });
+      sendError(res, error, logger, 'update key');
     }
   });
 
@@ -817,8 +799,7 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
       res.json({ success: true });
     } catch (error: any) {
       if (sendOwnershipError(error, res)) return;
-      logger.error('Failed to delete key', error);
-      res.status(500).json({ error: error.message });
+      sendError(res, error, logger, 'delete key');
     }
   });
 
@@ -851,8 +832,7 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
       res.json({ success: true });
     } catch (error: any) {
       if (sendOwnershipError(error, res)) return;
-      logger.error('Failed to block key', error);
-      res.status(500).json({ error: error.message });
+      sendError(res, error, logger, 'block key');
     }
   });
 
@@ -892,8 +872,7 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
       res.json({ success: true });
     } catch (error: any) {
       if (sendOwnershipError(error, res)) return;
-      logger.error('Failed to unblock key', error);
-      res.status(500).json({ error: error.message });
+      sendError(res, error, logger, 'unblock key');
     }
   });
 
@@ -921,8 +900,7 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
       res.json({ success: true });
     } catch (error: any) {
       if (sendOwnershipError(error, res)) return;
-      logger.error('Failed to reset key spend', error);
-      res.status(500).json({ error: error.message });
+      sendError(res, error, logger, 'reset key spend');
     }
   });
 
@@ -967,8 +945,7 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
       });
       res.json(result);
     } catch (error: any) {
-      logger.error('Failed to fetch audit logs', error);
-      res.status(500).json({ error: error.message });
+      sendError(res, error, logger, 'fetch audit logs');
     }
   });
 
@@ -977,8 +954,7 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
       const models: ModelInfo[] = await client.listModels();
       res.json(models);
     } catch (error: any) {
-      logger.error('Failed to list models', error);
-      res.status(500).json({ error: error.message });
+      sendError(res, error, logger, 'list models');
     }
   });
 
@@ -1025,8 +1001,7 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
         res.status(error.status).json(error.body);
         return;
       }
-      logger.error('Failed to fetch teams', error);
-      res.status(500).json({ error: error.message });
+      sendError(res, error, logger, 'fetch teams');
     }
   });
 
@@ -1053,15 +1028,7 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
   }
 
   function sendTeamError(err: any, res: Response): void {
-    if (err instanceof LiteLLMUpstreamError) {
-      res.status(err.status).json({
-        error: err.message,
-        ...(err.param ? { param: err.param } : {}),
-      });
-    } else {
-      logger.error('Team operation failed', err);
-      res.status(500).json({ error: err.message });
-    }
+    sendError(res, err, logger, 'team operation');
   }
 
   router.post('/teams', async (req: Request, res: Response) => {
@@ -1801,8 +1768,7 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
         res.status(error.status).json(error.body);
         return;
       }
-      logger.error('Failed to fetch team usage', error);
-      res.status(500).json({ error: error.message });
+      sendError(res, error, logger, 'fetch team usage');
     }
   });
 
@@ -1839,8 +1805,7 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
         res.status(error.status).json(error.body);
         return;
       }
-      logger.error('Failed to fetch usage', error);
-      res.status(500).json({ error: error.message });
+      sendError(res, error, logger, 'fetch usage');
     }
   });
 
@@ -1889,8 +1854,7 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
         res.status(error.status).json(error.body);
         return;
       }
-      logger.error('Bridge request failed', error);
-      res.status(500).json({ error: error.message });
+      sendError(res, error, logger, 'bridge request');
     };
 
     router.get('/bridge/health', (_req: Request, res: Response) => {

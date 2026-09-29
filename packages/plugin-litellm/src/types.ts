@@ -178,8 +178,8 @@ export interface GenerateKeyResponse {
 }
 
 export interface LiteLlmConfig {
-  /** Publicly reachable LiteLLM proxy base URL (for snippet generation). */
-  baseUrl: string;
+  /** Publicly reachable LiteLLM proxy base URL (for snippet generation). Null if not configured. */
+  baseUrl: string | null;
   /** Controls for the "Generate New Key" form, set via litellm.keyGeneration in app-config.yaml. */
   keyGeneration?: {
     /** When false (default), the "Unlimited budget" checkbox is hidden and a budget is always required. */

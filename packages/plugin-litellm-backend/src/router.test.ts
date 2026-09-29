@@ -433,11 +433,11 @@ describe('router /config', () => {
     assert.strictEqual(body.baseUrl, 'https://llm.example.com');
   });
 
-  test('falls back to baseUrl when publicBaseUrl is unset', async () => {
+  test('returns null baseUrl when publicBaseUrl is unset', async () => {
     const h2 = await startHarness({});
     try {
       const { body } = await req(h2.baseUrl, 'GET', '/config');
-      assert.strictEqual(body.baseUrl, 'http://litellm.local');
+      assert.strictEqual(body.baseUrl, null);
     } finally {
       await new Promise<void>(r => h2.server.close(() => r()));
     }
@@ -593,7 +593,7 @@ describe('router /keys/generate', () => {
     }
   });
 
-  test('preserves a non-400 upstream status and omits param when absent', async () => {
+  test('upstream 4xx (non-400) mapped to 400 with sanitized message', async () => {
     const h2 = await startHarness({
       config: {
         'litellm.userIdDomain': 'example.com',
@@ -615,9 +615,129 @@ describe('router /keys/generate', () => {
         authRef: 'user:default/alice',
         body: { alias: 'other', max_budget: 100 },
       });
-      assert.strictEqual(status, 422);
+      // Non-401/403 4xx errors map to 400 with sanitized message
+      assert.strictEqual(status, 400);
       assert.strictEqual(body.error, 'some upstream problem');
-      assert.strictEqual(body.param, undefined);
+    } finally {
+      await new Promise<void>(r => h2.server.close(() => r()));
+    }
+  });
+
+  test('PR-7a: upstream 401 → 502 generic (prevents session logout)', async () => {
+    const h2 = await startHarness({
+      config: {
+        'litellm.userIdDomain': 'example.com',
+        'litellm.keyGeneration.teamRequired': false,
+      },
+      client: mockClient({
+        generateKey: () =>
+          Promise.reject(
+            new LiteLLMUpstreamError(
+              401,
+              'Unauthorized',
+              '{"error":{"message":"API key is invalid"}}',
+            ),
+          ),
+      }),
+    });
+    try {
+      const { status, body } = await req(h2.baseUrl, 'POST', '/keys/generate', {
+        authRef: 'user:default/alice',
+        body: { alias: 'test', max_budget: 100 },
+      });
+      assert.strictEqual(status, 502);
+      assert.strictEqual(body.error, 'LiteLLM rejected the request');
+      assert.ok(!body.error.includes('invalid'));
+    } finally {
+      await new Promise<void>(r => h2.server.close(() => r()));
+    }
+  });
+
+  test('PR-7a: upstream 403 → 502 generic', async () => {
+    const h2 = await startHarness({
+      config: {
+        'litellm.userIdDomain': 'example.com',
+        'litellm.keyGeneration.teamRequired': false,
+      },
+      client: mockClient({
+        generateKey: () =>
+          Promise.reject(
+            new LiteLLMUpstreamError(
+              403,
+              'Forbidden',
+              '{"error":{"message":"Access denied"}}',
+            ),
+          ),
+      }),
+    });
+    try {
+      const { status, body } = await req(h2.baseUrl, 'POST', '/keys/generate', {
+        authRef: 'user:default/alice',
+        body: { alias: 'test', max_budget: 100 },
+      });
+      assert.strictEqual(status, 502);
+      assert.strictEqual(body.error, 'LiteLLM rejected the request');
+    } finally {
+      await new Promise<void>(r => h2.server.close(() => r()));
+    }
+  });
+
+  test('PR-7a: upstream 500 with raw HTML body absent from response', async () => {
+    const h2 = await startHarness({
+      config: {
+        'litellm.userIdDomain': 'example.com',
+        'litellm.keyGeneration.teamRequired': false,
+      },
+      client: mockClient({
+        generateKey: () =>
+          Promise.reject(
+            new LiteLLMUpstreamError(
+              500,
+              'Internal Server Error',
+              '<html><body>Internal Server Error</body></html>',
+            ),
+          ),
+      }),
+    });
+    try {
+      const { status, body } = await req(h2.baseUrl, 'POST', '/keys/generate', {
+        authRef: 'user:default/alice',
+        body: { alias: 'test', max_budget: 100 },
+      });
+      assert.strictEqual(status, 502);
+      assert.strictEqual(body.error, 'LiteLLM is unavailable');
+      assert.ok(!body.error.includes('<html>'));
+      assert.ok(!body.error.includes('</body>'));
+    } finally {
+      await new Promise<void>(r => h2.server.close(() => r()));
+    }
+  });
+
+  test('PR-7a: upstream 400 with HTML stripped and sanitized', async () => {
+    const h2 = await startHarness({
+      config: {
+        'litellm.userIdDomain': 'example.com',
+        'litellm.keyGeneration.teamRequired': false,
+      },
+      client: mockClient({
+        generateKey: () =>
+          Promise.reject(
+            new LiteLLMUpstreamError(
+              400,
+              'Bad Request',
+              '{"error":{"message":"Invalid <span>request</span>: field has   \\n  whitespace"}}',
+            ),
+          ),
+      }),
+    });
+    try {
+      const { status, body } = await req(h2.baseUrl, 'POST', '/keys/generate', {
+        authRef: 'user:default/alice',
+        body: { alias: 'test_key', max_budget: 50 },
+      });
+      assert.strictEqual(status, 400);
+      // Message should have HTML stripped and whitespace collapsed
+      assert.strictEqual(body.error, 'Invalid request: field has whitespace');
     } finally {
       await new Promise<void>(r => h2.server.close(() => r()));
     }
@@ -659,13 +779,14 @@ describe('router /keys/generate — team duration override failure', () => {
     assert.strictEqual(body.teamId, 'team-123');
   });
 
-  test('falls back to raw 500 passthrough when no team_id is set', async () => {
+  test('PR-7a: non-specific 500 errors map to generic "Internal error"', async () => {
     const { status, body } = await req(h.baseUrl, 'POST', '/keys/generate', {
       authRef: 'user:default/alice',
       body: { alias: 'no-team-key', max_budget: 50 },
     });
     assert.strictEqual(status, 500);
-    assert.match(body.error, /Invalid duration format/);
+    // Generic error message; real error logged server-side only
+    assert.strictEqual(body.error, 'Internal error');
   });
 });
 
