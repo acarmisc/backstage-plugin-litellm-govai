@@ -150,6 +150,7 @@ export class LiteLLMClient {
         models: inner.models ?? raw?.models,
         max_budget: inner.max_budget ?? raw?.max_budget,
         budget_duration: inner.budget_duration ?? raw?.budget_duration,
+        budget_reset_at: inner.budget_reset_at ?? raw?.budget_reset_at,
         spend: inner.spend ?? raw?.spend,
         current_spend: inner.current_spend ?? raw?.current_spend,
         soft_limit: inner.soft_limit ?? raw?.soft_limit,

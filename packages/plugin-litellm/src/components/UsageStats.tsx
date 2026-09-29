@@ -279,9 +279,19 @@ export const UsageStats: React.FC<UsageStatsProps> = ({
     {
       label: 'Total spend',
       value: fmtUsd(usage?.total_spend ?? 0),
-      hint: budgetKpi.max ? budgetKpi.resetLabel ?? undefined : undefined,
+      hint: undefined,
       tone: 'accent' as const,
     },
+    ...(budgetKpi.kind === 'capped' && budgetKpi.max !== null && budgetKpi.remaining !== null
+      ? [
+          {
+            label: 'Budget left',
+            value: budgetKpi.remaining > 0 ? fmtUsd(budgetKpi.remaining) : 'Over cap',
+            hint: `${fmtUsd(budgetKpi.spend)} of ${fmtUsd(budgetKpi.max)} · ${budgetKpi.resetLabel ?? ''}`,
+            tone: (budgetKpi.pct !== null && budgetKpi.pct >= 100 ? 'danger' : 'accent') as Tone,
+          },
+        ]
+      : []),
     {
       label: 'Requests',
       value: fmtInt(totalRequests),
