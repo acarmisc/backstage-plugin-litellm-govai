@@ -18,5 +18,14 @@ module.exports = createConfigForRole(__dirname, 'frontend-plugin', {
         'no-restricted-syntax': 'off',
       },
     },
+    {
+      // Test support and tests import devDependencies (jsdom, testing-library).
+      files: ['src/testing/**', '**/*.test.ts', '**/*.test.tsx'],
+      rules: {
+        '@backstage/no-undeclared-imports': 'off',
+        'no-restricted-imports': 'off',
+        'no-restricted-syntax': 'off',
+      },
+    },
   ],
 });

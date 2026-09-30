@@ -6,7 +6,7 @@ import React from 'react';
 import { render, cleanup, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { TestApiProvider, mockApis } from '@backstage/test-utils';
-import { alertApiRef, createApiRef } from '@backstage/core-plugin-api';
+import { alertApiRef } from '@backstage/core-plugin-api';
 import { permissionApiRef } from '@backstage/plugin-permission-react';
 import { LiteLLMHomeWidget } from './LiteLLMHomeWidget';
 import { liteLlmApiRef } from '../api';

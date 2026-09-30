@@ -2,8 +2,7 @@ import { fakeAlertApi } from '../testing/setupDom';
 import { describe, test, afterEach } from 'node:test';
 import assert from 'node:assert';
 import React from 'react';
-import { render, cleanup, screen, waitFor, within } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import { render, cleanup, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { TestApiProvider, mockApis } from '@backstage/test-utils';
 import { alertApiRef } from '@backstage/core-plugin-api';
@@ -59,11 +58,6 @@ const renderTable = (
   );
 };
 
-// `queryByRole` recomputes styles for every node and is pathologically slow on
-// MUI's DOM in jsdom, so check for an open dialog directly.
-const dialogIsOpen = () => document.querySelector('[role="dialog"]') !== null;
-
-const dialog = async () => within(await screen.findByRole('dialog'));
 
 // Kept in its own file: `usePermission` caches decisions in SWR's process-wide
 // cache, and node --test gives every file a fresh process, so a DENY policy
