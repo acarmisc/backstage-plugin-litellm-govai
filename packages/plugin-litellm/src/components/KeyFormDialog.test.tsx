@@ -86,7 +86,7 @@ describe('KeyFormDialog', () => {
       ...overrides,
     };
 
-    return render(
+    const tree = (props: ComponentProps<typeof KeyFormDialog>) => (
       <TestTheme>
       <MemoryRouter>
         <TestApiProvider
@@ -95,11 +95,18 @@ describe('KeyFormDialog', () => {
           [permissionApiRef, mockApis.permission()],
           ]}
         >
-          <KeyFormDialog {...defaultProps} />
+          <KeyFormDialog {...props} />
         </TestApiProvider>
       </MemoryRouter>
-      </TestTheme>,
+      </TestTheme>
     );
+
+    const result = render(tree(defaultProps));
+    // Re-render with the same props but a fresh `onGetConfig` identity, like a
+    // parent that passes an inline arrow and re-renders.
+    const rerenderWithNewCallbacks = () =>
+      result.rerender(tree({ ...defaultProps, onGetConfig: () => defaultProps.onGetConfig() }));
+    return { ...result, rerenderWithNewCallbacks };
   };
 
   test('field order in create mode: Team, Models, Budget, Duration, Alias, then Advanced', () => {
@@ -163,6 +170,48 @@ describe('KeyFormDialog', () => {
     assert.strictEqual(requests[0].max_budget, 25);
     assert.ok(requests[0].alias && requests[0].alias.length > 0);
     assert.strictEqual(requests[0].duration, '30d');
+  });
+
+  describe('parent re-renders', () => {
+    test('a generated key stays visible when the parent re-renders with a new onGetConfig', async () => {
+      const { rerenderWithNewCallbacks } = renderDialog();
+      await userEvent.click(button('Generate'));
+      await screen.findByText('Copy this key now. It will never be shown again.');
+
+      rerenderWithNewCallbacks();
+      rerenderWithNewCallbacks();
+      await new Promise(r => setTimeout(r, 100));
+
+      assert.ok(screen.getByText('Copy this key now. It will never be shown again.'));
+      assert.ok(screen.getAllByText(/sk-new-secret-key-12345/).length >= 1);
+    });
+
+    test('typed form values survive a parent re-render', async () => {
+      const { rerenderWithNewCallbacks } = renderDialog();
+      const alias = screen.getByLabelText(/Alias/) as HTMLInputElement;
+      await userEvent.clear(alias);
+      await userEvent.type(alias, 'my-custom-alias');
+
+      rerenderWithNewCallbacks();
+      await new Promise(r => setTimeout(r, 100));
+
+      assert.strictEqual((screen.getByLabelText(/Alias/) as HTMLInputElement).value, 'my-custom-alias');
+    });
+
+    test('config is fetched once per open, not once per render', async () => {
+      let calls = 0;
+      const onGetConfig = async () => {
+        calls++;
+        return { baseUrl: 'http://localhost:8000', keyActions: { allowOwnerResetSpend: false } } as LiteLlmConfig;
+      };
+      const { rerenderWithNewCallbacks } = renderDialog({ onGetConfig });
+      await waitFor(() => assert.ok(calls >= 1));
+      const before = calls;
+      rerenderWithNewCallbacks();
+      rerenderWithNewCallbacks();
+      await new Promise(r => setTimeout(r, 100));
+      assert.strictEqual(calls, before);
+    });
   });
 
   describe('one-time secret', () => {

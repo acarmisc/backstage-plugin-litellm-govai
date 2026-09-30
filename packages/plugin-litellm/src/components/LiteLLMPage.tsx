@@ -275,6 +275,8 @@ export const LiteLLMPage: FC = () => {
     return allModels.filter(m => allowed.has(m.model_name));
   }, [allModels, userInfo, teams]);
 
+  const getConfig = useCallback(() => api.getConfig(), [api]);
+
   const handleGenerateKey = useCallback(
     async (request: GenerateKeyRequest): Promise<GenerateKeyResponse> => {
       try {
@@ -640,7 +642,7 @@ export const LiteLLMPage: FC = () => {
         onCreateKey={handleGenerateKey}
         onUpdateKey={handleUpdateKey}
         onResetKeySpend={handleResetKeySpend}
-        onGetConfig={() => api.getConfig()}
+        onGetConfig={getConfig}
       />
 
       <ManageTeamDialog
