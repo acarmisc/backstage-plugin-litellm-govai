@@ -1,0 +1,43 @@
+name: Snyk
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "0 6 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  snyk:
+    runs-on: ubuntu-latest
+    env:
+      SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund --legacy-peer-deps
+
+      - uses: snyk/actions/setup@master
+
+      # Fork PRs don't receive secrets, so skip rather than fail.
+      - name: Snyk test
+        if: ${{ env.SNYK_TOKEN != '' }}
+        # Both package-lock.json and yarn.lock are committed; exclude yarn.lock
+        # so packages aren't scanned twice.
+        run: >
+          snyk test
+          --all-projects
+          --exclude=yarn.lock
+          --org=701fed0d-3b87-43f5-99f9-4399b6ad5481
+          --severity-threshold=high
