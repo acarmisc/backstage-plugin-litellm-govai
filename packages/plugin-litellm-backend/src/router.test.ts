@@ -4552,7 +4552,11 @@ describe('bridge routes: identity matches the UI', () => {
     try {
       const { status, body } = await req(h.baseUrl, 'GET', '/bridge/user/info', bearer);
       assert.strictEqual(status, 200);
-      assert.deepStrictEqual(body, { user_id: 'degiorgis', teams: ['t1', 't2'] });
+      assert.deepStrictEqual(body, {
+        user_id: 'degiorgis',
+        teams: ['t1', 't2'],
+        team_metadata: [{ id: 't1', name: 't1' }, { id: 't2', name: 't2' }],
+      });
     } finally {
       h.server.close();
     }

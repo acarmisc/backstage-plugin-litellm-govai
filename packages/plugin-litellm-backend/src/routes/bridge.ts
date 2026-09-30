@@ -181,7 +181,7 @@ export function registerBridgeRoutes(router: Router, ctx: RouterContext, bridgeO
           logger,
           bridgeIdentity,
         );
-        
+
         // Enrich team list with metadata (display names, etc.)
         const teamIds = user.teams ?? [];
         const teamMetadata: Array<{ id: string; name?: string }> = [];
@@ -198,8 +198,8 @@ export function registerBridgeRoutes(router: Router, ctx: RouterContext, bridgeO
             teamMetadata.push({ id: teamId });
           }
         }
-        
-        res.json({ user_id: user.user_id, teams: teamMetadata });
+
+        res.json({ user_id: user.user_id, teams: teamIds, team_metadata: teamMetadata });
       } catch (error: unknown) {
         handleBridgeError(error, res);
       }
