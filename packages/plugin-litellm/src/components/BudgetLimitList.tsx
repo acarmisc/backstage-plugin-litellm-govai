@@ -4,7 +4,7 @@
  * `LiteLLMBudgetGauges` (expanded "all limits" view). Keeping the card in one
  * place means a limit reads identically wherever it is shown.
  */
-import React from 'react';
+import { FC, ReactNode } from 'react';
 import Box from '@mui/material/Box';
 import Paper from '@mui/material/Paper';
 import Typography from '@mui/material/Typography';
@@ -27,7 +27,7 @@ export function levelToneColor(tone: Tone | undefined, theme: Theme): string {
 }
 
 /** Spend-vs-cap meter card for a single limit. */
-export const LimitCard: React.FC<{ limit: BudgetLimit }> = ({ limit }) => {
+export const LimitCard: FC<{ limit: BudgetLimit }> = ({ limit }) => {
   const tone = budgetTone(limit.pct);
   const pct = Math.round(limit.pct);
   const closeTo = limit.softLimit !== undefined && limit.spend >= limit.softLimit;
@@ -103,7 +103,7 @@ export const LimitCard: React.FC<{ limit: BudgetLimit }> = ({ limit }) => {
 };
 
 /** A LimitCard prefixed with a small KEY / USER / TEAM tag. */
-export const TaggedLimit: React.FC<{ limit: BudgetLimit }> = ({ limit }) => {
+export const TaggedLimit: FC<{ limit: BudgetLimit }> = ({ limit }) => {
   const theme = useTheme();
   const tone = budgetTone(limit.pct);
   return (
@@ -126,7 +126,7 @@ export const TaggedLimit: React.FC<{ limit: BudgetLimit }> = ({ limit }) => {
 };
 
 /** A key-budget note under a limit list — plain text when no href is given. */
-export const MoreKeysNote: React.FC<{ count: number; href?: string; label?: string }> = ({
+export const MoreKeysNote: FC<{ count: number; href?: string; label?: string }> = ({
   count,
   href,
   label,
@@ -151,7 +151,7 @@ export const MoreKeysNote: React.FC<{ count: number; href?: string; label?: stri
  * Used by the condensed gauges card's expanded view; the full widget renders
  * its own grouped-by-level rail instead.
  */
-export const BudgetLimitList: React.FC<{
+export const BudgetLimitList: FC<{
   limits: BudgetLimit[];
   /** Keys beyond the supplied limits — rendered as a trailing note. */
   hiddenKeyCount?: number;
@@ -166,7 +166,7 @@ export const BudgetLimitList: React.FC<{
 );
 
 /** Inset panel used to hold a nested list of limits inside a card. */
-export const LimitListPanel: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+export const LimitListPanel: FC<{ children: ReactNode }> = ({ children }) => (
   <Box
     sx={theme => ({
       px: 1.5,

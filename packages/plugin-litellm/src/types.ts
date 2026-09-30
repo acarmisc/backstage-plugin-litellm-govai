@@ -80,6 +80,11 @@ export interface CreateTeamRequest {
   budget_duration?: string;
   tpm_limit?: number;
   rpm_limit?: number;
+  /**
+   * Optimistic concurrency: the `metadata.updated_at_iso` the edit was based on.
+   * The server answers 409 when the stored value has moved on.
+   */
+  expectedUpdatedAtIso?: string;
 }
 
 export interface UpdateTeamRequest {

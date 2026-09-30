@@ -1,7 +1,6 @@
 import '../../testing/setupDom';
 import { describe, test, afterEach } from 'node:test';
 import assert from 'node:assert';
-import React from 'react';
 import { render, cleanup, screen } from '@testing-library/react';
 import { Meter } from './Meter';
 

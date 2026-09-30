@@ -1,7 +1,7 @@
 import { fakeAlertApi } from '../testing/setupDom';
 import { describe, test, afterEach } from 'node:test';
 import assert from 'node:assert';
-import React from 'react';
+import { ComponentProps } from 'react';
 import { render, cleanup, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
@@ -36,7 +36,7 @@ const mockBlockedKey: VirtualKey = {
   blocked: true,
 };
 
-type Props = React.ComponentProps<typeof KeysTable>;
+type Props = ComponentProps<typeof KeysTable>;
 
 const renderTable = (
   overrides: Partial<Props> = {},

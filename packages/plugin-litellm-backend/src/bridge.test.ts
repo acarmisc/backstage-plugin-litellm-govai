@@ -339,10 +339,10 @@ describe('KeycloakJWTVerifier', () => {
   test('rejects ID tokens (typ="ID")', async () => {
     // Generate an RSA keypair and serve its public key as a JWKS.
     const { publicKey, privateKey: pk } = await generateKeyPair('RS256');
-    const kid = 'test-kid-1';
-    const jwk = { ...(await exportJWK(publicKey)), kid, use: 'sig', alg: 'RS256' };
+    const jwksKid = 'test-jwksKid-1';
+    const jwk = { ...(await exportJWK(publicKey)), kid: jwksKid, use: 'sig', alg: 'RS256' };
 
-    const server = http.createServer((req: http.IncomingMessage, res: http.ServerResponse) => {
+    const jwksServer = http.createServer((req: http.IncomingMessage, res: http.ServerResponse) => {
       if (req.url === '/protocol/openid-connect/certs') {
         res.setHeader('content-type', 'application/json');
         res.end(JSON.stringify({ keys: [jwk] }));
@@ -351,11 +351,11 @@ describe('KeycloakJWTVerifier', () => {
       res.statusCode = 404;
       res.end();
     });
-    await new Promise<void>(r => server.listen(0, '127.0.0.1', r));
-    const port = (server.address() as any).port;
-    const issuer = `http://127.0.0.1:${port}`;
+    await new Promise<void>(r => jwksServer.listen(0, '127.0.0.1', r));
+    const port = (jwksServer.address() as any).port;
+    const tokenIssuer = `http://127.0.0.1:${port}`;
     const verifier = new KeycloakJWTVerifier({
-      issuer,
+      issuer: tokenIssuer,
       clientId: 'abby-cli',
     });
 
@@ -367,8 +367,8 @@ describe('KeycloakJWTVerifier', () => {
       email_verified: true,
       azp: 'abby-cli',
     })
-      .setProtectedHeader({ alg: 'RS256', kid, typ: 'JWT' })
-      .setIssuer(issuer)
+      .setProtectedHeader({ alg: 'RS256', kid: jwksKid, typ: 'JWT' })
+      .setIssuer(tokenIssuer)
       .setIssuedAt()
       .setExpirationTime('2h')
       .sign(pk);
@@ -386,15 +386,15 @@ describe('KeycloakJWTVerifier', () => {
       email_verified: true,
       azp: 'abby-cli',
     })
-      .setProtectedHeader({ alg: 'RS256', kid, typ: 'JWT' })
-      .setIssuer(issuer)
+      .setProtectedHeader({ alg: 'RS256', kid: jwksKid, typ: 'JWT' })
+      .setIssuer(tokenIssuer)
       .setIssuedAt()
       .setExpirationTime('2h')
       .sign(pk);
     const claims = await verifier.verify(accessToken);
     assert.strictEqual(claims.typ, 'Bearer');
 
-    await new Promise<void>(r => server.close(() => r()));
+    await new Promise<void>(r => jwksServer.close(() => r()));
   });
 });
 

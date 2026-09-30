@@ -22,7 +22,7 @@
  * `new-key` CTA renders the shared `GenerateKeyButton`, identical to the
  * one on the plugin page.
  */
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { ElementType, FC, ReactNode, useCallback, useEffect, useId, useMemo, useState } from 'react';
 import { useRouteRef } from '@backstage/frontend-plugin-api';
 import Paper from '@mui/material/Paper';
 import Box from '@mui/material/Box';
@@ -96,7 +96,7 @@ export interface LiteLLMBudgetGaugesProps {
   /** Notified whenever the expanded state changes. */
   onExpandedChange?: (expanded: boolean) => void;
   /** Fully custom node pinned below the CTAs, below a divider. */
-  action?: React.ReactNode;
+  action?: ReactNode;
   /**
    * Optional preloaded data to use instead of fetching via the hook.
    * When provided, the component uses these values directly without refetching.
@@ -138,7 +138,7 @@ function resetLabel(limit: BudgetLimit): string {
   return window ? `resets ${window}` : 'never resets';
 }
 
-const LevelGauge: React.FC<{ gauge: BudgetGauge; size: number; keysHref?: string }> = ({
+const LevelGauge: FC<{ gauge: BudgetGauge; size: number; keysHref?: string }> = ({
   gauge,
   size,
   keysHref,
@@ -255,7 +255,7 @@ interface DailySpend {
  * with an optional dashed cap line. Same column width and label language as
  * the gauges so the four-column row stays aligned.
  */
-const UsageMiniChart: React.FC<{
+const UsageMiniChart: FC<{
   data: DailySpend[];
   totalSpend: number;
   loading: boolean;
@@ -402,7 +402,7 @@ const UsageMiniChart: React.FC<{
   );
 };
 
-export const LiteLLMBudgetGauges: React.FC<LiteLLMBudgetGaugesProps> = ({
+export const LiteLLMBudgetGauges: FC<LiteLLMBudgetGaugesProps> = ({
   title = 'Budget',
   bare = false,
   size = 72,
@@ -423,7 +423,7 @@ export const LiteLLMBudgetGauges: React.FC<LiteLLMBudgetGaugesProps> = ({
   const theme = useTheme();
   const isSmallScreen = useMediaQuery(theme.breakpoints.down('sm'));
   const gaugeSize = isSmallScreen ? 56 : size;
-  const expandedRegionId = React.useId();
+  const expandedRegionId = useId();
   const moduleRouteRef = useRouteRef(rootRouteRef);
   const moduleHref = propModuleHref ?? moduleRouteRef?.();
   const { userInfo: hookUserInfo, teams: hookTeams, keys: hookKeys, loading: profileLoading, error: profileError } = useLiteLLMProfile();
@@ -584,7 +584,7 @@ export const LiteLLMBudgetGauges: React.FC<LiteLLMBudgetGaugesProps> = ({
 
   const hasFooter = resolvedCtas.length > 0 || !!action;
 
-  const Wrapper: React.ElementType = bare ? Box : Paper;
+  const Wrapper: ElementType = bare ? Box : Paper;
 
   return (
     <Wrapper sx={bare ? { height: '100%' } : { p: 2, height: '100%' }}>

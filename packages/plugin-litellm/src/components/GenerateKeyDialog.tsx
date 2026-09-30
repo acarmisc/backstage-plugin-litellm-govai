@@ -1,4 +1,4 @@
-import React from 'react';
+import { FC } from 'react';
 import { GenerateKeyRequest, GenerateKeyResponse, LiteLlmConfig, ModelInfo, TeamInfo, VirtualKey } from '../types';
 import { KeyFormDialog } from './KeyFormDialog';
 
@@ -7,7 +7,7 @@ import { KeyFormDialog } from './KeyFormDialog';
  * wrapper only forwards props for backwards compatibility with the public
  * entrypoint and will be removed in a future release.
  */
-export const GenerateKeyDialog: React.FC<{
+export const GenerateKeyDialog: FC<{
   open: boolean;
   onClose: () => void;
   keys: VirtualKey[];

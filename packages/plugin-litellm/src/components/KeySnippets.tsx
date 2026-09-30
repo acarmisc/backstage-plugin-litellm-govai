@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { FC, useState } from 'react';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import IconButton from '@mui/material/IconButton';
@@ -111,7 +111,7 @@ const SNIPPET_FILE_HINTS: Partial<Record<SnippetTab, string>> = {
   'claude-code': 'Store the key in your OS keychain and point apiKeyHelper at it in ~/.claude/settings.json',
 };
 
-export const SnippetTabs: React.FC<SnippetTabsProps> = ({ snippets, model, copyState }) => {
+export const SnippetTabs: FC<SnippetTabsProps> = ({ snippets, model, copyState }) => {
   const [tab, setTab] = useState<SnippetTab>('curl');
   const snippetKey = tab === 'claude-code' ? 'claudeCode' : tab;
   const code = snippets[snippetKey as keyof Snippets];

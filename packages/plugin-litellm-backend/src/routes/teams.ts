@@ -15,6 +15,7 @@ import { createRequireUser, getProvisionedUser } from './middleware/withUser';
 import { respondTeamList } from '../http/respondTeam';
 
 import { withTeamFetchRetry, teamCreateInFlight } from '../http/teamFetch';
+
 export function registerTeamsRoutes(router: Router, ctx: RouterContext): void {
   const {
     client,

@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, useMemo } from 'react';
+import { FC, useCallback, useEffect, useMemo, useState } from 'react';
 import Box from '@mui/material/Box';
 import Alert from '@mui/material/Alert';
 import Button from '@mui/material/Button';
@@ -62,7 +62,7 @@ function initDateRange(): DateRange {
   return { start, end };
 }
 
-export const LiteLLMPage: React.FC = () => {
+export const LiteLLMPage: FC = () => {
   const api = useApi(liteLlmApiRef);
   const alertApi = useApi(alertApiRef);
 
@@ -213,13 +213,15 @@ export const LiteLLMPage: React.FC = () => {
     if (!allTeams?.length) return [];
     if (!userInfo) return allTeams;
     const userId = userInfo.user_id;
-    if (userInfo.teams?.length) {
-      return allTeams.filter(t => userInfo.teams!.includes(t.team_id));
+    const memberOf = userInfo.teams;
+    if (memberOf?.length) {
+      return allTeams.filter(t => memberOf.includes(t.team_id));
     }
-    const byMembership = allTeams.filter(t =>
+    // No team list on the profile: fall back to membership on the team records.
+    // Never fall back to *all* teams — that would list teams the user isn't in.
+    return allTeams.filter(t =>
       t.members_with_roles?.some(m => m.user_id === userId),
     );
-    return byMembership.length > 0 ? byMembership : allTeams;
   }, [allTeams, userInfo]);
 
   const { value: usage, loading: usageLoading, error: usageError, retry: refreshUsage } = useAsyncRetry(async () => {
@@ -254,8 +256,11 @@ export const LiteLLMPage: React.FC = () => {
     }
   }, [api, dateRange, teamUsageCache, teamUsageLoading]);
 
-  // Models available for key generation: intersection of all models with user-level
-  // and team-level restrictions. If a user has no model restrictions, all models are allowed.
+  // Models offered for key generation: when the user has a model restriction, the
+  // UNION of their own allowed models and their teams' models (a team-bound key is
+  // limited to its team's models, which the server enforces and the key form then
+  // narrows to the selected team); with no restriction, every model. The server
+  // (POST /keys/generate) is the source of truth for what is actually accepted.
   const allowedModels = useMemo(() => {
     if (!allModels?.length) return [];
     const userModels = userInfo?.models;
@@ -339,8 +344,8 @@ export const LiteLLMPage: React.FC = () => {
         if (alert) alertApi.post(alert);
         refreshKeys();
       } catch (e: any) {
-        const alert = toastFor('resetSpendError', e.message);
-        if (alert) alertApi.post(alert);
+        // The key dialog renders this error inline; don't toast it as well.
+        throw e;
       }
     },
     [api, refreshKeys, alertApi],
@@ -648,7 +653,12 @@ export const LiteLLMPage: React.FC = () => {
         onSubmit={async payload => {
           try {
             if (manageTeam?.mode === 'edit' && manageTeam.team) {
-              await api.updateTeam(manageTeam.team.team_id, payload as UpdateTeamRequest);
+              const loadedAt = manageTeam.team.metadata?.updated_at_iso;
+              await api.updateTeam(manageTeam.team.team_id, {
+                ...(payload as UpdateTeamRequest),
+                // Reject the edit if someone else changed the team since it was loaded.
+                ...(typeof loadedAt === 'string' ? { expectedUpdatedAtIso: loadedAt } : {}),
+              });
             } else {
               await api.createTeam(payload as CreateTeamRequest);
             }

@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import { FC, useCallback, useMemo, useState } from 'react';
 import Box from '@mui/material/Box';
 import Table from '@mui/material/Table';
 import TableBody from '@mui/material/TableBody';
@@ -52,7 +52,7 @@ function fmtTokens(n?: number): string {
   return String(n);
 }
 
-export const ModelsTable: React.FC<ModelsTableProps> = ({ allModels, teams, loading }) => {
+export const ModelsTable: FC<ModelsTableProps> = ({ allModels, teams, loading }) => {
   const theme = useTheme();
   const [selectedTeamId, setSelectedTeamId] = useState<string>('');
   const [filterText, setFilterText] = useState<string>('');

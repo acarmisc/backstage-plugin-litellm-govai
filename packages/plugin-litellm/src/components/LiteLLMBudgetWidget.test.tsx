@@ -2,7 +2,7 @@ import { fakeAlertApi, deferred, skeletonCount } from '../testing/setupDom';
 import { routeResolutionApiRef } from '@backstage/frontend-plugin-api';
 import { describe, test, afterEach } from 'node:test';
 import assert from 'node:assert';
-import React from 'react';
+import { ComponentProps } from 'react';
 import { render, cleanup, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { TestApiProvider, mockApis } from '@backstage/test-utils';
@@ -68,8 +68,8 @@ describe('LiteLLMBudgetWidget', () => {
     ...overrides,
   });
 
-  const renderWidget = (overrides: Partial<React.ComponentProps<typeof LiteLLMBudgetWidget>> = {}, apiOverrides: any = {}) => {
-    const defaultProps: React.ComponentProps<typeof LiteLLMBudgetWidget> = {
+  const renderWidget = (overrides: Partial<ComponentProps<typeof LiteLLMBudgetWidget>> = {}, apiOverrides: any = {}) => {
+    const defaultProps: ComponentProps<typeof LiteLLMBudgetWidget> = {
       title: 'Budget Policy',
       ...overrides,
     };

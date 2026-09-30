@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import { ElementType, FC, useEffect, useMemo, useState } from 'react';
 import Paper from '@mui/material/Paper';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
@@ -49,7 +49,7 @@ function presetToDateRange(preset: DatePreset): { start: Date; end: Date } {
 }
 
 
-export const LiteLLMHomeWidget: React.FC<LiteLLMHomeWidgetProps> = ({
+export const LiteLLMHomeWidget: FC<LiteLLMHomeWidgetProps> = ({
   defaultPeriod = '7d',
   title = 'LiteLLM Usage',
   bare = false,
@@ -101,7 +101,7 @@ export const LiteLLMHomeWidget: React.FC<LiteLLMHomeWidgetProps> = ({
     [profileLoading, usageLoading, profileError, userInfo, usageError, keys],
   );
 
-  const Wrapper: React.ElementType = bare ? Box : Paper;
+  const Wrapper: ElementType = bare ? Box : Paper;
   const partialFailure = !usageLoading && usageError && usage;
 
   const dailyData = (usage?.daily_usage ?? []).map(d => ({
