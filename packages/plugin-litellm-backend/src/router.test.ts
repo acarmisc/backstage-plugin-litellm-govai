@@ -1451,7 +1451,7 @@ describe('router key-mutation routes — ownership guard (rec #18 regression)', 
     }
   });
 
-  test('PR-4: owner cannot unblock an admin-blocked key (blocked_by differs) without permission → 403', async () => {
+  test('PR-4: an admin-blocked key cannot be unblocked without the permission → 403', async () => {
     const h = await startHarness({
       config: { 'litellm.userIdDomain': 'example.com' },
       client: mockClient({
@@ -1475,30 +1475,69 @@ describe('router key-mutation routes — ownership guard (rec #18 regression)', 
     }
   });
 
-  test('PR-4: owner unblocks a self-blocked key without permission → 200', async () => {
+  test('unblock needs the permission even for a key the caller blocked (blocked_by is not trusted)', async () => {
+    for (const blockedBy of ['user:default/alice', 'user:default/bob', undefined]) {
+      const h = await startHarness({
+        config: { 'litellm.userIdDomain': 'example.com' },
+        client: mockClient({
+          listKeys: (uid?: string) =>
+            Promise.resolve([
+              {
+                key: 'sk-...own', token: 'hash-own', key_alias: 'alice-key', user_id: uid, created_at: '', spend: 0,
+                blocked: true, metadata: blockedBy ? { blocked_by: blockedBy } : {},
+              } as VirtualKey,
+            ]),
+        }),
+        permissions: mockPermissions({
+          authorize: async (queries: any[]) =>
+            queries.map((q: any) => ({
+              result: q.permission.name === 'litellm.key.unblock' ? AuthorizeResult.DENY : AuthorizeResult.ALLOW,
+            })),
+        }),
+      });
+      try {
+        const { status } = await req(h.baseUrl, 'POST', '/keys/hash-own/unblock', { authRef: 'user:default/alice' });
+        assert.strictEqual(status, 403, String(blockedBy));
+        assert.strictEqual(h.client.calls.unblockKey.length, 0);
+        assert.strictEqual(h.client.calls.updateKey.length, 0);
+      } finally {
+        h.server.close();
+      }
+    }
+  });
+
+  test('with the unblock permission the owner can unblock, and the block record is nulled', async () => {
     const h = await startHarness({
       config: { 'litellm.userIdDomain': 'example.com' },
       client: mockClient({
         listKeys: (uid?: string) =>
           Promise.resolve([
-            { key: 'sk-...own', token: 'hash-own', key_alias: 'alice-key', user_id: uid, created_at: '', spend: 0, metadata: { blocked_by: 'user:default/alice' } } as VirtualKey,
+            { key: 'sk-...own', token: 'hash-own', key_alias: 'alice-key', user_id: uid, created_at: '', spend: 0, blocked: true, metadata: { blocked_by: 'user:default/alice' } } as VirtualKey,
           ]),
-      }),
-      permissions: mockPermissions({
-        authorize: async () => [{ result: AuthorizeResult.DENY }],
       }),
     });
     try {
-      const { status } = await req(h.baseUrl, 'POST', '/keys/hash-own/unblock', {
-        authRef: 'user:default/alice',
-      });
+      const { status } = await req(h.baseUrl, 'POST', '/keys/hash-own/unblock', { authRef: 'user:default/alice' });
       assert.strictEqual(status, 200);
       assert.strictEqual(h.client.calls.unblockKey.length, 1);
-      assert.strictEqual(h.client.calls.updateKey.length, 1);
       const updatePayload = h.client.calls.updateKey[0];
       assert.strictEqual(updatePayload.key, 'hash-own');
-      assert.ok(!updatePayload.metadata.blocked_by);
-      assert.ok(!updatePayload.metadata.blocked_at);
+      assert.strictEqual(updatePayload.metadata.blocked_by, null);
+      assert.strictEqual(updatePayload.metadata.blocked_at, null);
+    } finally {
+      h.server.close();
+    }
+  });
+
+  test('someone else\'s key still cannot be unblocked, permission or not', async () => {
+    const h = await startHarness({
+      config: { 'litellm.userIdDomain': 'example.com' },
+      client: mockClient({ listKeys: () => Promise.resolve([]) }),
+    });
+    try {
+      const { status } = await req(h.baseUrl, 'POST', '/keys/hash-bob/unblock', { authRef: 'user:default/alice' });
+      assert.strictEqual(status, 403);
+      assert.strictEqual(h.client.calls.unblockKey.length, 0);
     } finally {
       h.server.close();
     }
