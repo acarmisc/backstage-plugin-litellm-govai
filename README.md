@@ -691,6 +691,13 @@ npm test                    # common, backend and frontend suites (node --test)
 npm run lint
 ```
 
+The root `package.json` pins `@yarnpkg/core` to `4.9.1` through `overrides`.
+`4.9.2` was published with a `got` dependency that points at a patch file which
+only exists in Yarn's own repository, and `@backstage/cli` (a devDependency here)
+reaches it through `@backstage/cli-defaults`. Without the pin, resolving the tree
+from scratch (for example after deleting `package-lock.json`) fails with no error
+message. Drop the pin once a later `@yarnpkg/core` release is picked up by default.
+
 Tests use Node's built-in runner (`node --test`). Frontend component tests run
 against jsdom with Testing Library; `packages/plugin-litellm/src/testing/` holds
 the DOM bootstrap and a MUI test theme, and `test-support/` holds the small Node
