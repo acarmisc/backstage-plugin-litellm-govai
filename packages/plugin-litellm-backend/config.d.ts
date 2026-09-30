@@ -390,6 +390,15 @@ export interface Config {
        * @default "abby-cli"
        */
       clientId?: string;
+
+      /**
+       * Email domains whose *verified* addresses may use the bridge. Defaults
+       * to `litellm.userIdDomain` when that is set. With neither configured
+       * the bridge rejects every caller. The LiteLLM user is then the same one
+       * the UI addresses (the Keycloak `preferred_username`, with
+       * `litellm.userIdDomain` applied when set) — the email is only the gate.
+       */
+      allowedEmailDomains?: string[];
     };
   };
 }

@@ -10,6 +10,7 @@ import {
   newDefaultVerifier,
   readBridgeConfig,
   resolveBridgeUserId,
+  type BridgeIdentityOptions,
 } from '../bridge';
 import { type GenerateKeyInput } from '@acarmisc/backstage-plugin-litellm-common';
 import { createKeyForUser, KeyServiceError, type KeyCreateContext } from '../services/keyService';
@@ -39,6 +40,11 @@ export function registerBridgeRoutes(router: Router, ctx: RouterContext, bridgeO
   // own auth. Lets CLI clients list/mint virtual keys without holding the master
   // key. Gated by litellm.bridge.enabled; the verifier needs litellm.bridge.issuer.
   const bridgeCfg = readBridgeConfig(config);
+  // Same userIdDomain rule as the UI; the trusted email domains gate who may use the bridge.
+  const bridgeIdentity: BridgeIdentityOptions = {
+    userIdDomain,
+    trustedEmailDomains: bridgeCfg.allowedEmailDomains,
+  };
   let tokenVerifier: TokenVerifier | undefined = bridgeOpts.tokenVerifier;
   if (bridgeCfg.enabled && !tokenVerifier) {
     try {
@@ -95,7 +101,7 @@ export function registerBridgeRoutes(router: Router, ctx: RouterContext, bridgeO
           provisioningEnabled,
           provisioningDefaults,
           logger,
-          userIdDomain,
+          bridgeIdentity,
         );
         res.json(keys);
       } catch (error: unknown) {
@@ -122,7 +128,7 @@ export function registerBridgeRoutes(router: Router, ctx: RouterContext, bridgeO
         const input: GenerateKeyInput = parseResult.data;
 
         // ── Resolve user identity from verified claims ───────────────────────
-        const userId = resolveBridgeUserId(claims, userIdDomain);
+        const userId = resolveBridgeUserId(claims, bridgeIdentity);
 
         // ── Create key via unified service ──────────────────────────────────
         const keyCreateCtx: KeyCreateContext = {

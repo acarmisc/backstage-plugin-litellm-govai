@@ -51,6 +51,12 @@ export interface BridgeConfig {
   issuer?: string;
   /** OIDC public client the CLI uses; checked against azp / aud. */
   clientId: string;
+  /**
+   * Email domains whose verified addresses may use the bridge. Defaults to
+   * `litellm.userIdDomain` when that is set; with neither, the bridge rejects
+   * every caller (fail closed).
+   */
+  allowedEmailDomains: string[];
 }
 
 export function readBridgeConfig(config: Config): BridgeConfig {
@@ -59,7 +65,10 @@ export function readBridgeConfig(config: Config): BridgeConfig {
   const issuer = config.getOptionalString('litellm.bridge.issuer');
   const clientId =
     config.getOptionalString('litellm.bridge.clientId') ?? 'abby-cli';
-  return { enabled, issuer, clientId };
+  const allowedEmailDomains = (
+    config.getOptionalStringArray('litellm.bridge.allowedEmailDomains') ?? []
+  ).map(d => d.trim().toLowerCase()).filter(Boolean);
+  return { enabled, issuer, clientId, allowedEmailDomains };
 }
 
 /** Thrown when the bridge is misconfigured (e.g. enabled without an issuer). */
@@ -158,29 +167,57 @@ export function newDefaultVerifier(cfg: BridgeConfig): TokenVerifier {
 }
 
 /**
- * Resolves the LiteLLM user_id from the verified claims with strict identity validation.
+ * How the bridge maps a verified token to a LiteLLM user.
+ * - `userIdDomain`: the same `litellm.userIdDomain` the UI uses to build ids.
+ * - `trustedEmailDomains`: email domains allowed to use the bridge; defaults to
+ *   `[userIdDomain]` when that is set.
+ */
+export interface BridgeIdentityOptions {
+  userIdDomain?: string;
+  trustedEmailDomains?: string[];
+}
+
+/** A bare string is the legacy form: `userIdDomain`, also the only trusted domain. */
+function normalizeIdentityOptions(
+  opts?: string | BridgeIdentityOptions,
+): { userIdDomain?: string; trusted: string[] } {
+  const o: BridgeIdentityOptions =
+    typeof opts === 'string' ? { userIdDomain: opts } : opts ?? {};
+  const trusted = (
+    o.trustedEmailDomains?.length
+      ? o.trustedEmailDomains
+      : o.userIdDomain
+      ? [o.userIdDomain]
+      : []
+  ).map(d => d.toLowerCase());
+  return { userIdDomain: o.userIdDomain, trusted };
+}
+
+/**
+ * Resolves the LiteLLM user_id for a verified bridge token.
  *
- * PR-6 identity mapping:
- * - Prefer `email` with `email_verified === true` whose domain equals `userIdDomain`.
- * - If userIdDomain is unset, always reject unverified emails (guard against misconfig).
- * - Never strip an arbitrary domain from `preferred_username`.
- * - Rejects invalid/missing identity with 403.
+ * Two separate questions, answered separately:
+ * 1. Is this person allowed in? The token must carry a *verified* email whose
+ *    domain is in the trusted list (`litellm.bridge.allowedEmailDomains`,
+ *    defaulting to `litellm.userIdDomain`). With no trusted domain configured
+ *    everyone is rejected (fail closed). Failure → 403.
+ * 2. Which LiteLLM user are they? The same one the UI addresses: the Backstage
+ *    user entity name (the Keycloak `preferred_username`) run through the same
+ *    `litellm.userIdDomain` rule the UI applies. Using the email local part
+ *    here would address a different user whenever a Keycloak username differs
+ *    from the email (and would provision a duplicate). The realm is the same
+ *    IdP Backstage signs users in with, so its usernames are the entity names.
  *
- * @param claims Verified JWT claims from the bridge token
- * @param userIdDomain Expected email domain (e.g. "example.com"); if set, email must match
- * @returns The resolved LiteLLM user_id
  * @throws BridgeIdentityError (403) if identity validation fails
  */
 export function resolveBridgeUserId(
   claims: BridgeClaims,
-  userIdDomain?: string,
+  identity?: string | BridgeIdentityOptions,
 ): string {
-  // The bridge maps identities by verified email only. Without a configured
-  // domain we can't tell our users from another tenant's, and stripping the
-  // domain would merge alice@a.com and alice@b.com — fail closed.
-  if (!userIdDomain) {
+  const { userIdDomain, trusted } = normalizeIdentityOptions(identity);
+  if (trusted.length === 0) {
     throw new BridgeIdentityError(
-      'litellm.userIdDomain must be configured to use the CLI bridge',
+      'set litellm.bridge.allowedEmailDomains (or litellm.userIdDomain) to use the CLI bridge',
     );
   }
   if (!claims.email) {
@@ -193,13 +230,14 @@ export function resolveBridgeUserId(
   if (parts.length !== 2 || !parts[0]) {
     throw new BridgeIdentityError('malformed email in token');
   }
-  const [localPart, domain] = parts;
-  if (domain.toLowerCase() !== userIdDomain.toLowerCase()) {
+  const [emailLocalPart, domain] = parts;
+  if (!trusted.includes(domain.toLowerCase())) {
     throw new BridgeIdentityError(
       `email domain mismatch: "${domain}" is not allowed for this deployment`,
     );
   }
-  return toLiteLLMUserId(localPart, userIdDomain);
+  const name = claims.preferred_username?.trim() || emailLocalPart;
+  return toLiteLLMUserId(name, userIdDomain);
 }
 
 /**
@@ -214,7 +252,7 @@ export async function getOrProvisionUserFromClaims(
   provisioningEnabled: boolean,
   provisioningDefaults: ProvisioningDefaults,
   logger: LoggerService,
-  userIdDomain?: string,
+  userIdDomain?: string | BridgeIdentityOptions,
 ): Promise<UserInfo> {
   const userId = resolveBridgeUserId(claims, userIdDomain);
   const existing = await client.getUserInfo(userId);
@@ -258,7 +296,7 @@ export async function bridgeListKeys(
   provisioningEnabled: boolean,
   provisioningDefaults: ProvisioningDefaults,
   logger: LoggerService,
-  userIdDomain?: string,
+  userIdDomain?: string | BridgeIdentityOptions,
 ): Promise<VirtualKey[]> {
   await getOrProvisionUserFromClaims(
     client,
@@ -279,7 +317,7 @@ export async function bridgeGenerateKey(
   provisioningDefaults: ProvisioningDefaults,
   logger: LoggerService,
   request: Partial<GenerateKeyRequest>,
-  userIdDomain?: string,
+  userIdDomain?: string | BridgeIdentityOptions,
 ): Promise<GenerateKeyResponse> {
   await getOrProvisionUserFromClaims(
     client,

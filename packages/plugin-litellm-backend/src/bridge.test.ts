@@ -11,6 +11,7 @@ import {
   BridgeAuthError,
   BridgeIdentityError,
   resolveBridgeUserId,
+  readBridgeConfig,
   getOrProvisionUserFromClaims,
   bridgeListKeys,
   bridgeGenerateKey,
@@ -477,5 +478,91 @@ describe('resolveBridgeUserId (PR-6 identity validation)', () => {
         ),
       (err: unknown) => err instanceof BridgeIdentityError && err.status === 403,
     );
+  });
+});
+// ---------------------------------------------------------------------------
+// Identity mapping: trusted email domains + the same id the UI uses
+// ---------------------------------------------------------------------------
+describe('resolveBridgeUserId: trusted domains and UI-consistent ids', () => {
+  const verified = (over: Record<string, unknown> = {}) => ({
+    sub: 's1',
+    email: 'andrea.degiorgis@abstract.it',
+    email_verified: true,
+    preferred_username: 'degiorgis',
+    azp: 'abby-cli',
+    ...over,
+  });
+
+  test('uses the Keycloak username (the Backstage entity name), not the email local part', () => {
+    // A username that differs from the email must resolve to the username, or the
+    // CLI would address (and provision) a different LiteLLM user than the UI does.
+    assert.strictEqual(
+      resolveBridgeUserId(verified(), { trustedEmailDomains: ['abstract.it'] }),
+      'degiorgis',
+    );
+  });
+
+  test('applies userIdDomain exactly as the UI does', () => {
+    assert.strictEqual(
+      resolveBridgeUserId(verified(), { userIdDomain: 'abstract.it' }),
+      'degiorgis@abstract.it',
+    );
+  });
+
+  test('an email-shaped username is kept as is (no double domain)', () => {
+    assert.strictEqual(
+      resolveBridgeUserId(verified({ preferred_username: 'jo@abstract.it' }), { userIdDomain: 'abstract.it' }),
+      'jo@abstract.it',
+    );
+  });
+
+  test('falls back to the email local part when the token has no username', () => {
+    assert.strictEqual(
+      resolveBridgeUserId(verified({ preferred_username: undefined }), { trustedEmailDomains: ['abstract.it'] }),
+      'andrea.degiorgis',
+    );
+  });
+
+  test('trusted domains work without userIdDomain, and userIdDomain alone trusts itself', () => {
+    assert.strictEqual(resolveBridgeUserId(verified(), { trustedEmailDomains: ['ABSTRACT.IT'] }), 'degiorgis');
+    assert.strictEqual(resolveBridgeUserId(verified(), 'abstract.it'), 'degiorgis@abstract.it');
+  });
+
+  test('fails closed with no trusted domain configured', () => {
+    for (const cfg of [undefined, {}, { trustedEmailDomains: [] }]) {
+      assert.throws(
+        () => resolveBridgeUserId(verified(), cfg as any),
+        (e: unknown) => e instanceof BridgeIdentityError && e.status === 403,
+      );
+    }
+  });
+
+  test('rejects a foreign domain, an unverified email and a missing email', () => {
+    const cfg = { trustedEmailDomains: ['abstract.it'] };
+    for (const claims of [
+      verified({ email: 'degiorgis@evil.com' }),
+      verified({ email_verified: false }),
+      verified({ email: undefined }),
+    ]) {
+      assert.throws(
+        () => resolveBridgeUserId(claims as any, cfg),
+        (e: unknown) => e instanceof BridgeIdentityError && e.status === 403,
+      );
+    }
+  });
+
+  test('readBridgeConfig normalises allowedEmailDomains', () => {
+    const cfg = readBridgeConfig({
+      getOptionalBoolean: () => true,
+      getOptionalString: (k: string) => (k.endsWith('issuer') ? 'https://kc/realms/x' : undefined),
+      getOptionalStringArray: () => [' Abstract.IT ', ''],
+    } as any);
+    assert.deepStrictEqual(cfg.allowedEmailDomains, ['abstract.it']);
+    const none = readBridgeConfig({
+      getOptionalBoolean: () => true,
+      getOptionalString: () => undefined,
+      getOptionalStringArray: () => undefined,
+    } as any);
+    assert.deepStrictEqual(none.allowedEmailDomains, []);
   });
 });
