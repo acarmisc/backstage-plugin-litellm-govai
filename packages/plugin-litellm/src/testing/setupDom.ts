@@ -62,3 +62,17 @@ export const fakeAlertApi = {
     this.posted.push(alert);
   },
 };
+
+/** A promise you resolve/reject from the test, to hold a component in its loading state. */
+export function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+
+/** Number of MUI Skeleton placeholders currently in the document. */
+export const skeletonCount = () => document.querySelectorAll('[class*="MuiSkeleton-root"]').length;

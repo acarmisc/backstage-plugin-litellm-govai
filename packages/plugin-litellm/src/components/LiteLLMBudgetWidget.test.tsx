@@ -1,4 +1,4 @@
-import { fakeAlertApi } from '../testing/setupDom';
+import { fakeAlertApi, deferred, skeletonCount } from '../testing/setupDom';
 import { routeResolutionApiRef } from '@backstage/frontend-plugin-api';
 import { describe, test, afterEach } from 'node:test';
 import assert from 'node:assert';
@@ -92,16 +92,16 @@ describe('LiteLLMBudgetWidget', () => {
     );
   };
 
-  test('renders skeletons while loading', async () => {
-    renderWidget({}, {
-      getUserInfo: async () => new Promise(resolve => setTimeout(() => resolve(mockUserInfo), 5000)),
-    });
+  test('shows skeleton placeholders while loading, then the content', async () => {
+    const userInfo = deferred<typeof mockUserInfo>();
+    renderWidget({}, { getUserInfo: () => userInfo.promise });
 
-    // Initially the widget should be in loading state
-    await waitFor(() => {
-      // Once loading completes, should show budget information
-      assert.ok(screen.getByText(/Budget Policy|Key|User|Team|Global/));
-    }, { timeout: 6000 });
+    assert.ok(skeletonCount() > 0, 'skeletons are shown while the profile loads');
+    assert.strictEqual(document.querySelector('[role="progressbar"]'), null, 'no bare spinner');
+
+    userInfo.resolve(mockUserInfo);
+    await waitFor(() => assert.strictEqual(skeletonCount(), 0));
+    assert.ok(screen.getAllByText(/Key|User|Team/).length > 0);
   });
 
   test('renders unprovisioned message when API returns unprovisioned error', async () => {
@@ -155,7 +155,7 @@ describe('LiteLLMBudgetWidget', () => {
       // Should show the budget policy sections
       assert.ok(screen.getByText(/Budget Policy/));
       // The layout includes Key, User, Team, Global levels
-      assert.ok(screen.queryByText(/Key/) || screen.queryByText(/User/) || screen.queryByText(/Team/));
+      assert.ok(screen.getAllByText(/Key|User|Team/).length > 0, 'at least one budget level is listed');
     });
   });
 

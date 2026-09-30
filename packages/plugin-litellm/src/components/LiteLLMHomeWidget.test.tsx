@@ -1,4 +1,4 @@
-import { fakeAlertApi } from '../testing/setupDom';
+import { fakeAlertApi, deferred, skeletonCount } from '../testing/setupDom';
 import { routeResolutionApiRef } from '@backstage/frontend-plugin-api';
 import { describe, test, afterEach } from 'node:test';
 import assert from 'node:assert';
@@ -112,17 +112,16 @@ describe('LiteLLMHomeWidget', () => {
     );
   };
 
-  test('renders skeleton while loading', async () => {
-    renderWidget({}, {
-      getUserInfo: async () => new Promise(resolve => setTimeout(() => resolve(mockUserInfo), 5000)),
-    });
+  test('shows skeleton placeholders while loading, then the content', async () => {
+    const userInfo = deferred<typeof mockUserInfo>();
+    renderWidget({}, { getUserInfo: () => userInfo.promise });
 
-    // Should show loading initially (with skeleton or similar)
-    // Wait for data to load
-    await waitFor(() => {
-      // Once loaded, should show usage information
-      assert.ok(screen.queryByText(/LiteLLM usage/) || screen.queryByText(/spent/));
-    }, { timeout: 6000 });
+    assert.ok(skeletonCount() > 0, 'skeletons are shown while the profile loads');
+    assert.strictEqual(document.querySelector('[role="progressbar"]'), null, 'no bare spinner');
+
+    userInfo.resolve(mockUserInfo);
+    await waitFor(() => assert.strictEqual(skeletonCount(), 0));
+    assert.ok(await screen.findByText(/spent/));
   });
 
   test('renders unprovisioned message when API returns unprovisioned error', async () => {
@@ -206,11 +205,9 @@ describe('LiteLLMHomeWidget', () => {
       }),
     });
 
-    await waitFor(() => {
-      // Should show widget content with usage information
-      // The widget displays spend, tokens in/out
-      assert.ok(screen.queryByText(/LiteLLM usage/i) || screen.queryByText(/spent/));
-    });
+    // One summary line: "$X spent · N in · M out"
+    const summary = await screen.findByText(/spent/);
+    assert.match(summary.textContent ?? '', /^\$[\d.,]+ spent · .+ in · .+ out$/);
   });
 
   test('handles usage fetch error gracefully', async () => {

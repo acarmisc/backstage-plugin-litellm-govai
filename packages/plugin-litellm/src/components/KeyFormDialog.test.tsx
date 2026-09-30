@@ -1,4 +1,5 @@
 import { fakeAlertApi } from '../testing/setupDom';
+import { TestTheme } from '../testing/TestTheme';
 import { describe, test, afterEach } from 'node:test';
 import assert from 'node:assert';
 import React from 'react';
@@ -12,6 +13,19 @@ import { KeyFormDialog } from './KeyFormDialog';
 import { ModelInfo, TeamInfo, GenerateKeyResponse, LiteLlmConfig } from '../types';
 
 afterEach(() => cleanup());
+
+// `getByRole` recomputes styles for every node and is pathologically slow on
+// MUI's DOM in jsdom; look buttons up by visible text / label instead.
+const button = (name: string) => screen.getByText(name, { selector: 'button' });
+const findButton = (name: string) => screen.findByText(name, { selector: 'button' });
+const stubClipboard = () => {
+  const written: string[] = [];
+  Object.defineProperty(navigator, 'clipboard', {
+    value: { writeText: async (t: string) => { written.push(t); } },
+    configurable: true,
+  });
+  return written;
+};
 
 describe('KeyFormDialog', () => {
   const mockModels: ModelInfo[] = [
@@ -55,7 +69,7 @@ describe('KeyFormDialog', () => {
       models: mockModels,
       teams: mockTeams,
       keyGenerationSettings: {
-        allowUnlimitedBudget: true,
+        allowUnlimitedBudget: false,
         teamRequired: false,
       },
       onCreateKey: async () => ({
@@ -73,6 +87,7 @@ describe('KeyFormDialog', () => {
     };
 
     return render(
+      <TestTheme>
       <MemoryRouter>
         <TestApiProvider
           apis={[
@@ -82,167 +97,130 @@ describe('KeyFormDialog', () => {
         >
           <KeyFormDialog {...defaultProps} />
         </TestApiProvider>
-      </MemoryRouter>,
+      </MemoryRouter>
+      </TestTheme>,
     );
   };
 
-  test('field order in create mode: Team → Models → Budget → Duration → Alias → Advanced', async () => {
+  test('field order in create mode: Team, Models, Budget, Duration, Alias, then Advanced', () => {
     renderDialog();
 
-    // Get all labels in document order
-    const labels = screen.getAllByText(/Team|Models|Max Budget|Duration|Alias|Advanced/);
-    const labelTexts = labels.map(l => l.textContent);
-
-    // Find the indices of the fields we care about
-    const teamIdx = labelTexts.findIndex(t => t?.includes('Team'));
-    const modelsIdx = labelTexts.findIndex(t => t?.includes('Models'));
-    const budgetIdx = labelTexts.findIndex(t => t?.includes('Max Budget'));
-    const durationIdx = labelTexts.findIndex(t => t?.includes('Duration'));
-    const aliasIdx = labelTexts.findIndex(t => t?.includes('Alias'));
-    const advancedIdx = labelTexts.findIndex(t => t?.includes('Advanced'));
-
-    // Verify order (all indices should be non-negative and in ascending order)
-    if (teamIdx >= 0 && modelsIdx >= 0) assert.ok(teamIdx < modelsIdx, 'Team should come before Models');
-    if (modelsIdx >= 0 && budgetIdx >= 0) assert.ok(modelsIdx < budgetIdx, 'Models should come before Budget');
-    if (budgetIdx >= 0 && durationIdx >= 0) assert.ok(budgetIdx < durationIdx, 'Budget should come before Duration');
-    if (durationIdx >= 0 && aliasIdx >= 0) assert.ok(durationIdx < aliasIdx, 'Duration should come before Alias');
-    if (aliasIdx >= 0 && advancedIdx >= 0) assert.ok(aliasIdx < advancedIdx, 'Alias should come before Advanced');
-  });
-
-  test('no error text before blur or submit', async () => {
-    renderDialog();
-
-    // Initially, no error messages should be visible
-    assert.ok(!screen.queryByText(/required/i));
-    assert.ok(!screen.queryByText(/must be/i));
-  });
-
-  test('submitting empty required field shows error and does NOT call onCreateKey', async () => {
-    let createKeyCallCount = 0;
-    const onCreateKey = async () => {
-      createKeyCallCount++;
-      return { key: 'sk-test' } as GenerateKeyResponse;
-    };
-
-    renderDialog({ onCreateKey });
-
-    // Try to submit without filling in required fields
-    const submitButton = screen.getByRole('button', { name: /Generate/i });
-    await userEvent.click(submitButton);
-
-    // onCreateKey should NOT have been called
-    assert.strictEqual(createKeyCallCount, 0);
-
-    // The form should still have the Generate button (not have navigated to secret screen)
-    await waitFor(() => {
-      assert.ok(screen.getByRole('button', { name: /Generate/i }));
-    });
-  });
-
-  test('after successful create shows one-time secret with warning text', async () => {
-    const onCreateKey = async () => ({
-      key: 'sk-secret-value-should-appear-here',
-    } as GenerateKeyResponse);
-
-    renderDialog({ onCreateKey });
-
-    // Fill in alias (required field)
-    const inputs = screen.getAllByRole('textbox');
-    const aliasField = inputs[inputs.length - 1]; // Alias is usually the last text input
-    await userEvent.type(aliasField, 'my-test-key');
-
-    // Submit form
-    const submitButton = screen.getByRole('button', { name: /Generate/i });
-    await userEvent.click(submitButton);
-
-    // Should show the secret and warning text
-    await waitFor(() => {
-      assert.ok(screen.getByText(/Copy this key now\. It will never be shown again\./));
-      // Use getAllByText to handle multiple occurrences (secret may appear in snippets too)
-      const secretElements = screen.getAllByText(/sk-secret-value-should-appear-here/);
-      assert.ok(secretElements.length > 0);
-    });
-  });
-
-  test('pressing Escape does NOT close dialog while showing secret', async () => {
-    const onClose = () => {
-      throw new Error('onClose should not be called');
-    };
-    const onCreateKey = async () => ({
-      key: 'sk-secret-12345',
-    } as GenerateKeyResponse);
-
-    renderDialog({ onCreateKey, onClose });
-
-    // Fill and submit to show secret
-    const inputs = screen.getAllByRole('textbox');
-    const aliasField = inputs[inputs.length - 1];
-    await userEvent.type(aliasField, 'test-key');
-
-    const submitButton = screen.getByRole('button', { name: /Generate/i });
-    await userEvent.click(submitButton);
-
-    // Wait for secret to appear
-    await waitFor(() => {
-      assert.ok(screen.getByText(/sk-secret-12345/));
-    });
-
-    // Try to close with Escape — should not trigger onClose
-    const dialog = screen.getByRole('dialog');
-    try {
-      fireEvent.keyDown(dialog, { key: 'Escape', code: 'Escape' });
-    } catch (e) {
-      // If onClose was called, it will throw
-      assert.fail('onClose should not be called on Escape when secret is showing');
+    const labels = [...document.querySelectorAll('label')].map(l => (l.textContent ?? '').replace(/\s*\*$/, '').trim());
+    const order = ['Team', 'Models', 'Max Budget', 'Duration', 'Alias'];
+    const positions = order.map(name => labels.findIndex(l => l.startsWith(name)));
+    positions.forEach((pos, i) => assert.ok(pos >= 0, `${order[i]} field is present (labels: ${labels.join(' | ')})`));
+    for (let i = 1; i < positions.length; i++) {
+      assert.ok(positions[i - 1] < positions[i], `${order[i - 1]} should come before ${order[i]}`);
     }
+
+    // Advanced (accordion) comes after Alias in the DOM.
+    const alias = screen.getByLabelText(/^Alias/);
+    const advanced = screen.getByText('Advanced');
+    assert.ok(
+      alias.compareDocumentPosition(advanced) & Node.DOCUMENT_POSITION_FOLLOWING,
+      'Advanced should come after Alias',
+    );
   });
 
-  test('Done before copying opens confirm dialog', async () => {
-    const onCreateKey = async () => ({
-      key: 'sk-secret-12345',
-    } as GenerateKeyResponse);
-
-    renderDialog({ onCreateKey });
-
-    // Fill and submit to show secret
-    const inputs = screen.getAllByRole('textbox');
-    const aliasField = inputs[inputs.length - 1];
-    await userEvent.type(aliasField, 'test-key');
-
-    const submitButton = screen.getByRole('button', { name: /Generate/i });
-    await userEvent.click(submitButton);
-
-    // Wait for secret to appear
-    await waitFor(() => {
-      assert.ok(screen.getByText(/sk-secret-12345/));
-    });
-
-    // Click Done without copying
-    const doneButton = screen.getByRole('button', { name: /Done/i });
-    await userEvent.click(doneButton);
-
-    // Should show confirmation dialog
-    await waitFor(() => {
-      assert.ok(screen.getByText(/You haven't copied the key\. Close anyway\?/i));
-    });
-  });
-
-  test('validation shows error after blur on required field', async () => {
+  test('shows no validation errors before blur or submit', () => {
     renderDialog();
+    assert.strictEqual(screen.queryByText(/Enter a positive budget/), null);
+    assert.strictEqual(screen.queryByText('Alias is required'), null);
+  });
 
-    // Get the alias input and blur it without typing
-    const inputs = screen.getAllByRole('textbox');
-    const aliasInput = inputs[inputs.length - 1];
+  test('blurring the empty budget field reveals its error', async () => {
+    renderDialog();
+    const budget = screen.getByLabelText(/^Max Budget/);
+    await userEvent.clear(budget); // budget is pre-filled with 100
+    await userEvent.tab();
+    assert.ok(await screen.findByText(/Enter a positive budget/));
+  });
 
-    // Focus and blur without typing
-    aliasInput.focus();
-    aliasInput.blur();
+  test('submitting an invalid form shows errors, focuses the first invalid field and does not call onCreateKey', async () => {
+    let calls = 0;
+    renderDialog({ onCreateKey: async () => { calls++; return { key: 'sk-x' } as GenerateKeyResponse; } });
 
-    // Error should now be visible after blur
-    await waitFor(() => {
-      // Check for error on the Alias field
-      const helperText = screen.queryByText(/Alias/i);
-      assert.ok(helperText, 'Should show error message for Alias field');
+    await userEvent.clear(screen.getByLabelText(/^Max Budget/));
+    await userEvent.click(button('Generate'));
+
+    assert.ok(await screen.findByText(/Enter a positive budget/));
+    assert.strictEqual(calls, 0);
+    assert.strictEqual(document.activeElement, screen.getByLabelText(/^Max Budget/));
+    // Submit stays enabled so the user can retry after fixing.
+    assert.strictEqual((button('Generate') as HTMLButtonElement).disabled, false);
+  });
+
+  test('a valid submit sends the entered budget and alias', async () => {
+    const requests: any[] = [];
+    renderDialog({ onCreateKey: async r => { requests.push(r); return { key: 'sk-ok' } as GenerateKeyResponse; } });
+
+    const budget = screen.getByLabelText(/^Max Budget/);
+    await userEvent.clear(budget);
+    await userEvent.type(budget, '25');
+    await userEvent.click(button('Generate'));
+
+    await waitFor(() => assert.strictEqual(requests.length, 1));
+    assert.strictEqual(requests[0].max_budget, 25);
+    assert.ok(requests[0].alias && requests[0].alias.length > 0);
+    assert.strictEqual(requests[0].duration, '30d');
+  });
+
+  describe('one-time secret', () => {
+    const createAndShowSecret = async (onClose: () => void) => {
+      renderDialog({ onClose, onCreateKey: async () => ({ key: 'sk-secret-value-1' } as GenerateKeyResponse) });
+      await userEvent.click(button('Generate'));
+      await screen.findByText('Copy this key now. It will never be shown again.');
+    };
+
+    test('shows the secret with the never-shown-again warning', async () => {
+      await createAndShowSecret(() => {});
+      assert.ok(screen.getAllByText(/sk-secret-value-1/).length >= 1);
+    });
+
+    test('Escape and backdrop clicks do not dismiss the secret', async () => {
+      let closed = 0;
+      await createAndShowSecret(() => { closed++; });
+
+      const dialogEl = document.querySelector('[role="dialog"]') as HTMLElement;
+      fireEvent.keyDown(dialogEl, { key: 'Escape', code: 'Escape' });
+      const container = dialogEl.parentElement as HTMLElement;
+      fireEvent.mouseDown(container);
+      fireEvent.click(container);
+
+      await new Promise(r => setTimeout(r, 200));
+      assert.strictEqual(closed, 0, 'onClose must not fire');
+      assert.ok(screen.getAllByText(/sk-secret-value-1/).length >= 1);
+    });
+
+    test('Done before copying asks for confirmation; Go back keeps the secret, Close anyway closes', async () => {
+      let closed = 0;
+      await createAndShowSecret(() => { closed++; });
+
+      await userEvent.click(button('Done'));
+      assert.ok(await screen.findByText("You haven't copied the key. Close anyway?"));
+      assert.strictEqual(closed, 0);
+
+      await userEvent.click(button('Go back'));
+      await waitFor(() => assert.strictEqual(screen.queryByText("You haven't copied the key. Close anyway?"), null));
+      assert.strictEqual(closed, 0);
+      assert.ok(screen.getAllByText(/sk-secret-value-1/).length >= 1);
+
+      await userEvent.click(button('Done'));
+      await userEvent.click(await findButton('Close anyway'));
+      await waitFor(() => assert.strictEqual(closed, 1));
+    });
+
+    test('after copying the key, Done closes without a confirmation', async () => {
+      const written = stubClipboard();
+      let closed = 0;
+      await createAndShowSecret(() => { closed++; });
+
+      await userEvent.click(screen.getByLabelText('Copy API key'));
+      await waitFor(() => assert.deepStrictEqual(written, ['sk-secret-value-1']));
+
+      await userEvent.click(button('Done'));
+      await waitFor(() => assert.strictEqual(closed, 1));
+      assert.strictEqual(screen.queryByText("You haven't copied the key. Close anyway?"), null);
     });
   });
 });

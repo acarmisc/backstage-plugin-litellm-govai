@@ -1,4 +1,4 @@
-import { fakeAlertApi } from '../testing/setupDom';
+import { fakeAlertApi, deferred, skeletonCount } from '../testing/setupDom';
 import { routeResolutionApiRef } from '@backstage/frontend-plugin-api';
 import { describe, test, afterEach } from 'node:test';
 import assert from 'node:assert';
@@ -80,18 +80,16 @@ describe('LiteLLMBudgetGauges', () => {
     );
   };
 
-  test('renders skeletons while loading', async () => {
-    renderWidget({}, {
-      getUserInfo: async () => new Promise(resolve => setTimeout(() => resolve(mockUserInfo), 5000)),
-    });
+  test('shows skeleton placeholders while loading, then the content', async () => {
+    const userInfo = deferred<typeof mockUserInfo>();
+    renderWidget({}, { getUserInfo: () => userInfo.promise });
 
-    // Initially should show Budget title
-    assert.ok(screen.getByText('Budget'));
+    assert.ok(skeletonCount() > 0, 'skeletons are shown while the profile loads');
+    assert.strictEqual(document.querySelector('[role="progressbar"]'), null, 'no bare spinner');
 
-    // Wait for loading to complete
-    await waitFor(() => {
-      assert.ok(screen.getByText(/limit/));
-    }, { timeout: 6000 });
+    userInfo.resolve(mockUserInfo);
+    await waitFor(() => assert.strictEqual(skeletonCount(), 0));
+    assert.ok(screen.getAllByText(/limit/).length > 0);
   });
 
   test('renders unprovisioned message when API returns unprovisioned error', async () => {
