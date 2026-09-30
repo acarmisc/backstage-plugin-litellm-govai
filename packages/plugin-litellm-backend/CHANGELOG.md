@@ -9,6 +9,18 @@ commit/PR that bumps the version in `package.json`. Format follows the
 Earlier history: `git log -- packages/plugin-litellm-backend` or the
 [GitHub tags](https://github.com/acarmisc/backstage-plugin-litellm-govai/tags).
 
+## 0.17.3
+
+### Patch Changes
+
+- **feat(bridge): `GET /bridge/user/info` and team-scoped `GET /bridge/models`.**
+  The Abby CLI calls `/bridge/user/info` to list the caller's teams (needed for
+  the team picker and for minting under `teamRequired`), but the route did not
+  exist and the 404 was read as "no teams". It now returns
+  `{ user_id, teams }`. `GET /bridge/models?team_id=X` narrows the catalogue to
+  the models the team may use (its `models` plus access groups); the caller must
+  belong to the team (403 otherwise). Without `team_id` the catalogue is unchanged.
+
 ## 0.17.2
 
 ### Patch Changes

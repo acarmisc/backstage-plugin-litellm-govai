@@ -4543,6 +4543,58 @@ describe('bridge routes: identity matches the UI', () => {
     }
   });
 
+  test('GET /bridge/user/info returns the caller id and teams', async () => {
+    const h = await startHarness({
+      config: bridgeConfig({ 'litellm.bridge.allowedEmailDomains': ['abstract.it'] }),
+      tokenVerifier: verifier,
+      client: mockClient({ userInfo: { user_id: 'degiorgis', teams: ['t1', 't2'] } }),
+    });
+    try {
+      const { status, body } = await req(h.baseUrl, 'GET', '/bridge/user/info', bearer);
+      assert.strictEqual(status, 200);
+      assert.deepStrictEqual(body, { user_id: 'degiorgis', teams: ['t1', 't2'] });
+    } finally {
+      h.server.close();
+    }
+  });
+
+  test('GET /bridge/models?team_id narrows the catalogue to the team models and access groups', async () => {
+    const h = await startHarness({
+      config: bridgeConfig({ 'litellm.bridge.allowedEmailDomains': ['abstract.it'] }),
+      tokenVerifier: verifier,
+      client: mockClient({
+        userInfo: { user_id: 'degiorgis', teams: ['t1'] },
+        listModels: async () => [
+          { model_name: 'a' }, { model_name: 'b', access_groups: ['gold'] }, { model_name: 'c' },
+        ] as any,
+        getTeamInfo: async () => ({ team_id: 't1', models: ['a', 'gold'] }),
+      }),
+    });
+    try {
+      const { status, body } = await req(h.baseUrl, 'GET', '/bridge/models?team_id=t1', bearer);
+      assert.strictEqual(status, 200);
+      assert.deepStrictEqual(body.map((m: any) => m.model_name), ['a', 'b']);
+      const all = await req(h.baseUrl, 'GET', '/bridge/models', bearer);
+      assert.strictEqual(all.body.length, 3);
+    } finally {
+      h.server.close();
+    }
+  });
+
+  test('GET /bridge/models?team_id rejects a team the caller is not in', async () => {
+    const h = await startHarness({
+      config: bridgeConfig({ 'litellm.bridge.allowedEmailDomains': ['abstract.it'] }),
+      tokenVerifier: verifier,
+      client: mockClient({ userInfo: { user_id: 'degiorgis', teams: ['t1'] } }),
+    });
+    try {
+      const { status } = await req(h.baseUrl, 'GET', '/bridge/models?team_id=other', bearer);
+      assert.strictEqual(status, 403);
+    } finally {
+      h.server.close();
+    }
+  });
+
   test('userIdDomain, when set, is applied like in the UI', async () => {
     const h = await startHarness({
       config: bridgeConfig({ 'litellm.userIdDomain': 'abstract.it' }),

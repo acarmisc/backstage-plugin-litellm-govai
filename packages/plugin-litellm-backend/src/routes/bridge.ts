@@ -7,12 +7,13 @@ import {
   BridgeClaims,
   TokenVerifier,
   bridgeListKeys,
+  getOrProvisionUserFromClaims,
   newDefaultVerifier,
   readBridgeConfig,
   resolveBridgeUserId,
   type BridgeIdentityOptions,
 } from '../bridge';
-import { type GenerateKeyInput } from '@acarmisc/backstage-plugin-litellm-common';
+import { isModelAllowed, ALL_PROXY_MODELS, type GenerateKeyInput } from '@acarmisc/backstage-plugin-litellm-common';
 import { createKeyForUser, KeyServiceError, type KeyCreateContext } from '../services/keyService';
 import { sendError } from '../errors';
 import { createGenerateKeyInputSchema } from '@acarmisc/backstage-plugin-litellm-common';
@@ -167,11 +168,56 @@ export function registerBridgeRoutes(router: Router, ctx: RouterContext, bridgeO
       }
     });
 
+    // Caller's LiteLLM identity: user id + team memberships. Lets CLI clients
+    // offer a team picker and mint keys under a valid team.
+    router.get('/bridge/user/info', async (req: Request, res: Response) => {
+      try {
+        const claims = await requireClaims(req);
+        const user = await getOrProvisionUserFromClaims(
+          client,
+          claims,
+          provisioningEnabled,
+          provisioningDefaults,
+          logger,
+          bridgeIdentity,
+        );
+        res.json({ user_id: user.user_id, teams: user.teams ?? [] });
+      } catch (error: unknown) {
+        handleBridgeError(error, res);
+      }
+    });
+
+    // Model catalogue. With ?team_id=X the list is narrowed to the models the
+    // team may use (its `models` plus access groups); the caller must belong
+    // to that team. Without it the full catalogue is returned, as before.
     router.get('/bridge/models', async (req: Request, res: Response) => {
       try {
-        await requireClaims(req); // authenticate only
+        const claims = await requireClaims(req);
+        const teamId = typeof req.query.team_id === 'string' ? req.query.team_id : '';
         const models = await client.listModels();
-        res.json(models);
+        if (!teamId) {
+          res.json(models);
+          return;
+        }
+        const user = await getOrProvisionUserFromClaims(
+          client,
+          claims,
+          provisioningEnabled,
+          provisioningDefaults,
+          logger,
+          bridgeIdentity,
+        );
+        if (!(user.teams ?? []).includes(teamId)) {
+          res.status(403).json({ error: 'Access denied: team is not one of your teams', team_id: teamId });
+          return;
+        }
+        const team = await client.getTeamInfo(teamId);
+        const allowed = team.models;
+        if (!allowed || allowed.length === 0 || allowed.includes(ALL_PROXY_MODELS)) {
+          res.json(models);
+          return;
+        }
+        res.json(models.filter(m => isModelAllowed(m, allowed)));
       } catch (error: unknown) {
         handleBridgeError(error, res);
       }
