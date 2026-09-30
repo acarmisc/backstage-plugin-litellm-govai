@@ -9,6 +9,26 @@ commit/PR that bumps the version in `package.json`. Format follows the
 Earlier history: `git log -- packages/plugin-litellm-backend` or the
 [GitHub tags](https://github.com/acarmisc/backstage-plugin-litellm-govai/tags).
 
+## 0.16.1
+
+### Patch Changes
+
+- **fix(bridge): map the CLI identity to the same LiteLLM user the UI uses.**
+  0.16.0 derived the bridge user from the *email local part* and required
+  `litellm.userIdDomain`. That addressed (and auto-provisioned) a different
+  LiteLLM user whenever a Keycloak username differs from the email, and made the
+  bridge unusable for deployments whose LiteLLM ids are bare entity names.
+  The bridge now separates the two questions: a *verified* email in a trusted
+  domain gets you in (`litellm.bridge.allowedEmailDomains`, defaulting to
+  `litellm.userIdDomain`; neither set → `403`), and the LiteLLM id is the Keycloak
+  `preferred_username` run through the same `litellm.userIdDomain` rule the UI
+  applies (email local part only when the token has no username).
+  **If you run the bridge without `litellm.userIdDomain`, set
+  `litellm.bridge.allowedEmailDomains` when upgrading to 0.16.x**; do not set
+  `userIdDomain` just to satisfy the bridge — that changes every UI user id.
+  If you already ran 0.16.0 with the bridge, look for duplicate LiteLLM users
+  named after the email local part and clean them up.
+
 ## 0.16.0
 
 **Security release — contains breaking behaviour changes. Upgrade
@@ -39,8 +59,8 @@ package.**
   access to every team's usage.
 - **`GET /config`** returns the configured `publicBaseUrl` only (`null` when
   unset) — it no longer falls back to the internal `baseUrl`.
-- **CLI bridge** requires `litellm.userIdDomain` and maps identity from a
-  verified email in that domain; ID tokens (`typ: ID`) and unverified or foreign
+- **CLI bridge** needs a trusted email domain (see 0.16.1: `litellm.bridge.allowedEmailDomains`,
+  defaulting to `litellm.userIdDomain`) and verified emails in it; ID tokens (`typ: ID`) and unverified or foreign
   emails are rejected, and verifier error details are no longer returned. Key
   minting uses the same validation and enforcement as the UI (strict schema,
   ceilings, flags, team and model checks). First-time provisioning from a bridge

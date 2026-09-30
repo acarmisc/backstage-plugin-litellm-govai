@@ -308,6 +308,7 @@ async function startHarness(opts: {
   permissions?: any;
   catalogClient?: any;
   auth?: any;
+  tokenVerifier?: any;
 }): Promise<Harness> {
   const cfg = mockConfig({
     'litellm.baseUrl': 'http://litellm.local',
@@ -323,6 +324,7 @@ async function startHarness(opts: {
     permissions: opts.permissions ?? mockPermissions(),
     client,
     catalogClient: opts.catalogClient,
+    tokenVerifier: opts.tokenVerifier,
   });
   // Mount the plugin router inside an express app so req/res get the
   // express augmentations (res.json, req.body parsing, etc.) that Backstage's
@@ -4406,5 +4408,88 @@ describe('re-review follow-ups', () => {
     assert.strictEqual((await run(['gpt-4'], ['gpt-4'])).status, 200);
     assert.strictEqual((await run(['gpt-4'], ['o1'])).status, 400);
     assert.strictEqual((await run(['all-proxy-models'], ['o1'])).status, 200);
+  });
+});
+
+describe('bridge routes: identity matches the UI', () => {
+  // Keycloak username differs from the email local part on purpose.
+  const claims = {
+    sub: 's1', email: 'andrea.degiorgis@abstract.it', email_verified: true,
+    preferred_username: 'degiorgis', azp: 'abby-cli',
+  };
+  const verifier = { verify: async () => claims };
+  const bridgeConfig = (extra: Record<string, any> = {}) => ({
+    'litellm.bridge.enabled': true,
+    'litellm.keyGeneration.teamRequired': false,
+    'litellm.keyGeneration.allowUnlimitedBudget': true,
+    ...extra,
+  });
+  const bearer = { headers: { authorization: 'Bearer any-token' } };
+
+  test('GET /bridge/keys lists the keys of the Keycloak username, not the email local part', async () => {
+    const h = await startHarness({
+      config: bridgeConfig({ 'litellm.bridge.allowedEmailDomains': ['abstract.it'] }),
+      tokenVerifier: verifier,
+      client: mockClient({ userInfo: { user_id: 'degiorgis', teams: [] } }),
+    });
+    try {
+      const { status } = await req(h.baseUrl, 'GET', '/bridge/keys', bearer);
+      assert.strictEqual(status, 200);
+      assert.ok(h.client.calls.listKeys.includes('degiorgis'), JSON.stringify(h.client.calls.listKeys));
+      assert.ok(!h.client.calls.listKeys.includes('andrea.degiorgis'));
+    } finally {
+      h.server.close();
+    }
+  });
+
+  test('POST /bridge/keys mints the key for that same user id', async () => {
+    const h = await startHarness({
+      config: bridgeConfig({ 'litellm.bridge.allowedEmailDomains': ['abstract.it'] }),
+      tokenVerifier: verifier,
+      client: mockClient({ userInfo: { user_id: 'degiorgis', teams: [] } }),
+    });
+    try {
+      const { status } = await req(h.baseUrl, 'POST', '/bridge/keys', {
+        ...bearer, body: { alias: 'cli', max_budget: 5 },
+      });
+      assert.strictEqual(status, 200);
+      const sent = h.client.calls.generateKey[h.client.calls.generateKey.length - 1];
+      assert.strictEqual(sent.user_id, 'degiorgis');
+    } finally {
+      h.server.close();
+    }
+  });
+
+  test('userIdDomain, when set, is applied like in the UI', async () => {
+    const h = await startHarness({
+      config: bridgeConfig({ 'litellm.userIdDomain': 'abstract.it' }),
+      tokenVerifier: verifier,
+      client: mockClient({ userInfo: { user_id: 'degiorgis@abstract.it', teams: [] } }),
+    });
+    try {
+      const { status } = await req(h.baseUrl, 'GET', '/bridge/keys', bearer);
+      assert.strictEqual(status, 200);
+      assert.ok(h.client.calls.listKeys.includes('degiorgis@abstract.it'));
+    } finally {
+      h.server.close();
+    }
+  });
+
+  test('without any trusted domain the bridge answers 403 and touches nothing', async () => {
+    const h = await startHarness({
+      config: bridgeConfig(),
+      tokenVerifier: verifier,
+      client: mockClient({ userInfo: { user_id: 'degiorgis', teams: [] } }),
+    });
+    try {
+      const list = await req(h.baseUrl, 'GET', '/bridge/keys', bearer);
+      const mint = await req(h.baseUrl, 'POST', '/bridge/keys', { ...bearer, body: { alias: 'cli', max_budget: 5 } });
+      assert.strictEqual(list.status, 403);
+      assert.strictEqual(mint.status, 403);
+      assert.strictEqual(h.client.calls.generateKey.length, 0);
+      assert.strictEqual(h.client.calls.createUser?.length ?? 0, 0);
+    } finally {
+      h.server.close();
+    }
   });
 });

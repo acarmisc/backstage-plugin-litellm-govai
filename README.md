@@ -785,15 +785,17 @@ Request flow for `/api/litellm/bridge/*`:
    token** (Keycloak's `typ` claim must be absent or `Bearer` — ID tokens are
    rejected). Failure → `401`; no verifier error details are returned to the
    caller (they are logged server-side).
-3. The caller is resolved to a LiteLLM `user_id` from the token's **verified
-   email** (`email_verified: true`) whose domain equals `litellm.userIdDomain`.
-   `litellm.userIdDomain` is therefore **required** for the bridge; an
-   unverified email, a foreign domain or a missing email → `403`. The bridge
-   never derives an identity by stripping a domain off `preferred_username`.
-   The user is then ensured to exist — provisioned from the JWT claims if
-   `litellm.provisioning.enabled` (base defaults only; group role overrides
-   need the Backstage catalog), otherwise `404` (log in to Backstage once
-   first).
+3. The caller is let in only with a **verified email** (`email_verified: true`) in
+   a trusted domain: `litellm.bridge.allowedEmailDomains`, which defaults to
+   `litellm.userIdDomain`. With neither configured every caller gets `403`, as
+   do unverified or foreign-domain emails. The LiteLLM user is then **the same one
+   the UI addresses**: the Keycloak `preferred_username` (the Backstage user
+   entity name) with `litellm.userIdDomain` applied when set — the email is only
+   the gate, never the identity, so a username that differs from the email still
+   maps to the right user. The user is then ensured to exist — provisioned from
+   the JWT claims if `litellm.provisioning.enabled` (base defaults only; group
+   role overrides need the Backstage catalog), otherwise `404` (log in to
+   Backstage once first).
 4. Keys are minted through the **same code path as the UI**: strict request
    schema, the `litellm.keys.*` ceilings, `allowUnlimitedBudget` /
    `teamRequired`, team-membership and allowed-model checks. Minted keys are
@@ -810,6 +812,7 @@ Configuration (`app-config.yaml`):
 litellm:
   bridge:
     enabled: true                                   # default false
+    allowedEmailDomains: [example.com]              # verified-email gate; defaults to litellm.userIdDomain
     issuer: https://auth.example.com/realms/solution-innovation  # required when enabled
     clientId: abby-cli                              # default abby-cli
 ```
