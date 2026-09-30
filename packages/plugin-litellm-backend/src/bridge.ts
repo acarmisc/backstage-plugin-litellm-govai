@@ -208,6 +208,11 @@ function normalizeIdentityOptions(
  *    from the email (and would provision a duplicate). The realm is the same
  *    IdP Backstage signs users in with, so its usernames are the entity names.
  *
+ *    When `preferred_username` is email-shaped (contains '@') and its domain
+ *    is in the trusted list, we extract the local part and use that as the
+ *    username instead. This handles the Abby CLI case where `preferred_username`
+ *    is the full email.
+ *
  * @throws BridgeIdentityError (403) if identity validation fails
  */
 export function resolveBridgeUserId(
@@ -236,7 +241,20 @@ export function resolveBridgeUserId(
       `email domain mismatch: "${domain}" is not allowed for this deployment`,
     );
   }
-  const name = claims.preferred_username?.trim() || emailLocalPart;
+  let name = claims.preferred_username?.trim();
+  // If preferred_username is email-shaped and its domain is trusted, use the
+  // local part so the CLI (which uses full email as preferred_username) maps
+  // to the same user as the UI (which uses bare entity name).
+  if (name && name.includes('@')) {
+    const usernameParts = name.split('@');
+    if (usernameParts.length === 2 && usernameParts[0]) {
+      const [userLocal, userDomain] = usernameParts;
+      if (trusted.includes(userDomain.toLowerCase())) {
+        name = userLocal;
+      }
+    }
+  }
+  name = name || emailLocalPart;
   return toLiteLLMUserId(name, userIdDomain);
 }
 
@@ -245,6 +263,12 @@ export function resolveBridgeUserId(
  * missing and provisioning is enabled, creates it from the JWT claims (email +
  * name); if provisioning is disabled, throws a 404 telling the caller to log
  * in to Backstage first (the UI is the primary provisioning entry point).
+ *
+ * When the computed userId is not found, before provisioning we also search
+ * for an existing user by email. This handles the case where a UI user (created
+ * with a bare entity name) is accessed via the CLI (which uses email-shaped
+ * preferred_username), and helps recover from cases where the bridge's userId
+ * computation and the UI's differ.
  */
 export async function getOrProvisionUserFromClaims(
   client: LiteLLMClient,
@@ -257,6 +281,19 @@ export async function getOrProvisionUserFromClaims(
   const userId = resolveBridgeUserId(claims, userIdDomain);
   const existing = await client.getUserInfo(userId);
   if (existing) return existing;
+
+  // Before provisioning, try to find an existing user by email.
+  // This handles the case where the UI created a user under a different ID
+  // (e.g. bare entity name) but the same email.
+  if (claims.email) {
+    const byEmail = await client.getUserByEmail(claims.email);
+    if (byEmail) {
+      logger.info(
+        `Found existing LiteLLM user ${byEmail.user_id} by email ${claims.email}, reusing for ${userId}`,
+      );
+      return byEmail;
+    }
+  }
 
   if (!provisioningEnabled) {
     throw new ProvisioningError(
@@ -298,7 +335,7 @@ export async function bridgeListKeys(
   logger: LoggerService,
   userIdDomain?: string | BridgeIdentityOptions,
 ): Promise<VirtualKey[]> {
-  await getOrProvisionUserFromClaims(
+  const user = await getOrProvisionUserFromClaims(
     client,
     claims,
     provisioningEnabled,
@@ -306,7 +343,7 @@ export async function bridgeListKeys(
     logger,
     userIdDomain,
   );
-  return client.listKeys(resolveBridgeUserId(claims, userIdDomain));
+  return client.listKeys(user.user_id);
 }
 
 /** Mints a new virtual key for the caller (provisioning the user first if needed). */
@@ -319,7 +356,7 @@ export async function bridgeGenerateKey(
   request: Partial<GenerateKeyRequest>,
   userIdDomain?: string | BridgeIdentityOptions,
 ): Promise<GenerateKeyResponse> {
-  await getOrProvisionUserFromClaims(
+  const user = await getOrProvisionUserFromClaims(
     client,
     claims,
     provisioningEnabled,
@@ -327,14 +364,13 @@ export async function bridgeGenerateKey(
     logger,
     userIdDomain,
   );
-  const userId = resolveBridgeUserId(claims, userIdDomain);
   const enriched: GenerateKeyRequest = {
     ...request,
-    user_id: userId,
+    user_id: user.user_id,
     metadata: {
       ...(request.metadata ?? {}),
       created_via: 'abby-cli',
-      created_by: userId,
+      created_by: user.user_id,
       created_at_iso: new Date().toISOString(),
     },
   };

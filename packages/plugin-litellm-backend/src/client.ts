@@ -162,6 +162,57 @@ export class LiteLLMClient {
     }
   }
 
+  /**
+   * Searches for an existing user by email address. Returns the first matching
+   * user or null if none found. Handles both response shapes: a bare array
+   * or `{ users: [...] }`. Matching is case-insensitive on the email address.
+   */
+  async getUserByEmail(email: string): Promise<UserInfo | null> {
+    try {
+      const raw = await this.request<any>(
+        `/user/list?user_email=${encodeURIComponent(email)}`,
+      );
+      let users: any[] = [];
+      if (Array.isArray(raw)) {
+        users = raw;
+      } else if (Array.isArray(raw?.users)) {
+        users = raw.users;
+      }
+      if (!users.length) return null;
+      // Match the first user (case-insensitive email comparison)
+      const found = users.find(
+        (u: any) =>
+          (u.user_email ?? u.email ?? '')
+            .toLowerCase() === email.toLowerCase(),
+      );
+      if (!found) return null;
+      // Normalize to UserInfo shape (same as getUserInfo does)
+      const inner = found.user_info ?? {};
+      const teamIds: string[] = Array.isArray(found.teams)
+        ? found.teams
+            .map((t: any) => (typeof t === 'string' ? t : t?.team_id))
+            .filter((t: unknown): t is string => typeof t === 'string')
+        : [];
+      return {
+        user_id: found.user_id ?? inner.user_id ?? '',
+        user_email: inner.user_email ?? found.user_email,
+        email: inner.email ?? found.email,
+        teams: teamIds,
+        models: inner.models ?? found.models,
+        max_budget: inner.max_budget ?? found.max_budget,
+        budget_duration: inner.budget_duration ?? found.budget_duration,
+        budget_reset_at: inner.budget_reset_at ?? found.budget_reset_at,
+        spend: inner.spend ?? found.spend,
+        current_spend: inner.current_spend ?? found.current_spend,
+        soft_limit: inner.soft_limit ?? found.soft_limit,
+        hard_limit: inner.hard_limit ?? found.hard_limit,
+      };
+    } catch (err: unknown) {
+      if (err instanceof LiteLLMUpstreamError && err.status === 404) return null;
+      throw err;
+    }
+  }
+
   async createUser(payload: CreateUserRequest): Promise<CreateUserResponse> {
     return this.request<CreateUserResponse>('/user/new', {
       method: 'POST',

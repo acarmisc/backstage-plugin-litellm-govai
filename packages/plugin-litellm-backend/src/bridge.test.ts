@@ -55,6 +55,7 @@ const defaults = {
  */
 function mockClient(opts: {
   userInfo?: any;
+  userByEmail?: Record<string, any>;
   createUser?: (p: any) => Promise<any>;
   listKeys?: (uid: string) => Promise<any[]>;
   generateKey?: (r: any) => Promise<any>;
@@ -63,6 +64,7 @@ function mockClient(opts: {
     createUser: [],
     updateUser: [],
     getUserInfo: [],
+    getUserByEmail: [],
   };
   const getUserInfoSeq: any[] = (() => {
     if (Array.isArray(opts.userInfo)) return [...opts.userInfo];
@@ -76,6 +78,11 @@ function mockClient(opts: {
       const next = getUserInfoSeq.shift();
       const value = typeof next === 'function' ? next() : next;
       return Promise.resolve(value === undefined ? null : value);
+    },
+    getUserByEmail: (email: string) => {
+      calls.getUserByEmail.push(email);
+      const value = opts.userByEmail?.[email] ?? null;
+      return Promise.resolve(value);
     },
     createUser: (p: any) => {
       calls.createUser.push(p);
@@ -176,6 +183,29 @@ describe('getOrProvisionUserFromClaims', () => {
     assert.equal(c.calls.createUser[0].user_email, 'alice@example.com');
     assert.equal(c.calls.createUser[0].user_id, 'alice@example.com');
   });
+
+  test('reuses existing user found by email when computed user_id does not match', async () => {
+    // Scenario: The UI created a user under a bare entity name (e.g. 'alice'),
+    // but the CLI accesses with email-shaped preferred_username (e.g. 'alice@example.com').
+    // The bridge should find the existing user by email and reuse it.
+    const existingUser = { user_id: 'alice', user_email: 'alice@example.com' };
+    const c = mockClient({
+      userInfo: null, // computed user_id 'alice@example.com' does not exist
+      userByEmail: { 'alice@example.com': existingUser }, // but we find the user by email
+    });
+    const u = await getOrProvisionUserFromClaims(
+      c,
+      claims,
+      true,
+      defaults,
+      silentLogger(),
+      'example.com',
+    );
+    assert.equal(u.user_id, 'alice');
+    assert.equal(c.calls.getUserInfo.length, 1);
+    assert.equal(c.calls.getUserByEmail.length, 1);
+    assert.equal(c.calls.createUser.length, 0); // no provisioning
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -208,7 +238,7 @@ describe('bridgeGenerateKey', () => {
   test('provisions then mints a key stamped with ownership metadata', async () => {
     let captured: any;
     const c = mockClient({
-      userInfo: { user_id: 'alice' },
+      userInfo: { user_id: 'alice@example.com' },
       generateKey: (r: any) => {
         captured = r;
         return Promise.resolve({ key: 'sk-new' });
@@ -226,7 +256,8 @@ describe('bridgeGenerateKey', () => {
     assert.equal(res.key, 'sk-new');
     // The bridge owns: resolving user_id, passing alias through (the real
     // LiteLLMClient renames alias -> key_alias), and stamping ownership
-    // metadata. Verify all three.
+    // metadata. Verify all three. The user_id in the key metadata is the actual
+    // user_id returned from getOrProvisionUserFromClaims, not the computed one.
     assert.equal(captured.user_id, 'alice@example.com');
     assert.equal(captured.alias, 'abby-laptop');
     assert.deepEqual(captured.models, ['glm-5.2:cloud']);
@@ -509,10 +540,29 @@ describe('resolveBridgeUserId: trusted domains and UI-consistent ids', () => {
     );
   });
 
-  test('an email-shaped username is kept as is (no double domain)', () => {
+  test('an email-shaped username with trusted domain → extracts local part (Abby CLI case)', () => {
+    // When preferred_username is an email with a trusted domain (Abby CLI case),
+    // extract the local part to match the UI (which uses bare entity name).
+    assert.strictEqual(
+      resolveBridgeUserId(verified({ preferred_username: 'andrea.degiorgis@abstract.it' }), { userIdDomain: 'abstract.it' }),
+      'andrea.degiorgis@abstract.it',
+    );
+    // Without userIdDomain, still extracts the local part
+    assert.strictEqual(
+      resolveBridgeUserId(verified({ preferred_username: 'andrea.degiorgis@abstract.it' }), { trustedEmailDomains: ['abstract.it'] }),
+      'andrea.degiorgis',
+    );
+  });
+
+  test('an email-shaped username with untrusted domain → kept as is', () => {
     assert.strictEqual(
       resolveBridgeUserId(verified({ preferred_username: 'jo@abstract.it' }), { userIdDomain: 'abstract.it' }),
       'jo@abstract.it',
+    );
+    // Email-shaped username with a domain NOT in trusted list stays unchanged
+    assert.strictEqual(
+      resolveBridgeUserId(verified({ preferred_username: 'jo@example.com', email: 'jo@abstract.it' }), { trustedEmailDomains: ['abstract.it'] }),
+      'jo@example.com',
     );
   });
 

@@ -9,6 +9,21 @@ commit/PR that bumps the version in `package.json`. Format follows the
 Earlier history: `git log -- packages/plugin-litellm-backend` or the
 [GitHub tags](https://github.com/acarmisc/backstage-plugin-litellm-govai/tags).
 
+## 0.17.1
+
+### Patch Changes
+
+- **fix(bridge): resolve LiteLLM user from email-shaped preferred_username and
+  reuse existing user by email.** When the CLI's `preferred_username` claim is
+  an email address (e.g. `andrea.carmisciano@abstract.it`) and its domain is in
+  the trusted list, the bridge now extracts the local part before resolving the
+  user ID, so it maps to the same LiteLLM user the UI addresses. Additionally,
+  if the computed user ID is not found, the bridge searches for an existing user
+  by email (via `GET /user/list?user_email=...`) before provisioning, reusing a
+  user created by the UI under a different ID (e.g. a bare entity name) but the
+  same email. This avoids duplicate user creation and 409 conflicts when the
+  bridge client's identity differs from the UI's identity computation.
+
 ## 0.17.0
 
 ### Breaking Changes
