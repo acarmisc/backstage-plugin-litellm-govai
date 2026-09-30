@@ -51,7 +51,15 @@ export function registerTeamUsageRoutes(router: Router, ctx: RouterContext): voi
       // and the caller belongs to the team's owning group (metadata.owning_group).
       // Membership of the global team-admin group alone is not enough.
       let isManager = false;
-      if (ctx.teamMgmtEnabled) {
+      // Skip the extra lookup when it can't change the outcome: members always
+      // get through, and manager-ness only matters for members when the budget
+      // hiding flags differ between the two roles.
+      const managerCheckNeeded =
+        ctx.teamMgmtEnabled &&
+        (!isMember ||
+          teamBudgetVisibility.hideTeamBudgetForMembers !==
+            teamBudgetVisibility.hideTeamBudgetForManagers);
+      if (managerCheckNeeded) {
         try {
           const team = await withTeamFetchRetry(() => client.getTeamInfo(teamId));
           const owningGroup =

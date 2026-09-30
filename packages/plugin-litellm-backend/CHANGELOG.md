@@ -64,6 +64,17 @@ package.**
   `5xx` and network failures (refused/reset/timeout) → generic `502`, upstream `4xx` messages are stripped of HTML
   and capped at 500 characters; unexpected errors return `Internal error`.
 
+### Upgrade notes
+
+- **Audit keys for a forged `metadata.blocked_by`.** Before 0.16.0 a client could
+  set `blocked_by` in `metadata` when creating a key, and an owner is allowed to
+  unblock a key whose `blocked_by` is themselves. New keys can no longer carry
+  it, but keys created on 0.15 or earlier may. Look for keys whose
+  `metadata.blocked_by` is set while `blocked` is false (LiteLLM UI or
+  `/key/list`) and clear it. Unblocking through this plugin now nulls the field;
+  unblocking in the LiteLLM admin UI does not, so an owner who once blocked a
+  key themselves keeps that record until it is cleared.
+
 ### Minor Changes
 
 - feat: `POST /keys/prune-expired` (server-side prune returning
@@ -80,7 +91,8 @@ package.**
   `any` usage cut from 95 to 39 sites; declared `litellm.opencode.*`,
   `userRole` and the new keys in `config.d.ts`.
 - fix: OpenCode rotation falls back to replacing the key (delete + generate)
-  on LiteLLM editions without key regeneration; the confirmation page's CSP
+  on LiteLLM editions without key regeneration (including the open-source
+  "Enterprise feature" error); the confirmation page's CSP
   allows the localhost callback redirect; the user-info cache is also cleared on
   team membership changes.
 - chore: the provisioning log line no longer logs the user id at `info`.
