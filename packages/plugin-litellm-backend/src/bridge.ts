@@ -183,13 +183,13 @@ function normalizeIdentityOptions(
 ): { userIdDomain?: string; trusted: string[] } {
   const o: BridgeIdentityOptions =
     typeof opts === 'string' ? { userIdDomain: opts } : opts ?? {};
-  const trusted = (
-    o.trustedEmailDomains?.length
-      ? o.trustedEmailDomains
-      : o.userIdDomain
-      ? [o.userIdDomain]
-      : []
-  ).map(d => d.toLowerCase());
+  let domains: string[] = [];
+  if (o.trustedEmailDomains?.length) {
+    domains = o.trustedEmailDomains;
+  } else if (o.userIdDomain) {
+    domains = [o.userIdDomain];
+  }
+  const trusted = domains.map(d => d.toLowerCase());
   return { userIdDomain: o.userIdDomain, trusted };
 }
 
