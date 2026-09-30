@@ -1,4 +1,3 @@
-import React from 'react';
 import { TrendingUp as TrendingUpIcon } from '@mui/icons-material';
 import {
   createFrontendPlugin,

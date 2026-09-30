@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import { FC, ReactNode, useEffect, useMemo, useState } from 'react';
 import Paper from '@mui/material/Paper';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
@@ -94,16 +94,16 @@ function rateTone(rate: number): Tone {
   return 'danger';
 }
 
-const ChartSkeleton: React.FC<{ height?: number }> = ({ height = 240 }) => (
+const ChartSkeleton: FC<{ height?: number }> = ({ height = 240 }) => (
   <Skeleton variant="rounded" height={height} />
 );
 
 /** Shows a loading skeleton, an empty-state message, or the chart itself. */
-const ChartOrFallback: React.FC<{
+const ChartOrFallback: FC<{
   loading: boolean;
   empty: boolean;
   height?: number;
-  children: React.ReactNode;
+  children: ReactNode;
 }> = ({ loading, empty, height = 240, children }) => {
   if (loading) return <ChartSkeleton height={height} />;
   if (empty) return <EmptyState message="No data for this period" height={height} />;
@@ -111,7 +111,7 @@ const ChartOrFallback: React.FC<{
 };
 
 /** Inline success-rate bar used in both breakdown tables. */
-const SuccessRateCell: React.FC<{ rate: number; requests: number }> = ({ rate, requests }) => {
+const SuccessRateCell: FC<{ rate: number; requests: number }> = ({ rate, requests }) => {
   if (requests === 0) return <Typography variant="body2" color="text.secondary">—</Typography>;
   const tone = rateTone(rate);
   return (
@@ -131,7 +131,7 @@ const SuccessRateCell: React.FC<{ rate: number; requests: number }> = ({ rate, r
   );
 };
 
-export const UsageStats: React.FC<UsageStatsProps> = ({
+export const UsageStats: FC<UsageStatsProps> = ({
   usage,
   usageError,
   onRetryUsage,

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { FC, useEffect, useMemo, useRef, useState } from 'react';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import Dialog from '@mui/material/Dialog';
@@ -84,7 +84,7 @@ export interface KeyFormDialogProps {
   onGetConfig: () => Promise<LiteLlmConfig>;
 }
 
-export const KeyFormDialog: React.FC<KeyFormDialogProps> = ({
+export const KeyFormDialog: FC<KeyFormDialogProps> = ({
   open,
   onClose,
   mode,
@@ -325,6 +325,10 @@ export const KeyFormDialog: React.FC<KeyFormDialogProps> = ({
       await onResetKeySpend(keyToEdit.token ?? keyToEdit.key);
       setResetSpendConfirm(false);
       onClose();
+    } catch (e: any) {
+      // Keep the dialog open and say what went wrong instead of closing as if it worked.
+      setResetSpendConfirm(false);
+      setEditError(e?.message ?? 'Failed to reset spend');
     } finally {
       setResetSpendSubmitting(false);
     }

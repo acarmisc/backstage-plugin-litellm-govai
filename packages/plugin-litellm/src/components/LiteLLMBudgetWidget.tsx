@@ -22,7 +22,7 @@
  * When user data is passed via props (userInfo, teams, keys), they are used
  * directly without refetching. Otherwise, the hook fetches them.
  */
-import React, { useMemo, useState, useId } from 'react';
+import { FC, ReactNode, useId, useMemo, useState } from 'react';
 import { useRouteRef } from '@backstage/frontend-plugin-api';
 import Paper from '@mui/material/Paper';
 import Box from '@mui/material/Box';
@@ -71,7 +71,7 @@ export interface LiteLLMBudgetWidgetProps {
    * collapsible region so it stays visible when collapsed — e.g. a
    * "create key" button.
    */
-  action?: React.ReactNode;
+  action?: ReactNode;
   /**
    * Optional preloaded data to use instead of fetching via the hook.
    * When provided, the component uses these values directly without refetching.
@@ -88,10 +88,10 @@ interface LevelFrameProps {
   note?: string;
   tone?: Tone;
   isLast?: boolean;
-  children: React.ReactNode;
+  children: ReactNode;
 }
 
-const LevelFrame: React.FC<LevelFrameProps> = ({
+const LevelFrame: FC<LevelFrameProps> = ({
   rank,
   name,
   tagline,
@@ -153,7 +153,7 @@ const LevelFrame: React.FC<LevelFrameProps> = ({
   </Box>
 );
 
-const EmptyLimitCard: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+const EmptyLimitCard: FC<{ children: ReactNode }> = ({ children }) => (
   <Paper
     variant="outlined"
     sx={theme => ({
@@ -181,7 +181,7 @@ const CLOSEST_LEVEL_LABEL: Record<BudgetLimit['kind'], string> = {
  * The one thing that's easy to get wrong about LiteLLM budgets: the order
  * caps are checked in. Short by design.
  */
-const HierarchyNote: React.FC<{ withReset?: boolean }> = ({ withReset }) => (
+const HierarchyNote: FC<{ withReset?: boolean }> = ({ withReset }) => (
   <Box
     sx={theme => ({
       px: 1.5,
@@ -202,7 +202,7 @@ const HierarchyNote: React.FC<{ withReset?: boolean }> = ({ withReset }) => (
 );
 
 /** Full body: the numbered key→personal→team→global rail plus the policy footnote. */
-const FullBody: React.FC<{ summary: BudgetSummary; keysLink?: string }> = ({ summary, keysLink }) => {
+const FullBody: FC<{ summary: BudgetSummary; keysLink?: string }> = ({ summary, keysLink }) => {
   const hasBudgetedKeys = summary.keys.length + summary.hiddenBudgetedKeys > 0;
   return (
     <>
@@ -261,7 +261,7 @@ const FullBody: React.FC<{ summary: BudgetSummary; keysLink?: string }> = ({ sum
 };
 
 /** Compact body: only the limits the user actually has, as a tagged meter list. */
-const CompactBody: React.FC<{ summary: BudgetSummary; keysLink?: string }> = ({ summary, keysLink }) => {
+const CompactBody: FC<{ summary: BudgetSummary; keysLink?: string }> = ({ summary, keysLink }) => {
   const { count } = budgetHeadline(summary);
   if (count === 0) {
     return (
@@ -287,7 +287,7 @@ const CompactBody: React.FC<{ summary: BudgetSummary; keysLink?: string }> = ({ 
   );
 };
 
-export const LiteLLMBudgetWidget: React.FC<LiteLLMBudgetWidgetProps> = ({
+export const LiteLLMBudgetWidget: FC<LiteLLMBudgetWidgetProps> = ({
   title = 'Budget Policy',
   maxKeys = 3,
   compact = false,

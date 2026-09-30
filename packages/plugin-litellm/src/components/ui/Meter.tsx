@@ -1,4 +1,4 @@
-import React from 'react';
+import { FC } from 'react';
 import Box from '@mui/material/Box';
 import { alpha } from '@mui/material/styles';
 import { toneColor, type Tone } from './tokens';
@@ -6,7 +6,7 @@ import { toneColor, type Tone } from './tokens';
  * Progress meter with an explicitly drawn track. MUI's `LinearProgress` tints
  * its track from the bar colour, which makes an empty bar look full.
  */
-export const Meter: React.FC<{
+export const Meter: FC<{
   value: number;
   tone?: Tone;
   height?: number;

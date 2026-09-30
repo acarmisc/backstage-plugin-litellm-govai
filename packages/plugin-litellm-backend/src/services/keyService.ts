@@ -100,7 +100,7 @@ export async function createKeyForUser(
   // For bridge (no catalogClient/auth), use direct provisioning from JWT;
   // for UI (with catalogClient/auth), use full provisioning with group roles.
   let userInfo: any;
-  if (catalogClient != null && auth != null) {
+  if (catalogClient !== undefined && catalogClient !== null && auth !== undefined && auth !== null) {
     userInfo = await getOrProvisionUser(
       client,
       user.tokenEntityRef || '',
@@ -211,7 +211,7 @@ export async function createKeyForUser(
   // authenticates via JWT/SSO; we always call with the master key, so that
   // column stays null. Enriching `metadata` makes the owner identity visible
   // in LiteLLM's UI and queryable via API.
-  const profile = user.tokenEntityRef && catalogClient != null && auth != null
+  const profile = user.tokenEntityRef && catalogClient !== undefined && catalogClient !== null && auth !== undefined && auth !== null
     ? await resolveUserProfile(user.tokenEntityRef, catalogClient, auth, logger)
     : {};
   const clientMetadata = input.metadata ?? {};

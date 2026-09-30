@@ -1,4 +1,4 @@
-import React from 'react';
+import { FC, ReactNode } from 'react';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import { alpha } from '@mui/material/styles';
@@ -10,7 +10,7 @@ import { toneColor, type Tone } from './tokens';
  * legitimately exceed 100% — the arc clamps at a full turn while the centre
  * label keeps the real number.
  */
-export const Gauge: React.FC<{
+export const Gauge: FC<{
   /** Share consumed, 0..100+ (unclamped for the label). */
   value: number;
   tone?: Tone;
@@ -19,9 +19,9 @@ export const Gauge: React.FC<{
   /** Ring thickness in px. */
   thickness?: number;
   /** Centre content; defaults to the rounded percentage. */
-  label?: React.ReactNode;
+  label?: ReactNode;
   /** Small caption under the value, inside the ring. */
-  caption?: React.ReactNode;
+  caption?: ReactNode;
   /** Optional aria-label for accessibility. */
   ariaLabel?: string;
 }> = ({ value, tone = 'accent', size = 72, thickness = 6, label, caption, ariaLabel }) => {

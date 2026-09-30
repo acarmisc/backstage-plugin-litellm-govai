@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import { FC, ReactNode, useMemo } from 'react';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import Skeleton from '@mui/material/Skeleton';
@@ -20,7 +20,7 @@ interface DashboardHeaderProps {
   onGenerateKeyClick: () => void;
   onNavigateToFilter?: (filter: 'expired' | 'expiring') => void;
   /** Page tab bar, rendered flush with the bottom edge of the header card. */
-  tabs?: React.ReactNode;
+  tabs?: ReactNode;
 }
 
 /** Two initials from an email or username, for the identity badge. */
@@ -31,7 +31,7 @@ function initials(name: string): string {
   return local.slice(0, 2).toUpperCase();
 }
 
-const CountStat: React.FC<{
+const CountStat: FC<{
   value: number | null;
   label: string;
   tone: Tone;
@@ -99,7 +99,7 @@ const CountStat: React.FC<{
   return content;
 };
 
-export const DashboardHeader: React.FC<DashboardHeaderProps> = ({
+export const DashboardHeader: FC<DashboardHeaderProps> = ({
   userInfo,
   teams,
   keys,

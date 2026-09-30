@@ -21,7 +21,7 @@ describe('UserInfoCache', () => {
   let cache: UserInfoCache;
 
   beforeEach(() => {
-    let currentTime = 0;
+    const currentTime = 0;
     fakeClock = {
       now: () => currentTime,
     };
@@ -58,7 +58,7 @@ describe('UserInfoCache', () => {
       assert.strictEqual(result, null);
       // Entry should be deleted, not just expired
       // @ts-ignore
-      assert.strictEqual(cache['cache'].has('user-1'), false);
+      assert.strictEqual(cache.cache.has('user-1'), false);
     });
   });
 

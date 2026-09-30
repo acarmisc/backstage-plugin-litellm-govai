@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import { FC, useMemo, useState } from 'react';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
 import Table from '@mui/material/Table';
@@ -63,7 +63,7 @@ function formatDateTime(iso: string): string {
   }
 }
 
-const DetailRow: React.FC<{ entry: AuditLogEntry }> = ({ entry }) => {
+const DetailRow: FC<{ entry: AuditLogEntry }> = ({ entry }) => {
   const [open, setOpen] = useState(false);
   const hasDetail = entry.before_value || entry.updated_values;
 
@@ -194,7 +194,7 @@ function renderAuditLogBody(loading: boolean, entries: AuditLogEntry[]) {
   return entries.map(entry => <DetailRow key={entry.id} entry={entry} />);
 }
 
-export const AuditLog: React.FC<AuditLogProps> = ({ api }) => {
+export const AuditLog: FC<AuditLogProps> = ({ api }) => {
   const [page, setPage] = useState(0);
   const [pageSize, setPageSize] = useState(25);
   const [filters, setFilters] = useState<Pick<AuditLogsParams, 'action' | 'table_name' | 'changed_by'>>({});

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import { FC, useMemo, useState } from 'react';
 import Table from '@mui/material/Table';
 import TableBody from '@mui/material/TableBody';
 import TableCell from '@mui/material/TableCell';
@@ -163,7 +163,7 @@ function compareKeys(a: VirtualKey, b: VirtualKey, sortKey: SortKey): number {
   }
 }
 
-export const KeysTable: React.FC<KeysTableProps> = ({
+export const KeysTable: FC<KeysTableProps> = ({
   keys,
   loading,
   onGenerateKeyClick,

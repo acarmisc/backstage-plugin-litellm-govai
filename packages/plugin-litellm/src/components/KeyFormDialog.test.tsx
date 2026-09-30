@@ -2,7 +2,7 @@ import { fakeAlertApi } from '../testing/setupDom';
 import { TestTheme } from '../testing/TestTheme';
 import { describe, test, afterEach } from 'node:test';
 import assert from 'node:assert';
-import React from 'react';
+import { ComponentProps } from 'react';
 import { render, cleanup, screen, waitFor, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
@@ -60,8 +60,8 @@ describe('KeyFormDialog', () => {
     },
   ];
 
-  const renderDialog = (overrides: Partial<React.ComponentProps<typeof KeyFormDialog>> = {}) => {
-    const defaultProps: React.ComponentProps<typeof KeyFormDialog> = {
+  const renderDialog = (overrides: Partial<ComponentProps<typeof KeyFormDialog>> = {}) => {
+    const defaultProps: ComponentProps<typeof KeyFormDialog> = {
       open: true,
       onClose: () => {},
       mode: 'create',

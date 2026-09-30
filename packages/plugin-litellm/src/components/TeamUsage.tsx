@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { FC, useState } from 'react';
 import Paper from '@mui/material/Paper';
 import Box from '@mui/material/Box';
 import Typography from '@mui/material/Typography';
@@ -70,7 +70,7 @@ interface TeamCardProps {
   onExpand?: (team: TeamInfo) => void;
 }
 
-const TeamCard: React.FC<TeamCardProps> = ({ team, usage, usageLoading, canManage, onEditTeam, onExpand }) => {
+const TeamCard: FC<TeamCardProps> = ({ team, usage, usageLoading, canManage, onEditTeam, onExpand }) => {
   const [expanded, setExpanded] = useState(false);
   const chart = useChartTheme();
 
@@ -357,7 +357,7 @@ interface TeamUsageProps {
   onTeamExpand?: (team: TeamInfo) => void;
 }
 
-export const TeamUsage: React.FC<TeamUsageProps> = ({
+export const TeamUsage: FC<TeamUsageProps> = ({
   teams,
   loading,
   getTeamUsage,

@@ -3909,6 +3909,8 @@ describe('user principal enforcement', () => {
   ];
 
   for (const [method, path] of cases) {
+    // `h` is assigned in before() and never reassigned while the tests run.
+    // eslint-disable-next-line no-loop-func
     test(`service principal → 401 on ${method} ${path.split('?')[0]}`, async () => {
       const { status } = await req(h.baseUrl, method, path, {
         authRef: 'svc',
@@ -3916,6 +3918,7 @@ describe('user principal enforcement', () => {
       });
       assert.strictEqual(status, 401);
     });
+    // eslint-disable-next-line no-loop-func
     test(`anonymous caller → 401 on ${method} ${path.split('?')[0]}`, async () => {
       const { status } = await req(h.baseUrl, method, path, {
         body: method === 'POST' ? { alias: 'x', max_budget: 1 } : undefined,
@@ -3926,12 +3929,12 @@ describe('user principal enforcement', () => {
 
   test('user_id query param cannot override the token identity', async () => {
     const client = h.client;
-    const before = client.calls.listKeys?.length ?? 0;
+    const listCallsBefore = client.calls.listKeys?.length ?? 0;
     await req(h.baseUrl, 'GET', '/keys?user_id=victim@example.com', {
       authRef: 'user:default/bob',
     });
     const last = client.calls.listKeys?.[client.calls.listKeys.length - 1];
-    assert.ok((client.calls.listKeys?.length ?? 0) > before);
+    assert.ok((client.calls.listKeys?.length ?? 0) > listCallsBefore);
     assert.strictEqual(last, 'bob');
   });
 
@@ -4020,9 +4023,9 @@ describe('user info cache (router level)', () => {
       const authRef = 'user:default/alice';
       await req(h.baseUrl, 'GET', '/user/info', { authRef });
       await req(h.baseUrl, 'POST', '/keys/generate', { authRef, body: { alias: 'k', max_budget: 5 } });
-      const before = h.client.calls.getUserInfo.length;
+      const callsBefore = h.client.calls.getUserInfo.length;
       await req(h.baseUrl, 'GET', '/user/info', { authRef });
-      assert.ok(h.client.calls.getUserInfo.length > before);
+      assert.ok(h.client.calls.getUserInfo.length > callsBefore);
     } finally {
       h.server.close();
     }

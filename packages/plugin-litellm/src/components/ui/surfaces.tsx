@@ -1,4 +1,4 @@
-import React from 'react';
+import { FC, ReactNode } from 'react';
 import Box from '@mui/material/Box';
 import ButtonBase from '@mui/material/ButtonBase';
 import Paper from '@mui/material/Paper';
@@ -9,13 +9,13 @@ import { toneColor, type Tone } from './tokens';
 // ── surfaces ──────────────────────────────────────────────────────────────────
 
 /** Page-level surface with a consistent title row. */
-export const SectionCard: React.FC<{
-  title?: React.ReactNode;
-  subtitle?: React.ReactNode;
-  actions?: React.ReactNode;
+export const SectionCard: FC<{
+  title?: ReactNode;
+  subtitle?: ReactNode;
+  actions?: ReactNode;
   /** Set when the body renders its own edge-to-edge content (e.g. a table). */
   flush?: boolean;
-  children: React.ReactNode;
+  children: ReactNode;
 }> = ({ title, subtitle, actions, flush = false, children }) => (
   <Paper sx={{ borderRadius: 2, overflow: 'hidden' }}>
     {(title || actions) && (
@@ -48,11 +48,11 @@ export const SectionCard: React.FC<{
 );
 
 /** Bordered frame around a single chart, with its own caption row. */
-export const ChartCard: React.FC<{
-  title: React.ReactNode;
-  meta?: React.ReactNode;
+export const ChartCard: FC<{
+  title: ReactNode;
+  meta?: ReactNode;
   height?: number;
-  children: React.ReactNode;
+  children: ReactNode;
 }> = ({ title, meta, height = 240, children }) => (
   // The plot area must have an explicit height, never a flex-derived one:
   // Recharts' ResponsiveContainer measures its parent, so a parent that sizes
@@ -87,7 +87,7 @@ export interface MetricDef {
  * loose cards. Cells share a baseline grid so the numbers line up even when
  * only some of them carry a hint.
  */
-export const MetricStrip: React.FC<{ metrics: MetricDef[] }> = ({ metrics }) => (
+export const MetricStrip: FC<{ metrics: MetricDef[] }> = ({ metrics }) => (
   <Paper
     variant="outlined"
     sx={{
@@ -149,7 +149,7 @@ export const MetricStrip: React.FC<{ metrics: MetricDef[] }> = ({ metrics }) => 
 );
 
 /** Label + value pair used inside cards. */
-export const Stat: React.FC<{ label: string; value: React.ReactNode }> = ({ label, value }) => (
+export const Stat: FC<{ label: string; value: ReactNode }> = ({ label, value }) => (
   <Box sx={{ minWidth: 0 }}>
     <Typography
       variant="caption"
@@ -279,11 +279,11 @@ export const quietIconButtonSx = (tone: Tone = 'neutral'): SxProps<Theme> => the
 });
 
 /** Centered empty / loading state for a card body. */
-export const EmptyState: React.FC<{
+export const EmptyState: FC<{
   message: string;
   hint?: string;
   height?: number;
-  action?: React.ReactNode;
+  action?: ReactNode;
 }> = ({ message, hint, height, action }) => (
   <Box
     sx={{

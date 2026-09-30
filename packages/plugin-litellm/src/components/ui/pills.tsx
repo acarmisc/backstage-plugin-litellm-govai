@@ -1,4 +1,4 @@
-import React from 'react';
+import { FC, ReactNode } from 'react';
 import Box from '@mui/material/Box';
 import { alpha } from '@mui/material/styles';
 import type { SxProps, Theme } from '@mui/material/styles';
@@ -9,8 +9,8 @@ import { toneColor, type Tone } from './tokens';
  * orange pill per row is unreadable. Tinted background, hairline border,
  * squared-off corners.
  */
-export const StatusPill: React.FC<{
-  label: React.ReactNode;
+export const StatusPill: FC<{
+  label: ReactNode;
   tone?: Tone;
   /** Show the leading tone dot. */
   dot?: boolean;
@@ -64,7 +64,7 @@ export const StatusPill: React.FC<{
 );
 
 /** Quiet monospace tag for identifiers: model names, team slugs, roles. */
-export const TagChip: React.FC<{ label: React.ReactNode; title?: string; mono?: boolean }> = ({
+export const TagChip: FC<{ label: ReactNode; title?: string; mono?: boolean }> = ({
   label,
   title,
   mono = true,

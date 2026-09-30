@@ -1,4 +1,4 @@
-import React from 'react';
+import { FC } from 'react';
 import Box from '@mui/material/Box';
 import Paper from '@mui/material/Paper';
 import Typography from '@mui/material/Typography';
@@ -20,7 +20,7 @@ interface ChartTooltipProps {
  * Recharts' default tooltip is an opaque white card with a hard border — it
  * disappears on dark themes. This one uses the theme's own surface tokens.
  */
-export const ChartTooltip: React.FC<ChartTooltipProps> = ({
+export const ChartTooltip: FC<ChartTooltipProps> = ({
   active,
   label,
   payload,
@@ -87,7 +87,7 @@ export const ChartTooltip: React.FC<ChartTooltipProps> = ({
  * so a handful of fully-qualified model names ("bedrock/eu.anthropic.…") wrap
  * into a ragged block that eats the plot area.
  */
-export const SeriesLegend: React.FC<{ series: Array<{ name: string; color: string }> }> = ({
+export const SeriesLegend: FC<{ series: Array<{ name: string; color: string }> }> = ({
   series,
 }) => (
   <Box

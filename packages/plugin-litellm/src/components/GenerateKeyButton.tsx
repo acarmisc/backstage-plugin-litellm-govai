@@ -1,4 +1,4 @@
-import React from 'react';
+import { FC } from 'react';
 import Button from '@mui/material/Button';
 import { Add } from '@mui/icons-material';
 import { Link } from '@backstage/core-components';
@@ -24,7 +24,7 @@ export interface GenerateKeyButtonProps {
   disabled?: boolean;
 }
 
-export const GenerateKeyButton: React.FC<GenerateKeyButtonProps> = ({
+export const GenerateKeyButton: FC<GenerateKeyButtonProps> = ({
   to,
   onClick,
   label = 'Generate New Key',

@@ -31,18 +31,10 @@ export function toLiteLLMUserId(
 }
 
 /**
- * Reads the provisioning block from config, applying safe defaults for every
- * field so the feature works out-of-the-box without any YAML required.
- *
- * Safe defaults rationale:
- *   maxBudget:      $10  — prevents runaway spend on a forgotten test account
- *   budgetDuration: 30d  — monthly reset, aligns with typical billing cycles
- *   models:         []   — empty means all proxy models are allowed;
- *                          restrict here or at team level for tighter control
- *   teams:          []   — no automatic team assignment; add IDs to enrol users
- *   tpmLimit:       none — LiteLLM global / team limits still apply
- *   rpmLimit:       none — same
- *   metadata:       backstage source tag only
+ * Reads `litellm.provisioning.roles`: group-scoped overrides of the base
+ * provisioning defaults, evaluated in order (first match wins). Returns an
+ * empty list when none are configured. Fields omitted on a role fall back to
+ * the base defaults at match time (see applyRoleOverrides).
  */
 export function readRoleConfigs(config: Config): RoleConfig[] {
   const raw = config.getOptional<any[]>('litellm.provisioning.roles');
@@ -79,6 +71,20 @@ export function applyRoleOverrides(
   };
 }
 
+/**
+ * Reads the provisioning block from config, applying safe defaults for every
+ * field so the feature works out-of-the-box without any YAML required.
+ *
+ * Safe defaults rationale:
+ *   maxBudget:      $10  — prevents runaway spend on a forgotten test account
+ *   budgetDuration: 30d  — monthly reset, aligns with typical billing cycles
+ *   models:         []   — empty means all proxy models are allowed;
+ *                          restrict here or at team level for tighter control
+ *   teams:          []   — no automatic team assignment; add IDs to enrol users
+ *   tpmLimit:       none — LiteLLM global / team limits still apply
+ *   rpmLimit:       none — same
+ *   metadata:       backstage source tag only
+ */
 export function readProvisioningDefaults(config: Config): {
   enabled: boolean;
   defaults: ProvisioningDefaults;
