@@ -53,6 +53,7 @@ import { validateKeyForm, firstInvalidField, expiryPreview, priciestInputPrice }
 import {
   createForm,
   editForm,
+  changedEditFields,
   isModelAllowedByTeam,
   aliasHelperText,
   teamHelperText,
@@ -305,11 +306,10 @@ export const KeyFormDialog: FC<KeyFormDialogProps> = ({
     setSubmitting(true);
     setEditError(null);
     try {
-      const request: UpdateKeyRequest = {
-        ...editFormState,
-        max_budget: unlimitedBudget ? null : editFormState.max_budget,
-      };
-      await onUpdateKey(keyToEdit.token ?? keyToEdit.key, request);
+      const request = changedEditFields(editForm(keyToEdit), editFormState, unlimitedBudget);
+      if (Object.keys(request).length > 0) {
+        await onUpdateKey(keyToEdit.token ?? keyToEdit.key, request);
+      }
       onClose();
     } catch (error: any) {
       setEditError(error?.message ?? 'Failed to update key');

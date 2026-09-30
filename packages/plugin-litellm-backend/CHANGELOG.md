@@ -33,21 +33,35 @@ package.**
   `litellm.key.resetSpend` permission; unblocking a key someone else blocked
   needs the new `litellm.key.unblock` permission. `unblock` no longer requires
   `litellm.key.manage` for keys the caller blocked themselves.
-- **`GET /teams/:teamId/usage`** requires team membership or team-admin rights
-  (`404` otherwise).
+- **`GET /teams/:teamId/usage`** requires membership of the team, or (with team
+  management enabled) membership of the team's `metadata.owning_group`; `404`
+  otherwise. Membership of the global team-admin group alone no longer grants
+  access to every team's usage.
 - **`GET /config`** returns the configured `publicBaseUrl` only (`null` when
   unset) — it no longer falls back to the internal `baseUrl`.
 - **CLI bridge** requires `litellm.userIdDomain` and maps identity from a
   verified email in that domain; ID tokens (`typ: ID`) and unverified or foreign
   emails are rejected, and verifier error details are no longer returned. Key
-  minting goes through the same validated code path as the UI.
+  minting uses the same validation and enforcement as the UI (strict schema,
+  ceilings, flags, team and model checks). First-time provisioning from a bridge
+  token applies the base defaults only (no group role overrides), and the
+  bridge does not evaluate Backstage permissions.
 - **OpenCode connect** no longer mints or returns anything on `GET`: `GET` shows
   a confirmation page and `POST` creates or **rotates** the key (via LiteLLM key
   regeneration) — it used to redirect with a key *hash* when a key existed.
   Clients that drive the flow with a bare browser `GET` redirect must be updated
   to follow the confirmation.
+- **Server-owned metadata is reserved.** `POST /keys/generate` rejects client
+  `metadata` containing `blocked_by`, `blocked_at`, `created_*` or `updated_*`;
+  re-blocking an already-blocked key is a `409` and never rewrites `blocked_by`
+  (otherwise an owner could take over an admin's block and then unblock it).
+- **Keys always expire.** A generate request without `duration` now gets `30d`
+  (or the first allowed duration) instead of a non-expiring key.
+- **Model allow-lists** follow LiteLLM's rules on the server too: the
+  `all-proxy-models` sentinel means unrestricted, and team lists may name model
+  access groups.
 - **Error responses are sanitised.** Upstream `401`/`403` → `502`, upstream
-  `5xx`/network → generic `502`, upstream `4xx` messages are stripped of HTML
+  `5xx` and network failures (refused/reset/timeout) → generic `502`, upstream `4xx` messages are stripped of HTML
   and capped at 500 characters; unexpected errors return `Internal error`.
 
 ### Minor Changes
@@ -65,6 +79,10 @@ package.**
 - refactor: `LoggerService` / `RootConfigService` typing, `@backstage/errors`,
   `any` usage cut from 95 to 39 sites; declared `litellm.opencode.*`,
   `userRole` and the new keys in `config.d.ts`.
+- fix: OpenCode rotation falls back to replacing the key (delete + generate)
+  on LiteLLM editions without key regeneration; the confirmation page's CSP
+  allows the localhost callback redirect; the user-info cache is also cleared on
+  team membership changes.
 - chore: the provisioning log line no longer logs the user id at `info`.
 
 ## 0.15.0

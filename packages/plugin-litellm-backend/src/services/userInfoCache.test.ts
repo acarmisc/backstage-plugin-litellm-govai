@@ -260,6 +260,12 @@ describe('withUserInfoCache wrapper', () => {
       async createUser(): Promise<any> {
         return { user_id: 'new-user' };
       },
+      async teamMemberAdd(): Promise<any> {
+        return { success: true };
+      },
+      async teamMemberDelete(): Promise<any> {
+        return { success: true };
+      },
       async listKeys(): Promise<any[]> {
         return [];
       },
@@ -315,6 +321,19 @@ describe('withUserInfoCache wrapper', () => {
     await wrapped.deleteKeys({ keys: ['test-key'] });
     await wrapped.getUserInfo('alice');
     assert.strictEqual(userGetInfoCallCount, 2);
+  });
+
+  it('invalidates cache on team membership changes', async () => {
+    for (const method of ['teamMemberAdd', 'teamMemberDelete'] as const) {
+      userGetInfoCallCount = 0;
+      const wrapped = withUserInfoCache(mockClient, { ttlMs: 10_000 });
+      await wrapped.getUserInfo('alice');
+      assert.strictEqual(userGetInfoCallCount, 1, method);
+
+      await (wrapped as any)[method]({ team_id: 't1' });
+      await wrapped.getUserInfo('alice');
+      assert.strictEqual(userGetInfoCallCount, 2, method);
+    }
   });
 
   it('invalidates cache on blockKey', async () => {

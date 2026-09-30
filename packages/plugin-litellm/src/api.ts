@@ -97,10 +97,21 @@ export class LiteLlmApi implements LiteLlmApiInterface {
     if (!response.ok) {
       let body: unknown;
       try { body = await response.json(); } catch { body = await response.text().catch(() => ''); }
-      const message =
-        (typeof body === 'object' && body && typeof (body as any).error === 'string'
+      const errorText =
+        typeof body === 'object' && body && typeof (body as any).error === 'string'
           ? (body as any).error
-          : undefined) ?? `${response.status} ${response.statusText}`;
+          : undefined;
+      // Validation failures carry the reason in `details` ("max_budget: must not
+      // exceed 100"); without it the user would only see "Invalid request body".
+      const details =
+        typeof body === 'object' && body && typeof (body as any).details === 'string'
+          ? (body as any).details
+          : undefined;
+      const message = errorText
+        ? details
+          ? `${errorText}: ${details}`
+          : errorText
+        : `${response.status} ${response.statusText}`;
       throw new ApiError(message, response.status, body);
     }
   }

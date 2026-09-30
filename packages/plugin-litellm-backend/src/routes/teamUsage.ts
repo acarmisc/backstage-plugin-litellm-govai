@@ -3,6 +3,7 @@ import { UsageMetrics } from '../types';
 import { getOrProvisionUser, isUserMemberOfGroup, ProvisioningError } from '../provisioning';
 import { redactTeamUsage } from '../teamBudgetVisibility';
 import { sendError } from '../errors';
+import { withTeamFetchRetry } from '../http/teamFetch';
 import type { RouterContext } from './context';
 import { createRequireUser } from './middleware/withUser';
 
@@ -15,7 +16,6 @@ export function registerTeamUsageRoutes(router: Router, ctx: RouterContext): voi
     provisioningEnabled,
     provisioningDefaults,
     roleConfigs,
-    teamAdminCfg,
     teamBudgetVisibility,
   } = ctx;
   const requireUser = createRequireUser(ctx);
@@ -47,16 +47,24 @@ export function registerTeamUsageRoutes(router: Router, ctx: RouterContext): voi
 
       // Check membership: user must be in the team OR be a team manager
       const isMember = userInfo?.teams?.includes(teamId) ?? false;
+      // A "manager" administers this specific team: team management is enabled
+      // and the caller belongs to the team's owning group (metadata.owning_group).
+      // Membership of the global team-admin group alone is not enough.
       let isManager = false;
-      if (teamAdminCfg.group) {
+      if (ctx.teamMgmtEnabled) {
         try {
-          isManager = await isUserMemberOfGroup(
-            tokenEntityRef,
-            teamAdminCfg.group,
-            catalogClient,
-            auth,
-            logger,
-          );
+          const team = await withTeamFetchRetry(() => client.getTeamInfo(teamId));
+          const owningGroup =
+            typeof team.metadata?.owning_group === 'string' ? team.metadata.owning_group : undefined;
+          if (owningGroup) {
+            isManager = await isUserMemberOfGroup(
+              tokenEntityRef,
+              owningGroup,
+              catalogClient,
+              auth,
+              logger,
+            );
+          }
         } catch (err: unknown) {
           const message = err instanceof Error ? err.message : String(err);
           logger.warn(`Team-manager check failed: ${message}`);

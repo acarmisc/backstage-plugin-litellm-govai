@@ -106,16 +106,16 @@ export class ProfileCache {
   }
 
   /**
-   * Invalidate just the 'profile' cached entry and its inflight promise.
+   * Invalidate every profile entry (`profile`, `profile-userInfo`,
+   * `profile-keys`, ...) and its in-flight promise, leaving unrelated keys alone.
    */
   invalidateProfile(api: LiteLlmApiInterface): void {
-    const cached = this.cache.get(api);
-    if (cached) {
-      delete cached.profile;
-    }
-    const inflight = this.inflight.get(api);
-    if (inflight) {
-      delete inflight.profile;
+    const isProfileKey = (k: string) => k === 'profile' || k.startsWith('profile-');
+    for (const store of [this.cache.get(api), this.inflight.get(api)]) {
+      if (!store) continue;
+      for (const k of Object.keys(store)) {
+        if (isProfileKey(k)) delete store[k];
+      }
     }
   }
 }

@@ -8,6 +8,7 @@ import {
   ProvisioningError,
 } from '../provisioning';
 import { litellmKeyCreatePermission } from '@acarmisc/backstage-plugin-litellm-common';
+import { LiteLLMUpstreamError } from '../client';
 import { sendError } from '../errors';
 import type { RouterContext } from './context';
 
@@ -170,7 +171,7 @@ export function registerOpencodeRoutes(router: Router, ctx: RouterContext): void
 </html>`;
 
         res.set('Cache-Control', 'no-store');
-        res.set('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'");
+        res.set('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'; form-action 'self' http://localhost:* http://127.0.0.1:*");
         res.set('Content-Type', 'text/html; charset=utf-8');
         res.status(200).send(html);
       } catch (error: unknown) {
@@ -201,21 +202,8 @@ export function registerOpencodeRoutes(router: Router, ctx: RouterContext): void
           k => k.key_alias === alias && !k.blocked && k.user_id === userId,
         );
 
-        let key: string;
-        let rotated = false;
-
-        if (reusable?.token ?? reusable?.key) {
-          // Rotate the existing key by regenerating it.
-          const keyHashOrId = reusable.token ?? reusable.key!;
-          const result = await client.regenerateKey(keyHashOrId);
-          if (!result.key) {
-            res.status(502).json({ error: 'LiteLLM returned no key material on regenerate' });
-            return;
-          }
-          key = result.key;
-          rotated = true;
-        } else {
-          // Generate a new key.
+        // Mint a brand-new key bound to this user (and team) under the slot alias.
+        const mintNewKey = async (): Promise<string | undefined> => {
           const profile = await resolveUserProfile(
             tokenEntityRef,
             catalogClient,
@@ -236,11 +224,39 @@ export function registerOpencodeRoutes(router: Router, ctx: RouterContext): void
             },
             user_id: userId,
           } as GenerateKeyRequest);
-          if (!result.key) {
-            res.status(502).json({ error: 'LiteLLM returned no key material' });
-            return;
+          return result.key;
+        };
+
+        let key: string | undefined;
+        let rotated = false;
+
+        if (reusable?.token ?? reusable?.key) {
+          const keyHashOrId = (reusable.token ?? reusable.key)!;
+          try {
+            // Rotate the existing key in place via LiteLLM's key regeneration.
+            key = (await client.regenerateKey(keyHashOrId)).key;
+            rotated = true;
+          } catch (err: unknown) {
+            // Key regeneration isn't available on every LiteLLM edition. Only
+            // "not supported / not found" answers fall back to replacing the
+            // key (delete + generate under the same alias); auth, upstream
+            // outages and everything else still fail the request.
+            const unsupported =
+              err instanceof LiteLLMUpstreamError &&
+              [400, 404, 405, 501].includes(err.status);
+            if (!unsupported) throw err;
+            logger.warn('LiteLLM key regeneration unavailable; replacing the OpenCode key instead');
+            await client.deleteKeys({ keys: [keyHashOrId] });
+            key = await mintNewKey();
+            rotated = true;
           }
-          key = result.key;
+        } else {
+          key = await mintNewKey();
+        }
+
+        if (!key) {
+          res.status(502).json({ error: 'LiteLLM returned no key material' });
+          return;
         }
 
         const url = new URL(redirectUri);
