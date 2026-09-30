@@ -21,7 +21,14 @@ export async function findDisallowedModels(
 
   // Fail closed: if the model catalogue can't be read the error propagates.
   const catalogue = await client.listModels();
-  const byName = new Map(catalogue.map(m => [m.model_name, m]));
+  // /model/info returns one row per deployment; a model name can appear several
+  // times with different access groups, so merge them per name.
+  const byName = new Map<string, { model_name: string; access_groups: string[] }>();
+  for (const m of catalogue) {
+    const entry = byName.get(m.model_name) ?? { model_name: m.model_name, access_groups: [] };
+    entry.access_groups = [...new Set([...entry.access_groups, ...(m.access_groups ?? [])])];
+    byName.set(m.model_name, entry);
+  }
   return notLiteral.filter(name =>
     !isModelAllowed(byName.get(name) ?? { model_name: name }, allowed),
   );

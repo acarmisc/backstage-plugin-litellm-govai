@@ -434,12 +434,15 @@ export function registerKeysRoutes(router: Router, ctx: RouterContext): void {
 
       await client.unblockKey(keyId);
 
-      // Clear the blocked_by metadata on unblock
+      // Clear the block record on unblock. Set the fields to null rather than
+      // deleting them: whether LiteLLM merges or replaces metadata on update, a
+      // stale `blocked_by` must not survive, or a later admin block could be
+      // lifted by the same owner.
       const updatedMetadata = {
         ...(key.metadata ?? {}),
+        blocked_by: null,
+        blocked_at: null,
       };
-      delete updatedMetadata.blocked_by;
-      delete updatedMetadata.blocked_at;
 
       await client.updateKey({
         key: keyId,

@@ -4285,3 +4285,126 @@ describe('release review: model allow-lists', () => {
     assert.strictEqual(r.generated, 0);
   });
 });
+
+describe('re-review follow-ups', () => {
+  test('unblock nulls blocked_by/blocked_at instead of leaving a stale record', async () => {
+    const h = await startHarness({
+      config: { 'litellm.userIdDomain': 'example.com' },
+      client: mockClient({
+        listKeys: (uid?: string) =>
+          Promise.resolve([
+            {
+              key: 'sk-...own', token: 'hash-own', key_alias: 'k', user_id: uid, created_at: '', spend: 0,
+              blocked: true, metadata: { blocked_by: 'user:default/alice', blocked_at: '2026-01-01', keep: 'me' },
+            } as VirtualKey,
+          ]),
+      }),
+    });
+    try {
+      const { status } = await req(h.baseUrl, 'POST', '/keys/hash-own/unblock', { authRef: 'user:default/alice' });
+      assert.strictEqual(status, 200);
+      const sent = h.client.calls.updateKey[0];
+      assert.strictEqual(sent.metadata.blocked_by, null);
+      assert.strictEqual(sent.metadata.blocked_at, null);
+      assert.strictEqual(sent.metadata.keep, 'me');
+    } finally {
+      h.server.close();
+    }
+  });
+
+  test('OpenCode falls back when LiteLLM answers "Enterprise feature" with a 500', async () => {
+    const h = await startHarness({
+      config: { 'litellm.opencode.enabled': true, 'litellm.userIdDomain': 'example.com' },
+      client: mockClient({
+        userInfo: { user_id: 'alice@example.com', teams: [] },
+        listKeys: () => Promise.resolve([{
+          key: 'sk-existing', token: 'sk-existing', key_alias: 'opencode-alice@example.com',
+          user_id: 'alice@example.com', spend: 0, created_at: '2026-01-01',
+        }]),
+        regenerateKey: async () => {
+          throw new LiteLLMUpstreamError(500, 'Server Error',
+            '{"error":{"message":"Regenerating Virtual Keys is an Enterprise feature"}}');
+        },
+      }),
+    });
+    try {
+      const { status } = await reqPostForm(
+        h.baseUrl, '/opencode/connect', { redirect_uri: 'http://localhost:1456/callback' },
+        { authRef: 'user:default/alice' },
+      );
+      assert.strictEqual(status, 302);
+      assert.strictEqual(h.client.calls.deleteKeys.length, 1);
+      assert.strictEqual(h.client.calls.generateKey.length, 1);
+    } finally {
+      await new Promise<void>(r => h.server.close(() => r()));
+    }
+  });
+
+  test('OpenCode does not fall back on an auth failure from LiteLLM', async () => {
+    const h = await startHarness({
+      config: { 'litellm.opencode.enabled': true, 'litellm.userIdDomain': 'example.com' },
+      client: mockClient({
+        userInfo: { user_id: 'alice@example.com', teams: [] },
+        listKeys: () => Promise.resolve([{
+          key: 'sk-existing', token: 'sk-existing', key_alias: 'opencode-alice@example.com',
+          user_id: 'alice@example.com', spend: 0, created_at: '2026-01-01',
+        }]),
+        regenerateKey: async () => { throw new LiteLLMUpstreamError(401, 'Unauthorized', 'nope'); },
+      }),
+    });
+    try {
+      const { status } = await reqPostForm(
+        h.baseUrl, '/opencode/connect', { redirect_uri: 'http://localhost:1456/callback' },
+        { authRef: 'user:default/alice' },
+      );
+      assert.strictEqual(status, 502);
+      assert.strictEqual(h.client.calls.deleteKeys.length, 0);
+    } finally {
+      await new Promise<void>(r => h.server.close(() => r()));
+    }
+  });
+
+  test('key update enforces the team model list (sentinel and access groups)', async () => {
+    const run = async (teamModels: string[], models: string[], catalogue: any[] = []) => {
+      const h = await startHarness({
+        config: { 'litellm.userIdDomain': 'example.com' },
+        client: mockClient({
+          listKeys: (uid?: string) =>
+            Promise.resolve([{ key: 'sk-...own', token: 'hash-own', key_alias: 'k', user_id: uid, created_at: '', spend: 0, team_id: 't1' } as VirtualKey]),
+          getTeamInfo: async () => ({ team_id: 't1', spend: 0, models: teamModels }),
+          listModels: async () => catalogue,
+        }),
+      });
+      try {
+        return await req(h.baseUrl, 'POST', '/keys/hash-own/update', {
+          authRef: 'user:default/alice', body: { models },
+        });
+      } finally {
+        h.server.close();
+      }
+    };
+    assert.strictEqual((await run(['all-proxy-models'], ['anything'])).status, 200);
+    const cat = [{ model_name: 'gpt-4', access_groups: ['premium'] }, { model_name: 'o1' }];
+    assert.strictEqual((await run(['premium'], ['gpt-4'], cat)).status, 200);
+    assert.strictEqual((await run(['premium'], ['o1'], cat)).status, 400);
+  });
+
+  test('without a team, the user-level model list applies', async () => {
+    const run = async (userModels: string[], models: string[]) => {
+      const h = await startHarness({
+        config: { 'litellm.keyGeneration.teamRequired': false, 'litellm.keyGeneration.allowUnlimitedBudget': true },
+        client: mockClient({ userInfo: { user_id: 'alice@example.com', teams: [], models: userModels } }),
+      });
+      try {
+        return await req(h.baseUrl, 'POST', '/keys/generate', {
+          authRef: 'user:default/alice', body: { alias: 'k', models, max_budget: 5 },
+        });
+      } finally {
+        h.server.close();
+      }
+    };
+    assert.strictEqual((await run(['gpt-4'], ['gpt-4'])).status, 200);
+    assert.strictEqual((await run(['gpt-4'], ['o1'])).status, 400);
+    assert.strictEqual((await run(['all-proxy-models'], ['o1'])).status, 200);
+  });
+});

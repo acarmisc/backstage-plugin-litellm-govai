@@ -241,9 +241,12 @@ export function registerOpencodeRoutes(router: Router, ctx: RouterContext): void
             // "not supported / not found" answers fall back to replacing the
             // key (delete + generate under the same alias); auth, upstream
             // outages and everything else still fail the request.
+            // Open-source LiteLLM answers with an "Enterprise feature" error
+            // (a 500), so recognise that by message as well as by status.
             const unsupported =
               err instanceof LiteLLMUpstreamError &&
-              [400, 404, 405, 501].includes(err.status);
+              ([400, 404, 405, 501].includes(err.status) ||
+                /enterprise|premium/i.test(err.message));
             if (!unsupported) throw err;
             logger.warn('LiteLLM key regeneration unavailable; replacing the OpenCode key instead');
             await client.deleteKeys({ keys: [keyHashOrId] });
