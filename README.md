@@ -460,7 +460,7 @@ wiring these up only restricts behavior once you opt in.
 | `litellm.key.revoke` | `DELETE /keys/:keyId`, `POST /keys/prune-expired` | |
 | `litellm.key.manage` | `POST /keys/:keyId/update`, `/block` | |
 | `litellm.key.resetSpend` | `POST /keys/:keyId/reset_spend` | Also needs `litellm.keys.allowOwnerResetSpend: true` — the flag is checked first and fails closed |
-| `litellm.key.unblock` | `POST /keys/:keyId/unblock` | Owners can unblock a key **they blocked themselves** without it; unblocking a key blocked by someone else (e.g. a LiteLLM admin) requires this permission |
+| `litellm.key.unblock` | `POST /keys/:keyId/unblock` | Required for **every** unblock (the caller must also own the key). Owners are not trusted to lift a block on their own say-so — grant this only to roles that may lift blocks; everyone else asks an administrator |
 | `litellm.audit.read` | `GET /audit` | Additive to the existing `litellm.audit.group` check — both must pass |
 | `litellm.team.create` | `POST /teams` | Team management — see [Team Management](#team-management-litellm-team-admins) |
 | `litellm.team.manage` | `PATCH /teams/:id`, `GET /teams/managed` | |
@@ -635,14 +635,15 @@ source of truth.
 
 - Resetting a key's spend needs `litellm.keys.allowOwnerResetSpend: true` **and**
   the `litellm.key.resetSpend` permission.
-- Blocking records `metadata.blocked_by` / `blocked_at`. An owner may unblock only
-  a key they blocked themselves; anything else needs `litellm.key.unblock`.
+- Blocking records `metadata.blocked_by` / `blocked_at` for audit purposes only.
+  Unblocking always needs `litellm.key.unblock` (plus ownership): the record is
+  never used to decide who may lift a block, because an owner could influence it.
 - `GET /teams/:teamId/usage` requires membership of the team, or membership of
   the team's `metadata.owning_group` (with team management enabled), and answers
   `404` otherwise, so team existence isn't leaked.
-- Blocking an already-blocked key is a `409`, so an owner can't take over an
-  admin's block; `blocked_by` / `blocked_at` (and `created_*` / `updated_*`)
-  metadata can't be set by clients.
+- Blocking an already-blocked key is a `409` and `blocked_by` / `blocked_at` (and
+  `created_*` / `updated_*`) metadata can't be set by clients, so the audit
+  record can't be overwritten or pre-seeded.
 - A key generated without a duration gets `30d` (never a non-expiring key).
 
 **Errors** never pass raw upstream text through: LiteLLM `401`/`403` become `502`

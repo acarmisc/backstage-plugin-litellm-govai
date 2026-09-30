@@ -77,4 +77,11 @@ describe('KeysTable without permission', () => {
       assert.strictEqual((button as HTMLButtonElement).disabled, true, name);
     }
   });
+
+  test('a blocked key\'s Unblock button is disabled and says why', async () => {
+    renderTable({ keys: [{ ...mockKey, blocked: true }] }, 'DENY');
+
+    const button = await screen.findByLabelText('No permission to unblock keys', {}, { timeout: 5000 });
+    assert.strictEqual((button as HTMLButtonElement).disabled, true);
+  });
 });

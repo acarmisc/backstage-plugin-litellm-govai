@@ -9,6 +9,21 @@ commit/PR that bumps the version in `package.json`. Format follows the
 Earlier history: `git log -- packages/plugin-litellm-backend` or the
 [GitHub tags](https://github.com/acarmisc/backstage-plugin-litellm-govai/tags).
 
+## 0.17.0
+
+### Breaking Changes
+
+- **Unblocking always needs `litellm.key.unblock`.** 0.16.x let an owner unblock
+  a key whose `metadata.blocked_by` was themselves, without the permission. That
+  record is writable by the owner (keys created before 0.16, or a stale value
+  left when an admin unblocks in the LiteLLM UI), so it could not tell "I blocked
+  it" from "an admin blocked it". It is no longer consulted: `POST
+  /keys/:id/unblock` requires the permission for every caller (ownership is still
+  checked), and `blocked_by` / `blocked_at` are kept for audit only. Grant
+  `litellm.key.unblock` to the roles that may lift blocks; without a grant, users
+  can still block their own keys but an administrator must unblock them. This
+  also makes the 0.16.0 "audit keys for a forged `blocked_by`" upgrade note moot.
+
 ## 0.16.1
 
 ### Patch Changes
@@ -73,8 +88,7 @@ package.**
   to follow the confirmation.
 - **Server-owned metadata is reserved.** `POST /keys/generate` rejects client
   `metadata` containing `blocked_by`, `blocked_at`, `created_*` or `updated_*`;
-  re-blocking an already-blocked key is a `409` and never rewrites `blocked_by`
-  (otherwise an owner could take over an admin's block and then unblock it).
+  re-blocking an already-blocked key is a `409` and never rewrites `blocked_by`.
 - **Keys always expire.** A generate request without `duration` now gets `30d`
   (or the first allowed duration) instead of a non-expiring key.
 - **Model allow-lists** follow LiteLLM's rules on the server too: the
@@ -83,17 +97,6 @@ package.**
 - **Error responses are sanitised.** Upstream `401`/`403` → `502`, upstream
   `5xx` and network failures (refused/reset/timeout) → generic `502`, upstream `4xx` messages are stripped of HTML
   and capped at 500 characters; unexpected errors return `Internal error`.
-
-### Upgrade notes
-
-- **Audit keys for a forged `metadata.blocked_by`.** Before 0.16.0 a client could
-  set `blocked_by` in `metadata` when creating a key, and an owner is allowed to
-  unblock a key whose `blocked_by` is themselves. New keys can no longer carry
-  it, but keys created on 0.15 or earlier may. Look for keys whose
-  `metadata.blocked_by` is set while `blocked` is false (LiteLLM UI or
-  `/key/list`) and clear it. Unblocking through this plugin now nulls the field;
-  unblocking in the LiteLLM admin UI does not, so an owner who once blocked a
-  key themselves keeps that record until it is cleared.
 
 ### Minor Changes
 

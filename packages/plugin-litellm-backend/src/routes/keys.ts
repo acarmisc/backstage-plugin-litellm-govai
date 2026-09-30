@@ -420,16 +420,15 @@ export function registerKeysRoutes(router: Router, ctx: RouterContext): void {
 
       const { tokenEntityRef, key } = await authorizeKeyAction(req, keyId);
 
-      // Check if the key can be unblocked:
-      // - Owner can unblock a self-blocked key (metadata.blocked_by === tokenEntityRef)
-      // - Otherwise require the unblock permission
-      const isOwnerUnblockingOwnBlock = key.metadata?.blocked_by === tokenEntityRef;
-
-      if (!isOwnerUnblockingOwnBlock) {
-        if (!(await assertPermission(req, litellmKeyUnblockPermission))) {
-          sendPermissionDenied(res, litellmKeyUnblockPermission);
-          return;
-        }
+      // Unblocking always needs the dedicated permission, on top of ownership.
+      // `metadata.blocked_by` is deliberately NOT trusted here: it lives in a
+      // record the owner can influence (older keys, or a stale value left after
+      // an admin unblocked in the LiteLLM UI), so "I blocked it myself" can't be
+      // told apart from "an admin blocked it". Grant `litellm.key.unblock` only
+      // to roles that may lift blocks; everyone else asks an administrator.
+      if (!(await assertPermission(req, litellmKeyUnblockPermission))) {
+        sendPermissionDenied(res, litellmKeyUnblockPermission);
+        return;
       }
 
       await client.unblockKey(keyId);

@@ -26,10 +26,11 @@ import { usePermission } from '@backstage/plugin-permission-react';
 import {
   litellmKeyManagePermission,
   litellmKeyRevokePermission,
+  litellmKeyUnblockPermission,
 } from '@acarmisc/backstage-plugin-litellm-common';
 import { useCopyToClipboard } from '../hooks';
 import { expiryStatus } from '../api';
-import { keyDisplayLabel, keyLast4, pruneCopy } from '../keyLabels';
+import { keyDisplayLabel, keyLast4, pruneCopy, blockButtonState } from '../keyLabels';
 import { fmtUsd, fmtLimits } from '../format';
 import { filterKeysByStatus, type KeyFilterType } from '../keyFilter';
 import { GenerateKeyButton } from './GenerateKeyButton';
@@ -178,11 +179,14 @@ export const KeysTable: FC<KeysTableProps> = ({
   // Permission checks
   const managePermission = usePermission({ permission: litellmKeyManagePermission });
   const revokePermission = usePermission({ permission: litellmKeyRevokePermission });
+  const unblockPermission = usePermission({ permission: litellmKeyUnblockPermission });
   const canManageKeys = !managePermission.loading && managePermission.allowed;
   const canRevokeKeys = !revokePermission.loading && revokePermission.allowed;
   // Only claim "no permission" after a real denial, not while still checking.
   const manageDenied = !managePermission.loading && !managePermission.allowed;
   const revokeDenied = !revokePermission.loading && !revokePermission.allowed;
+  const canUnblockKeys = !unblockPermission.loading && unblockPermission.allowed;
+  const unblockDenied = !unblockPermission.loading && !unblockPermission.allowed;
 
   // Block confirmation
   const [blockConfirmKey, setBlockConfirmKey] = useState<VirtualKey | null>(null);
@@ -339,6 +343,11 @@ export const KeysTable: FC<KeysTableProps> = ({
     return filteredKeys.map((key) => {
       const keyId = key.token ?? key.key;
       const keyModels = key.models ?? [];
+      const blockState = blockButtonState(
+        key.blocked,
+        { allowed: canManageKeys, denied: manageDenied },
+        { allowed: canUnblockKeys, denied: unblockDenied },
+      );
       return (
         <TableRow
           key={keyId}
@@ -438,19 +447,13 @@ export const KeysTable: FC<KeysTableProps> = ({
                   </IconButton>
                 </span>
               </Tooltip>
-              <Tooltip describeChild title={(() => {
-                if (manageDenied) return 'No permission to block keys';
-                return key.blocked ? 'Unblock key' : 'Block key — suspends without revoking';
-              })()} placement="top">
+              <Tooltip describeChild title={blockState.label} placement="top">
                 <span>
                   <IconButton
                     size="small"
                     onClick={() => handleToggleBlock(key)}
-                    disabled={blockSubmitting || !canManageKeys}
-                    aria-label={(() => {
-                      if (manageDenied) return 'No permission to block keys';
-                      return key.blocked ? 'Unblock key' : 'Block key — suspends without revoking';
-                    })()}
+                    disabled={blockSubmitting || blockState.disabled}
+                    aria-label={blockState.label}
                     sx={quietIconButtonSx('warning')}
                   >
                     {keyBlockIcon(blockSubmitting, key.blocked)}

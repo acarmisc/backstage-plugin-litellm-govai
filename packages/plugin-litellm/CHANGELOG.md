@@ -10,6 +10,17 @@ commit/PR that bumps the version in `package.json`. Format follows the
 Earlier history: `git log -- packages/plugin-litellm` or the
  [GitHub tags](https://github.com/acarmisc/backstage-plugin-litellm-govai/tags).
 
+## 0.30.0
+
+Requires `@acarmisc/backstage-plugin-litellm-backend` `0.17.0`.
+
+### Breaking Changes
+
+- The row **Unblock** button is gated by the `litellm.key.unblock` permission
+  (previously `litellm.key.manage`) and shows "No permission to unblock keys"
+  when it isn't granted, matching the backend, which now requires that
+  permission for every unblock.
+
 ## 0.29.0
 
 Requires `@acarmisc/backstage-plugin-litellm-backend` `0.16.0` and
