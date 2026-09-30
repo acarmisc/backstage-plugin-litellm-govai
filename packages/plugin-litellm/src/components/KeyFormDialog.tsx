@@ -160,10 +160,24 @@ export const KeyFormDialog: FC<KeyFormDialogProps> = ({
       setCloseWithoutCopyConfirm(false);
       setTouched({});
       setSubmitAttempted(false);
-      // Fetch config to check key action capabilities
-      onGetConfig().then(setConfig).catch(() => setConfig(null));
     }
-  }, [open, isCreate, keyToEdit, username, keyGenerationSettings?.allowUnlimitedBudget, onGetConfig]);
+  }, [open, isCreate, keyToEdit, username, keyGenerationSettings?.allowUnlimitedBudget]);
+
+  // Fetch config to check key action capabilities. Kept separate from the
+  // reset effect above and reading `onGetConfig` through a ref: parents often
+  // pass an inline callback, and depending on its identity would re-run the
+  // reset on every parent render, wiping a freshly generated key (or the
+  // user's in-progress input).
+  const onGetConfigRef = useRef(onGetConfig);
+  onGetConfigRef.current = onGetConfig;
+  useEffect(() => {
+    if (!open) return undefined;
+    let cancelled = false;
+    onGetConfigRef.current()
+      .then(c => { if (!cancelled) setConfig(c); })
+      .catch(() => { if (!cancelled) setConfig(null); });
+    return () => { cancelled = true; };
+  }, [open]);
 
   const allowUnlimitedBudget = keyGenerationSettings?.allowUnlimitedBudget ?? false;
   const teamRequired = keyGenerationSettings?.teamRequired ?? true;
