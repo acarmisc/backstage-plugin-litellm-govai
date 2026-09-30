@@ -127,6 +127,14 @@ export function registerBridgeRoutes(router: Router, ctx: RouterContext, bridgeO
         }
         const input: GenerateKeyInput = parseResult.data;
 
+        // CLI clients don't know the budget policy. When unlimited budgets are
+        // not allowed and the caller sent no max_budget, fall back to the
+        // provisioning default instead of rejecting the mint. An explicit
+        // value (including null) is left alone and validated as usual.
+        if (!allowUnlimitedBudget && input.max_budget === undefined) {
+          input.max_budget = provisioningDefaults.maxBudget;
+        }
+
         // ── Resolve user identity from verified claims ───────────────────────
         const userId = resolveBridgeUserId(claims, bridgeIdentity);
 

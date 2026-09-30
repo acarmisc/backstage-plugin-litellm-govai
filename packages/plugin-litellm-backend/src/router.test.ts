@@ -4499,6 +4499,50 @@ describe('bridge routes: identity matches the UI', () => {
     }
   });
 
+  test('POST /bridge/keys without max_budget falls back to the provisioning default when unlimited is not allowed', async () => {
+    const h = await startHarness({
+      config: bridgeConfig({
+        'litellm.bridge.allowedEmailDomains': ['abstract.it'],
+        'litellm.keyGeneration.allowUnlimitedBudget': false,
+        'litellm.provisioning.defaults.maxBudget': 25,
+      }),
+      tokenVerifier: verifier,
+      client: mockClient({ userInfo: { user_id: 'degiorgis', teams: [] } }),
+    });
+    try {
+      const { status } = await req(h.baseUrl, 'POST', '/bridge/keys', {
+        ...bearer, body: { alias: 'cli' },
+      });
+      assert.strictEqual(status, 200);
+      const sent = h.client.calls.generateKey[h.client.calls.generateKey.length - 1];
+      assert.strictEqual(sent.max_budget, 25);
+    } finally {
+      h.server.close();
+    }
+  });
+
+  test('POST /bridge/keys keeps an explicit max_budget and still rejects explicit null when unlimited is not allowed', async () => {
+    const h = await startHarness({
+      config: bridgeConfig({
+        'litellm.bridge.allowedEmailDomains': ['abstract.it'],
+        'litellm.keyGeneration.allowUnlimitedBudget': false,
+        'litellm.provisioning.defaults.maxBudget': 25,
+      }),
+      tokenVerifier: verifier,
+      client: mockClient({ userInfo: { user_id: 'degiorgis', teams: [] } }),
+    });
+    try {
+      const ok = await req(h.baseUrl, 'POST', '/bridge/keys', { ...bearer, body: { alias: 'cli', max_budget: 5 } });
+      assert.strictEqual(ok.status, 200);
+      const sent = h.client.calls.generateKey[h.client.calls.generateKey.length - 1];
+      assert.strictEqual(sent.max_budget, 5);
+      const unlimited = await req(h.baseUrl, 'POST', '/bridge/keys', { ...bearer, body: { alias: 'cli2', max_budget: null } });
+      assert.strictEqual(unlimited.status, 400);
+    } finally {
+      h.server.close();
+    }
+  });
+
   test('userIdDomain, when set, is applied like in the UI', async () => {
     const h = await startHarness({
       config: bridgeConfig({ 'litellm.userIdDomain': 'abstract.it' }),

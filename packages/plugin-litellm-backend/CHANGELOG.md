@@ -9,6 +9,16 @@ commit/PR that bumps the version in `package.json`. Format follows the
 Earlier history: `git log -- packages/plugin-litellm-backend` or the
 [GitHub tags](https://github.com/acarmisc/backstage-plugin-litellm-govai/tags).
 
+## 0.17.2
+
+### Patch Changes
+
+- **fix(bridge): default `max_budget` for CLI mints.** `POST /bridge/keys` now
+  falls back to `litellm.provisioning.defaults.maxBudget` when the caller sends
+  no `max_budget` and `allowUnlimitedBudget` is false, instead of answering 400
+  `max_budget is required`. CLI clients such as Abby don't know the budget
+  policy. An explicit `max_budget` (including `null`) is unchanged.
+
 ## 0.17.1
 
 ### Patch Changes
