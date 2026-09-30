@@ -244,9 +244,7 @@ export async function createKeyForUser(
   const durations = ctx.keyValidationConfig.allowedDurations;
   const defaultDuration =
     durations.length === 0 || durations.includes('30d') ? '30d' : durations[0];
-  {
-    upstreamRequest.duration = input.duration ?? defaultDuration;
-  }
+  upstreamRequest.duration = input.duration ?? defaultDuration;
   if (input.max_budget !== undefined) {
     // max_budget from input can be null (unlimited) or a number
     upstreamRequest.max_budget = input.max_budget ?? undefined;
