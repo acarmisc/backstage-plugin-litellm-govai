@@ -50,11 +50,11 @@ Browse every model the proxy exposes, with per-model input/output cost and max i
 
 ![Models tab](docs/screenshots/models-tab.png)
 
-### Compact "Create Key" card
+### Generate Key button
 
-A smaller variant of the home widget for surfaces that only need a one-click shortcut into the key-mint flow.
+Every "create a key" call-to-action in the plugin — the page header, the empty state, the keys table and the homepage budget card — is the same shared `GenerateKeyButton`, so the copy, icon and styling stay identical. It is exported for your own layouts: pass `onClick` to run your own handler, or `to` to deep-link (for example `/litellm?generate=1`, which opens the generate-key dialog).
 
-![Create Key card](docs/screenshots/key-card.png)
+> The screenshots in this section predate the latest UI polish and are being refreshed; the behaviour described in the text is current.
 
 ### Budget Policy card
 
@@ -102,8 +102,8 @@ litellm:
 
   # Optional — publicly reachable LiteLLM proxy URL, used to build
   # ready-to-paste curl / OpenAI-SDK snippets in the "Key Generated" dialog.
-  # Falls back to baseUrl (the internal URL) when omitted.
-  # @visibility backend
+  # Served to the frontend via GET /config. When omitted the UI shows
+  # "Endpoint not configured" — the internal baseUrl is never exposed.
   # publicBaseUrl: https://llm-gw.example.com
 
   # Required — LiteLLM master key for admin operations.
@@ -247,6 +247,15 @@ litellm:
 | `litellm.provisioning.roles[].metadata` | object | no | — | Merged over default metadata |
 | `litellm.keyGeneration.allowUnlimitedBudget` | boolean | no | `false` | Show the "Unlimited budget" checkbox in the Generate New Key form |
 | `litellm.keyGeneration.teamRequired` | boolean | no | `true` | Require a team to be selected before a key can be generated |
+| `litellm.keys.maxBudget` | number | no | `100` | Server-side ceiling (USD) for a key's `max_budget` on generate/update |
+| `litellm.keys.maxTpm` | number | no | `100000` | Server-side ceiling for a key's tokens-per-minute limit |
+| `litellm.keys.maxRpm` | number | no | `1000` | Server-side ceiling for a key's requests-per-minute limit |
+| `litellm.keys.allowedDurations` | string[] | no | `['1d','7d','30d','90d']` | Durations a key may be generated with (an empty list allows any `<n><s/m/h/d/w/y>`) |
+| `litellm.keys.allowOwnerResetSpend` | boolean | no | `false` | Let key owners reset their own key's spend (still needs the `litellm.key.resetSpend` permission). Fails closed even under an allow-all policy |
+| `litellm.cache.userInfoTtlSeconds` | number | no | `10` | TTL of the per-user LiteLLM profile cache (`0` disables) |
+| `litellm.supportContact` | string | no | — | Who users should contact when their account isn't set up (shown in the UI) |
+| `litellm.opencode.enabled` | boolean | no | `false` | Mount `/opencode/connect` (see [Security model](#security-model)) |
+| `litellm.opencode.keyDuration` / `maxBudget` / `requireTeam` / `metadata` | — | no | `30d` / `50` / `false` / `{}` | Defaults for keys created through the OpenCode connect flow |
 | `litellm.display.hideTeamBudgetForMembers` | boolean | no | `false` | Hide team budget dollars from members (percent + status still shown, enforced server-side) |
 | `litellm.display.hideTeamBudgetForManagers` | boolean | no | `false` | Hide team budget dollars even from managers (budget field becomes write-only) |
 | `litellm.teamAdmin.group` | string | no† | — | Backstage group whose members may manage teams. Setting this + `permission.enabled` enables the feature |
@@ -273,7 +282,7 @@ backend.add(import('@acarmisc/backstage-plugin-litellm-backend'));
 
 ### Frontend Registration
 
-The plugin uses the Backstage New Frontend System. Add the plugin package as an extension in `packages/app/src/App.tsx` or equivalent:
+The plugin supports the Backstage **New Frontend System** and the **New Backend System** only (there is no legacy `createPlugin` frontend export or legacy home `createCardExtension` support; the backend's `createRouter` remains exported for tests and custom wiring). Add the plugin package as an extension in `packages/app/src/App.tsx` or equivalent:
 
 ```typescript
 import { litellmPlugin, LiteLLMPage } from '@acarmisc/backstage-plugin-litellm';
@@ -288,7 +297,7 @@ You can also register it as a plugin extension using the New Frontend System.
 
 `LiteLLMHomeWidget` is a compact card you can drop onto any Backstage homepage. It shows **the signed-in user's** data — identity is resolved server-side from the Backstage Bearer token, so no `userId` prop is required and no additional backend endpoint is needed.
 
-**KPIs displayed:** USD spent · Tokens in · Tokens out · Key count, plus a daily-spend sparkline (hidden when there is no daily data). A small period selector (`Today` / `7d` / `30d`) lives in the card header.
+**What it shows:** one summary line — `$129.90 spent · 412M in · 1.7M out` — a daily-spend sparkline with a tooltip and a date-range caption (hidden when there is no daily data), and an `Open LiteLLM →` link resolved through the plugin's route ref. A period selector (`Today` / `7d` / `30d`) lives in the card header. While loading it shows skeletons in the final layout; if the account isn't set up it says so quietly instead of showing an error.
 
 ```tsx
 import { LiteLLMHomeWidget } from '@acarmisc/backstage-plugin-litellm';
@@ -303,8 +312,11 @@ import { LiteLLMHomeWidget } from '@acarmisc/backstage-plugin-litellm';
 |------|------|---------|-------------|
 | `defaultPeriod` | `'today' \| '7d' \| '30d'` | `'7d'` | Period shown on first render |
 | `title` | `string` | `'LiteLLM Usage'` | Card title override |
+| `bare` | `boolean` | `false` | Render without the card chrome and title, for hosts that already provide a titled card |
 
 The widget requires the same backend setup as the full `LiteLLMPage` (backend plugin configured and the user provisioned in LiteLLM).
+
+> **Home page extensions.** Registering the widgets as `HomePageWidgetBlueprint` extensions (for `@backstage/plugin-home`'s customizable grid) is not shipped yet: `@backstage/plugin-home-react` currently pulls a second `@backstage/frontend-plugin-api` next to the plugin's, so it needs a Backstage dependency upgrade first. Until then, embed the exported components (use `bare` inside a card you already render).
 
 ### Budget Policy Widget
 
@@ -326,7 +338,7 @@ import { LiteLLMBudgetWidget } from '@acarmisc/backstage-plugin-litellm';
 // Compressed, for a secondary column — folds under a one-line summary and
 // shows only the limits you actually have, with a "create key" button
 // pinned to the card:
-<LiteLLMBudgetWidget compact collapsible action={<CreateKeyButton />} />
+<LiteLLMBudgetWidget compact collapsible action={<GenerateKeyButton size="small" onClick={openMyDialog} />} />
 ```
 
 `compact` drops the numbered rail (but keeps the one-line `Order: key → personal → team → global` note), leaving a `KEY` / `USER` / `TEAM`-tagged meter list. `collapsible` folds it under a two-line header — the title, then a tone dot and a summary naming the closest limit's level (`3 limits · closest: team 95%`). `action` renders any node below a divider at the card bottom, kept visible when collapsed. The same widget (`compact collapsible`) also appears beside the usage charts on the `/litellm` Overview tab. The "+N more budgeted keys" note links to `/litellm?tab=keys` — `LiteLLMPage` reads `?tab=` to open a specific tab.
@@ -346,20 +358,22 @@ Like the home widget it needs the backend plugin configured and the user provisi
 
 ### Budget Gauges (condensed homepage card)
 
-When the full `LiteLLMBudgetWidget` takes too much vertical space — e.g. a homepage column beside other cards — `LiteLLMBudgetGauges` is the condensed form: **one ring gauge per enforcement level**, `Key` · `User` · `Team`, **plus a month-to-date daily token-usage mini-chart**, in a fixed four-column row. Each ring shows the limit at that level **nearest its cap** (percent in the centre), with the limit's name, spend-vs-cap, and reset window under it. When a level holds several limits, the ring is the closest to its cap and a `+N more` link counts the rest through to the Keys tab; a level with no cap renders an empty ring with a short note, so the card keeps a stable shape. The chart stacks daily input/output tokens from the 1st of the current month through today (frozen period — no selector) with the MTD token total underneath.
+When the full `LiteLLMBudgetWidget` takes too much vertical space — e.g. a homepage column beside other cards — `LiteLLMBudgetGauges` is the condensed form: **one ring gauge per enforcement level**, `Key` · `User` · `Team`, **plus a month-to-date daily spend mini-chart**, in a responsive row (rings shrink below the `sm` breakpoint). Each ring shows the limit at that level **nearest its cap** (percent in the centre), with the limit's name, spend-vs-cap, and reset window under it. When a level holds several limits, the ring is the closest to its cap and a `+N more` link counts the rest through to the Keys tab; a level with no cap renders an empty ring with a short note, so the card keeps a stable shape. The chart plots daily spend from the 1st of the current month through today (frozen period — no selector), with a dashed line at your cap when you have one and a `Sep 1 – Sep 29`-style caption underneath. Rings and meters expose `role="meter"` with a descriptive label, and show `Over cap` past 100%.
 
 **Composable CTAs.** The bar under the card is assembled from a `ctas` list, so each host picks the actions it wants, in the order it wants:
 
 | CTA kind | Default label | Behaviour |
 |----------|---------------|-----------|
 | `new-key` | `Generate New Key` | Shared `GenerateKeyButton` — identical copy, icon and styling to the plugin page. Calls `onCreateKey()` if supplied, else deep-links to `/litellm?generate=1`, which opens the generate-key dialog (`LiteLLMPage` honours the param) |
-| `module` | `Open module` | Links to the LiteLLM page (`moduleHref`) |
+| `module` | `Open LiteLLM` | Links to the LiteLLM page (resolved from the plugin route ref, or `moduleHref`); hidden if the route isn't mounted |
 | `all-limits` | `All limits` | Expands an in-place list of every limit you have (bounded height, scrolls); auto-hidden when you have no limits |
 
 ```tsx
 import { LiteLLMBudgetGauges } from '@acarmisc/backstage-plugin-litellm';
 
-// Defaults to ['new-key', 'module', 'all-limits']:
+// Defaults to ['module', 'all-limits']; `new-key` is added automatically
+// (first) for users who have no keys yet, and never while loading or when the
+// account isn't provisioned:
 <LiteLLMBudgetGauges />
 
 // Just jump into the module:
@@ -443,8 +457,10 @@ wiring these up only restricts behavior once you opt in.
 | Permission | Guards | Notes |
 |---|---|---|
 | `litellm.key.create` | `POST /keys/generate` | |
-| `litellm.key.revoke` | `DELETE /keys/:keyId` | |
-| `litellm.key.manage` | `POST /keys/:keyId/update`, `/block`, `/unblock`, `/reset_spend` | |
+| `litellm.key.revoke` | `DELETE /keys/:keyId`, `POST /keys/prune-expired` | |
+| `litellm.key.manage` | `POST /keys/:keyId/update`, `/block` | |
+| `litellm.key.resetSpend` | `POST /keys/:keyId/reset_spend` | Also needs `litellm.keys.allowOwnerResetSpend: true` — the flag is checked first and fails closed |
+| `litellm.key.unblock` | `POST /keys/:keyId/unblock` | Owners can unblock a key **they blocked themselves** without it; unblocking a key blocked by someone else (e.g. a LiteLLM admin) requires this permission |
 | `litellm.audit.read` | `GET /audit` | Additive to the existing `litellm.audit.group` check — both must pass |
 | `litellm.team.create` | `POST /teams` | Team management — see [Team Management](#team-management-litellm-team-admins) |
 | `litellm.team.manage` | `PATCH /teams/:id`, `GET /teams/managed` | |
@@ -588,6 +604,64 @@ litellm:
     hideTeamBudgetForManagers: false
 ```
 
+## Security model
+
+Everything the UI enforces is also enforced by the backend — the server is the
+source of truth.
+
+**Who can call what**
+
+- User routes (`/user/info`, `/keys*`, `/teams`, `/usage`, …) require a verified
+  **Backstage user** credential. Service and external principals and anonymous
+  callers get `401`. The LiteLLM identity is derived only from that credential;
+  a `user_id` in the query string or body is never honoured.
+- Every key mutation additionally checks that the caller owns the key.
+
+**Key creation and editing** (`POST /keys/generate`, `POST /keys/:id/update`)
+
+- Requests are parsed with a **strict** schema — unknown fields are rejected with
+  `400` (for example `team_id`, `spend`, `blocked` or `user_id` on an update). The
+  upstream LiteLLM request is built explicitly from the parsed fields, never by
+  spreading the request body.
+- `litellm.keys.maxBudget` / `maxTpm` / `maxRpm` / `allowedDurations` cap what a
+  user can ask for; `litellm.keyGeneration.allowUnlimitedBudget` and `teamRequired`
+  are enforced server-side; the `team_id` must be one of the caller's teams and
+  the requested models must be within what the team (or, without a team, the
+  user) may use.
+- Server-owned metadata (`created_by_backstage_user`, `created_via`, …) always
+  overrides anything the client sends.
+
+**Sensitive actions**
+
+- Resetting a key's spend needs `litellm.keys.allowOwnerResetSpend: true` **and**
+  the `litellm.key.resetSpend` permission.
+- Blocking records `metadata.blocked_by` / `blocked_at`. An owner may unblock only
+  a key they blocked themselves; anything else needs `litellm.key.unblock`.
+- `GET /teams/:teamId/usage` requires membership of the team (or team-admin
+  rights) and answers `404` otherwise, so team existence isn't leaked.
+
+**Errors** never pass raw upstream text through: LiteLLM `401`/`403` become `502`
+(so an upstream auth failure can't log the Backstage session out), upstream
+`5xx`/network failures become a generic `502`, and `4xx` messages are stripped of
+HTML and capped at 500 characters. `GET /config` exposes `publicBaseUrl` only,
+never the internal `baseUrl`.
+
+**OpenCode connect** (`litellm.opencode.enabled`): `GET /opencode/connect` only
+renders a confirmation page. The state change happens on `POST`, which creates a
+key or **rotates** the existing one via LiteLLM's key regeneration and redirects
+to the local `http://localhost:<port>/callback` with the new plaintext key —
+never a stored hash. Note: the `POST` is not CSRF-token protected beyond the
+localhost-only redirect target; the worst a forged request can do is rotate the
+signed-in user's OpenCode key.
+
+**Group membership** used for team administration and provisioning roles is
+*direct* membership only — nested groups are not resolved.
+`metadata.owning_group` on LiteLLM teams is trusted and editable by LiteLLM
+admins, so guard the LiteLLM admin interface accordingly.
+
+**Claude Code snippet**: the generated snippet no longer embeds a key in a helper
+script; it reads the key from the OS keychain through `apiKeyHelper`.
+
 ## Development
 
 ### Build
@@ -601,9 +675,21 @@ yarn workspace @acarmisc/backstage-plugin-litellm-backend build
 
 ### Testing
 
+The repo is an **npm workspace** with a single root `package-lock.json`. From the root:
+
 ```bash
-yarn workspace @acarmisc/backstage-plugin-litellm test
+npm ci --legacy-peer-deps   # Backstage's MUI4 theme has a react@^17 peer dep
+npm run build               # builds the common package first, then backend + frontend
+npm test                    # common, backend and frontend suites (node --test)
+npm run lint
 ```
+
+Tests use Node's built-in runner (`node --test`). Frontend component tests run
+against jsdom with Testing Library; `packages/plugin-litellm/src/testing/` holds
+the DOM bootstrap and a MUI test theme, and `test-support/` holds the small Node
+loader hooks that make Backstage's ESM builds importable outside a bundler.
+`usePermission` caches decisions in a process-wide SWR cache, so tests that need
+a different permission decision live in their own file (`*.denied.test.tsx`).
 
 ### API Reports
 
@@ -638,11 +724,12 @@ instead of maintaining this table by hand.
 | Endpoint | Method | Purpose |
 |----------|--------|---------|
 | `/health` | GET | Health check |
-| `/config` | GET | Public LiteLLM proxy base URL (for snippet generation) |
+| `/config` | GET | Public proxy URL (`null` when `publicBaseUrl` isn't set), key-generation and team-management flags, support contact |
 | `/openapi.json` | GET | OpenAPI 3.1 contract for this backend surface |
 | `/user/info` | GET | Get current user info and quotas |
 | `/keys` | GET | List user's virtual keys |
 | `/keys/generate` | POST | Generate a new virtual key |
+| `/keys/prune-expired` | POST | Delete the caller's expired keys; returns `{ pruned, failed, failures? }` (`litellm.key.revoke`) |
 | `/keys/:keyId` | DELETE | Revoke/delete a virtual key (caller must own it) |
 | `/keys/:keyId/update` | POST | Update alias / models / budget / limits (caller must own it) |
 | `/keys/:keyId/block` | POST | Suspend a key without revoking it (caller must own it) |
@@ -662,6 +749,7 @@ instead of maintaining this table by hand.
 | `/teams/:teamId/usage` | GET | Usage metrics for a team (`start_date`, `end_date` required) |
 | `/usage` | GET | Get usage metrics and analytics for the current user |
 | `/audit` | GET | Audit logs (gated by `litellm.audit.group` membership) |
+| `/opencode/connect` | GET / POST | OpenCode SSO connect: GET shows a confirmation page (no state change); POST creates or rotates the key and redirects to the local callback (only when `litellm.opencode.enabled`) |
 | `/provisioning/preview` | GET | Resolve which role a Backstage group maps to (dry-run, audit-group-gated) |
 
 The UI endpoints above authenticate via the Backstage identity system. The
@@ -686,15 +774,26 @@ Request flow for `/api/litellm/bridge/*`:
 
 1. CLI sends `Authorization: Bearer <keycloak-access-token>`.
 2. The bridge verifies the JWT against the realm JWKS (`createRemoteJWKSet`),
-   checking the issuer and that the token was issued for the configured
-   `clientId` (via `azp`, falling back to `aud`). Failure → `401`.
-3. The caller is resolved to a LiteLLM `user_id` (email → preferred_username →
-   sub) and ensured to exist — provisioned from the JWT claims if
-   `litellm.provisioning.enabled`, otherwise `404` (log in to Backstage once
+   checking the issuer, that the token was issued for the configured
+   `clientId` (via `azp`, falling back to `aud`), and that it is an **access
+   token** (Keycloak's `typ` claim must be absent or `Bearer` — ID tokens are
+   rejected). Failure → `401`; no verifier error details are returned to the
+   caller (they are logged server-side).
+3. The caller is resolved to a LiteLLM `user_id` from the token's **verified
+   email** (`email_verified: true`) whose domain equals `litellm.userIdDomain`.
+   `litellm.userIdDomain` is therefore **required** for the bridge; an
+   unverified email, a foreign domain or a missing email → `403`. The bridge
+   never derives an identity by stripping a domain off `preferred_username`.
+   The user is then ensured to exist — provisioned from the JWT claims if
+   `litellm.provisioning.enabled` (base defaults only; group role overrides
+   need the Backstage catalog), otherwise `404` (log in to Backstage once
    first).
-4. Keys are listed/minted via the existing master-key-authed client. Minted
-   keys are stamped with ownership metadata (`created_via: abby-cli`,
-   `created_by`, `created_at_iso`).
+4. Keys are minted through the **same code path as the UI**: strict request
+   schema, the `litellm.keys.*` ceilings, `allowUnlimitedBudget` /
+   `teamRequired`, team-membership and allowed-model checks. Minted keys are
+   stamped with ownership metadata (`created_via: abby-cli`, `created_by`,
+   `created_at_iso`). The bridge does not evaluate Backstage permissions (it
+   has no Backstage credentials to authorize with).
 
 Unlike the UI routes, bridge routes do **not** call Backstage's
 `auth.authenticate` — they verify the raw Keycloak JWT themselves.
