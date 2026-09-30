@@ -107,11 +107,10 @@ export class LiteLlmApi implements LiteLlmApiInterface {
         typeof body === 'object' && body && typeof (body as any).details === 'string'
           ? (body as any).details
           : undefined;
-      const message = errorText
-        ? details
-          ? `${errorText}: ${details}`
-          : errorText
-        : `${response.status} ${response.statusText}`;
+      let message = `${response.status} ${response.statusText}`;
+      if (errorText) {
+        message = details ? `${errorText}: ${details}` : errorText;
+      }
       throw new ApiError(message, response.status, body);
     }
   }
