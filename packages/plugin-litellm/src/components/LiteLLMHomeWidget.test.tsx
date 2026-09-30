@@ -1,4 +1,5 @@
 import { fakeAlertApi } from '../testing/setupDom';
+import { routeResolutionApiRef } from '@backstage/frontend-plugin-api';
 import { describe, test, afterEach } from 'node:test';
 import assert from 'node:assert';
 import React from 'react';
@@ -13,11 +14,6 @@ import { ApiError } from '../api';
 import { UserInfo, VirtualKey, TeamInfo } from '../types';
 
 // Mock the route-resolution API for useRouteRef
-const coreRouteResolutionRef = createApiRef<any>({ id: 'core.route-resolution' });
-const mockRouteResolution = {
-  resolve: () => '/litellm',
-};
-
 afterEach(() => cleanup());
 
 describe('LiteLLMHomeWidget', () => {
@@ -105,9 +101,9 @@ describe('LiteLLMHomeWidget', () => {
         <TestApiProvider
           apis={[
             [alertApiRef, fakeAlertApi],
+            [routeResolutionApiRef, { resolve: () => () => '/litellm' }],
           [permissionApiRef, mockApis.permission()],
             [liteLlmApiRef, fakeApi],
-            [coreRouteResolutionRef, mockRouteResolution],
           ]}
         >
           <LiteLLMHomeWidget {...defaultProps} />

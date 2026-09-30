@@ -37,6 +37,20 @@ define('navigator', dom.window.navigator);
 define('getComputedStyle', dom.window.getComputedStyle.bind(dom.window));
 define('requestAnimationFrame', (cb: FrameRequestCallback) => setTimeout(() => cb(Date.now()), 0));
 define('cancelAnimationFrame', (id: number) => clearTimeout(id));
+// EventTarget methods live on window's prototype, so the own-property copy
+// above misses them.
+for (const fn of ['addEventListener', 'removeEventListener', 'dispatchEvent'] as const) {
+  define(fn, dom.window[fn].bind(dom.window));
+}
+// recharts' ResponsiveContainer needs ResizeObserver, which jsdom lacks.
+define(
+  'ResizeObserver',
+  class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  },
+);
 define('IS_REACT_ACT_ENVIRONMENT', true);
 
 export { dom };

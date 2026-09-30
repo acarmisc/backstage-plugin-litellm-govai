@@ -106,3 +106,17 @@ describe('isUnprovisionedError', () => {
     assert.strictEqual(isUnprovisionedError(error), false);
   });
 });
+
+describe('isUnprovisionedError (message forms surfaced by useLiteLLMProfile)', () => {
+  test('recognises the bare backend message string', () => {
+    assert.strictEqual(isUnprovisionedError('User not found in LiteLLM'), true);
+  });
+  test('recognises a plain Error carrying the backend message', () => {
+    assert.strictEqual(isUnprovisionedError(new Error('User not found in LiteLLM')), true);
+  });
+  test('does not match other strings', () => {
+    assert.strictEqual(isUnprovisionedError('Something else'), false);
+    assert.strictEqual(isUnprovisionedError(null), false);
+    assert.strictEqual(isUnprovisionedError(undefined), false);
+  });
+});

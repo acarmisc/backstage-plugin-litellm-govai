@@ -34,7 +34,7 @@
   "scripts": {
     "build": "node build.js && tsc -p tsconfig.json",
     "lint": "eslint src dev --ext .ts,.tsx",
-    "test": "tsc -p tsconfig.test.json && node --import ./test-support/register.mjs --test \"dist-test/**/*.test.js\"",
+    "test": "tsc -p tsconfig.test.json && node --import ./test-support/register.mjs --test --test-timeout=30000 \"dist-test/**/*.test.js\"",
     "api-report": "npm run build && api-extractor run --local --verbose",
     "prepack": "npm run build",
     "postpack": ""

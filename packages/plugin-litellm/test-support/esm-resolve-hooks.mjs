@@ -55,5 +55,30 @@ export async function load(url, context, nextLoad) {
   if (/\.(svg|png|jpe?g|gif|webp|css)(\?.*)?$/.test(url)) {
     return { format: 'module', source: 'export default "";', shortCircuit: true };
   }
-  return nextLoad(url, context);
+  const loaded = await nextLoad(url, context);
+  // Bundlers unwrap `__esModule` CommonJS default exports for ESM importers;
+  // Node hands back the whole `exports` object instead (an object where a
+  // React component was expected). Emulate the bundler interop for CommonJS
+  // modules in node_modules that opt in with `__esModule`.
+  if (loaded.format === 'commonjs' && url.startsWith('file:') && url.includes('/node_modules/')) {
+    try {
+      const path = fileURLToPath(url);
+      const mod = createRequire(path)(path);
+      if (mod && mod.__esModule && 'default' in mod) {
+        const names = Object.keys(mod).filter(
+          k => k !== 'default' && k !== '__esModule' && /^[A-Za-z_$][\w$]*$/.test(k),
+        );
+        const source = [
+          "import { createRequire } from 'node:module';",
+          `const __m = createRequire(${JSON.stringify(path)})(${JSON.stringify(path)});`,
+          'export default __m.default;',
+          ...names.map(n => `export const ${n} = __m.${n};`),
+        ].join('\n');
+        return { format: 'module', source, shortCircuit: true };
+      }
+    } catch {
+      // fall through to the default behaviour
+    }
+  }
+  return loaded;
 }

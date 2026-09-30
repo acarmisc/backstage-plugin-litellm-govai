@@ -2,7 +2,7 @@ import { fakeAlertApi } from '../testing/setupDom';
 import { describe, test, afterEach } from 'node:test';
 import assert from 'node:assert';
 import React from 'react';
-import { render, cleanup, screen, waitFor } from '@testing-library/react';
+import { render, cleanup, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { TestApiProvider, mockApis } from '@backstage/test-utils';
@@ -13,167 +13,132 @@ import { VirtualKey } from '../types';
 
 afterEach(() => cleanup());
 
+const mockKey: VirtualKey = {
+  key: 'sk-...2345',
+  token: 'hash-test-12345',
+  key_alias: 'test-alias',
+  created_at: '2026-09-01T00:00:00Z',
+  expires_at: '2026-12-01T00:00:00Z',
+  spend: 10,
+  max_budget: 100,
+  tpm_limit: 10000,
+  rpm_limit: 100,
+  models: ['gpt-4'],
+  blocked: false,
+  team_id: 'team-1',
+};
+
+const mockBlockedKey: VirtualKey = {
+  ...mockKey,
+  key: 'sk-...9999',
+  token: 'hash-blocked-99999',
+  key_alias: 'blocked-alias',
+  blocked: true,
+};
+
+type Props = React.ComponentProps<typeof KeysTable>;
+
+const renderTable = (
+  overrides: Partial<Props> = {},
+  permission: 'ALLOW' | 'DENY' = 'ALLOW',
+) => {
+  const props: Props = {
+    keys: [],
+    loading: false,
+    onGenerateKeyClick: () => {},
+    onEditKey: () => {},
+    onBlockKey: async () => {},
+    onUnblockKey: async () => {},
+    onDeleteKey: async () => {},
+    onPruneExpiredKeys: async () => ({ pruned: 0, failed: 0 }),
+    ...overrides,
+  };
+  return render(
+    <MemoryRouter>
+      <TestApiProvider
+        apis={[
+          [alertApiRef, fakeAlertApi],
+          [permissionApiRef, mockApis.permission({ authorize: permission })],
+        ]}
+      >
+        <KeysTable {...props} />
+      </TestApiProvider>
+    </MemoryRouter>,
+  );
+};
+
+// `queryByRole` recomputes styles for every node and is pathologically slow on
+// MUI's DOM in jsdom, so check for an open dialog directly.
+const dialogIsOpen = () => document.querySelector('[role="dialog"]') !== null;
+
+const dialog = async () => within(await screen.findByRole('dialog'));
+
 describe('KeysTable', () => {
-  const mockKey: VirtualKey = {
-    key: 'sk-test-key-12345',
-    token: 'sk-test-key-12345',
-    key_alias: 'test-alias',
-    created_at: '2026-09-01T00:00:00Z',
-    expires_at: '2026-12-01T00:00:00Z',
-    spend: 10,
-    max_budget: 100,
-    tpm_limit: 10000,
-    rpm_limit: 100,
-    models: ['gpt-4'],
-    blocked: false,
-    team_id: 'team-1',
-  };
-
-  const mockBlockedKey: VirtualKey = {
-    ...mockKey,
-    key: 'sk-blocked-key-99999',
-    token: 'sk-blocked-key-99999',
-    key_alias: 'blocked-alias',
-    blocked: true,
-  };
-
-  const renderTable = (overrides: Partial<React.ComponentProps<typeof KeysTable>> = {}) => {
-    const defaultProps: React.ComponentProps<typeof KeysTable> = {
-      keys: [],
-      loading: false,
-      onGenerateKeyClick: () => {},
-      onEditKey: () => {},
-      onBlockKey: async () => {},
-      onUnblockKey: async () => {},
-      onDeleteKey: async () => {},
-      onPruneExpiredKeys: async () => ({ pruned: 0 }),
-      ...overrides,
-    };
-
-    return render(
-      <MemoryRouter>
-        <TestApiProvider
-          apis={[
-            [alertApiRef, fakeAlertApi],
-          [permissionApiRef, mockApis.permission()],
-          ]}
-        >
-          <KeysTable {...defaultProps} />
-        </TestApiProvider>
-      </MemoryRouter>,
-    );
-  };
-
-  test('renders the table with keys', () => {
-    renderTable({ keys: [mockKey] });
+  test('renders one row per key with the alias', () => {
+    renderTable({ keys: [mockKey, mockBlockedKey] });
     assert.ok(screen.getByText('test-alias'));
-    // "All models" might be split across multiple elements, so check for component presence via role
-    assert.ok(screen.getByRole('table'));
+    assert.ok(screen.getByText('blocked-alias'));
   });
 
-  test('Block button opens confirmation dialog with alias and warning', async () => {
-    const onBlockKey = async () => {};
-    renderTable({ keys: [mockKey], onBlockKey });
-
-    // Find and click the block button
-    const blockButton = screen.getByRole('button', { name: /Block key/i });
-    assert.ok(blockButton, 'Block button should be found');
-
-    await userEvent.click(blockButton);
-
-    // Verify dialog opens with correct content
-    await waitFor(() => {
-      // The dialog should have the key alias
-      assert.ok(screen.queryByText(/test-alias/) || screen.queryAllByText(/test/).length > 0);
-    });
-  });
-
-  test('Block does NOT call onBlockKey until confirmed', async () => {
-    let callCount = 0;
-    const onBlockKey = async () => {
-      callCount++;
-    };
-    renderTable({ keys: [mockKey], onBlockKey });
-
-    const blockButton = screen.getByRole('button', { name: /Block key/i });
-    await userEvent.click(blockButton);
-
-    // Click should not immediately call onBlockKey
-    assert.strictEqual(callCount, 0, 'onBlockKey should not be called immediately');
-
-    // Find and click the confirm button (from the dialog)
-    await waitFor(() => {
-      const confirmButtons = screen.queryAllByRole('button', { name: /Block/i });
-      assert.ok(confirmButtons.length > 0, 'Confirm button should appear');
-    });
-
-    const confirmButton = screen.getAllByRole('button', { name: /Block/i }).find((btn: any) =>
-      btn.textContent?.trim() === 'Block'
-    );
-    if (confirmButton) {
-      await userEvent.click(confirmButton);
-
-      // Now onBlockKey should have been called
-      await waitFor(() => {
-        assert.ok(callCount >= 1, 'onBlockKey should be called after confirmation');
-      });
-    }
-  });
-
-  test('Unblock is one-click (no dialog)', async () => {
-    let unblockCallCount = 0;
-    const onUnblockKey = async () => {
-      unblockCallCount++;
-    };
-    renderTable({ keys: [mockBlockedKey], onUnblockKey });
-
-    const unblockButtons = screen.getAllByLabelText(/unblock key/i);
-    await userEvent.click(unblockButtons[0]);
-
-    // No dialog should appear, function called immediately
-    await waitFor(() => {
-      assert.strictEqual(unblockCallCount, 1);
-    });
-  });
-
-  test('Revoke dialog title contains alias and last4', async () => {
+  test('icon buttons expose accessible names', async () => {
     renderTable({ keys: [mockKey] });
-
-    const revokeButtons = screen.getAllByLabelText(/revoke key/i);
-    await userEvent.click(revokeButtons[0]);
-
-    await waitFor(() => {
-      // The title should contain the alias and key's last 4 digits
-      const titleText = document.body.innerText;
-      assert.ok(titleText.includes('test-alias'));
-      assert.ok(titleText.includes('12345'));
-    });
+    assert.ok(await screen.findByRole('button', { name: 'Edit key' }));
+    assert.ok(await screen.findByRole('button', { name: /^Block key/ }));
+    assert.ok(await screen.findByRole('button', { name: 'Revoke key' }));
+    assert.ok(await screen.findByRole('button', { name: 'Copy key ID' }));
   });
 
-  test('icon buttons expose accessible names', () => {
-    renderTable({ keys: [mockKey] });
+  test('Block asks for confirmation naming the key and does not fire until confirmed', async () => {
+    const blocked: string[] = [];
+    renderTable({ keys: [mockKey], onBlockKey: async id => { blocked.push(id); } });
 
-    // Check for accessible names on action buttons
-    assert.ok(screen.getByLabelText(/Edit key/i));
-    assert.ok(screen.getByLabelText(/Block key/i));
-    assert.ok(screen.getByLabelText(/Revoke key/i));
-    assert.ok(screen.getByLabelText(/Copy API key/i));
+    await userEvent.click(await screen.findByRole('button', { name: /^Block key/ }));
+
+    const d = await dialog();
+    assert.ok(d.getByText('Block key?'));
+    assert.ok(d.getByText('test-alias'));
+    assert.ok(d.getByText(/Integrations using it will fail immediately/));
+    assert.deepStrictEqual(blocked, [], 'must not block before confirming');
+
+    await userEvent.click(d.getByRole('button', { name: 'Block' }));
+    await waitFor(() => assert.deepStrictEqual(blocked, ['hash-test-12345']));
   });
 
-  test('Cancel in block dialog closes without calling onBlockKey', async () => {
-    let callCount = 0;
-    const onBlockKey = async () => {
-      callCount++;
-    };
-    renderTable({ keys: [mockKey], onBlockKey });
+  test('Cancel in the block dialog closes it without blocking', async () => {
+    const blocked: string[] = [];
+    renderTable({ keys: [mockKey], onBlockKey: async id => { blocked.push(id); } });
 
-    const blockButtons = screen.getAllByLabelText(/block key/i);
-    await userEvent.click(blockButtons[0]);
+    await userEvent.click(await screen.findByRole('button', { name: /^Block key/ }));
+    const d = await dialog();
+    await userEvent.click(d.getByRole('button', { name: 'Cancel' }));
 
-    const cancelButton = await screen.findByRole('button', { name: /Cancel/i });
-    await userEvent.click(cancelButton);
+    await waitFor(() => assert.strictEqual(dialogIsOpen(), false));
+    assert.deepStrictEqual(blocked, []);
+  });
 
-    // onBlockKey should not have been called
-    assert.strictEqual(callCount, 0);
+  test('Unblock is one click with no dialog', async () => {
+    const unblocked: string[] = [];
+    renderTable({ keys: [mockBlockedKey], onUnblockKey: async id => { unblocked.push(id); } });
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Unblock key' }));
+
+    await waitFor(() => assert.deepStrictEqual(unblocked, ['hash-blocked-99999']));
+    assert.strictEqual(dialogIsOpen(), false);
+  });
+
+  test('Revoke dialog names the key with its last four characters', async () => {
+    const deleted: string[] = [];
+    renderTable({ keys: [mockKey], onDeleteKey: async id => { deleted.push(id); } });
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Revoke key' }));
+
+    const d = await dialog();
+    const heading = d.getByRole('heading');
+    assert.ok(heading.textContent?.includes('test-alias'), heading.textContent ?? '');
+    assert.ok(heading.textContent?.includes('sk-…2345'), heading.textContent ?? '');
+    assert.deepStrictEqual(deleted, [], 'must not delete before confirming');
+
+    await userEvent.click(d.getByRole('button', { name: /revoke/i }));
+    await waitFor(() => assert.deepStrictEqual(deleted, ['hash-test-12345']));
   });
 });
