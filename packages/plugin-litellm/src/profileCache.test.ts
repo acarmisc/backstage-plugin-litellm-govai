@@ -171,3 +171,25 @@ describe('ProfileCache', () => {
     assert.strictEqual(callCount, 2);
   });
 });
+
+describe('ProfileCache.invalidateProfile with the hook\'s real keys', () => {
+  test('clears every profile-* entry (and only those)', async () => {
+    const cache = new ProfileCache(30_000, { now: () => 0 });
+    const api = {} as any;
+    let n = 0;
+    const load = (key: string) => cache.memoize(api, key, async () => ++n);
+
+    await load('profile-userInfo');
+    await load('profile-keys');
+    await load('team-usage-t1');
+    assert.strictEqual(n, 3);
+
+    cache.invalidateProfile(api);
+
+    await load('profile-userInfo');
+    await load('profile-keys');
+    await load('team-usage-t1');
+    // profile entries re-fetched (+2); the unrelated key stayed cached.
+    assert.strictEqual(n, 5);
+  });
+});

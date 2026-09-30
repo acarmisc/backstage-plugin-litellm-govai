@@ -382,3 +382,13 @@ describe('profile cache invalidation on writes', () => {
     assert.strictEqual(loads, 1);
   });
 });
+
+describe('validation error details', () => {
+  test('the message includes the server-provided reason', async () => {
+    const { api } = makeApi(400, { error: 'Invalid request body', details: 'max_budget: max_budget must not exceed 100' });
+    await assert.rejects(
+      () => api.blockKey('k'),
+      (e: any) => e.message === 'Invalid request body: max_budget: max_budget must not exceed 100',
+    );
+  });
+});

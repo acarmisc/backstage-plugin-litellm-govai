@@ -20,6 +20,7 @@ import {
 } from '@acarmisc/backstage-plugin-litellm-common';
 import { createKeyForUser, KeyServiceError, type KeyCreateContext } from '../services/keyService';
 import { sendError, sanitizeUpstreamMessage } from '../errors';
+import { findDisallowedModels } from '../services/modelAccess';
 import type { RouterContext } from './context';
 import { getProvisionedUser } from './middleware/withUser';
 
@@ -308,16 +309,13 @@ export function registerKeysRoutes(router: Router, ctx: RouterContext): void {
           allowedModels = userInfo?.models ?? [];
         }
 
-        // Only enforce if the allowedModels list is non-empty (non-empty = restricted)
-        if (allowedModels.length > 0) {
-          const disallowed = input.models.filter(m => !allowedModels.includes(m));
-          if (disallowed.length > 0) {
-            res.status(400).json({
-              error: 'One or more requested models are not allowed',
-              disallowed_models: disallowed,
-            });
-            return;
-          }
+        const disallowed = await findDisallowedModels(client, input.models, allowedModels);
+        if (disallowed.length > 0) {
+          res.status(400).json({
+            error: 'One or more requested models are not allowed',
+            disallowed_models: disallowed,
+          });
+          return;
         }
       }
 
@@ -386,6 +384,13 @@ export function registerKeysRoutes(router: Router, ctx: RouterContext): void {
       }
 
       const { tokenEntityRef, key } = await authorizeKeyAction(req, keyId);
+
+      // An already-blocked key keeps its original `blocked_by`. Re-blocking would
+      // otherwise let an owner take over an admin's block and then unblock it.
+      if (key.blocked) {
+        res.status(409).json({ error: 'Key is already blocked' });
+        return;
+      }
 
       // Record metadata: who blocked this key and when
       const updatedMetadata = {

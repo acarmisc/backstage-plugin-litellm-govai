@@ -25,6 +25,8 @@ import {
 } from '@acarmisc/backstage-plugin-litellm-common';
 
 /** Unified identity for key creation — resolved from either Backstage or JWT claims. */
+import { findDisallowedModels } from './modelAccess';
+
 export interface KeyCreateUser {
   /** Backstage user entity ref, e.g. "user:default/alice" (may be empty for bridge). */
   tokenEntityRef?: string;
@@ -191,18 +193,15 @@ export async function createKeyForUser(
       allowedModels = userInfo?.models ?? [];
     }
 
-    // Only enforce if the allowedModels list is non-empty (non-empty = restricted)
-    if (allowedModels.length > 0) {
-      const disallowed = input.models.filter(m => !allowedModels.includes(m));
-      if (disallowed.length > 0) {
-        throw new KeyServiceError(
-          400,
-          {
-            error: 'One or more requested models are not allowed',
-            disallowed_models: disallowed,
-          },
-        );
-      }
+    const disallowed = await findDisallowedModels(client, input.models, allowedModels);
+    if (disallowed.length > 0) {
+      throw new KeyServiceError(
+        400,
+        {
+          error: 'One or more requested models are not allowed',
+          disallowed_models: disallowed,
+        },
+      );
     }
   }
 
@@ -240,9 +239,12 @@ export async function createKeyForUser(
   if (input.models !== undefined) {
     upstreamRequest.models = input.models;
   }
-  if (input.duration !== undefined) {
-    upstreamRequest.duration = input.duration;
-  }
+  // Never mint a non-expiring key by omission: default to 30d, or the first
+  // allowed duration when 30d isn't offered.
+  const durations = ctx.keyValidationConfig.allowedDurations;
+  const defaultDuration =
+    durations.length === 0 || durations.includes('30d') ? '30d' : durations[0];
+  upstreamRequest.duration = input.duration ?? defaultDuration;
   if (input.max_budget !== undefined) {
     // max_budget from input can be null (unlimited) or a number
     upstreamRequest.max_budget = input.max_budget ?? undefined;

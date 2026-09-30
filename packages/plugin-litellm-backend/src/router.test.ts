@@ -3573,35 +3573,88 @@ describe('team budget visibility', () => {
     }
   });
 
-  test('GET /teams/:id/usage returns 200 for team managers even if not members', async () => {
-    const client = mockClient({
-      userInfo: { user_id: 'alice', teams: [] },
-      getTeamUsage: async () => ({
-        total_spend: 50, total_tokens: 500, prompt_tokens: 300,
-        completion_tokens: 200, api_requests: 10, successful_requests: 9,
-        failed_requests: 1, usage_by_model: {}, usage_by_key: {},
-        daily_usage: [], daily_by_model: [],
-      }),
+  describe('team usage access for non-members', () => {
+    const usageOk = async () => ({
+      total_spend: 50, total_tokens: 500, prompt_tokens: 300,
+      completion_tokens: 200, api_requests: 10, successful_requests: 9,
+      failed_requests: 1, usage_by_model: {}, usage_by_key: {},
+      daily_usage: [], daily_by_model: [],
     });
-    const catalogClient = mockCatalogClient({
-      'user:default/alice': { groups: ['group:default/team-admins'] },
+    const cfg = {
+      'permission.enabled': true,
+      'litellm.teamAdmin.group': 'group:default/team-admins',
+    };
+    const call = async (groups: string[]) => {
+      const client = mockClient({
+        userInfo: { user_id: 'alice', teams: [] },
+        getTeamUsage: usageOk,
+        getTeamInfo: async () => ({
+          team_id: 't1', spend: 0, metadata: { owning_group: 'group:default/team-x' },
+        }),
+      });
+      const h = await startHarness({
+        config: cfg,
+        client,
+        catalogClient: mockCatalogClient({ 'user:default/alice': { groups } }),
+      });
+      try {
+        const r = await req(
+          h.baseUrl, 'GET', '/teams/t1/usage?start_date=2026-01-01&end_date=2026-01-31',
+          { authRef: 'user:default/alice' },
+        );
+        return { ...r, usageCalls: client.calls.getTeamUsage.length };
+      } finally {
+        await close(h);
+      }
+    };
+
+    test('a member of the team\'s owning group can read it', async () => {
+      const r = await call(['group:default/team-x']);
+      assert.strictEqual(r.status, 200);
+      assert.strictEqual(r.body.total_spend, 50);
+      assert.strictEqual(r.usageCalls, 1);
     });
+
+    test('a global team-admin who does NOT own the team gets 404', async () => {
+      const r = await call(['group:default/team-admins']);
+      assert.strictEqual(r.status, 404);
+      assert.strictEqual(r.usageCalls, 0);
+    });
+  });
+});
+
+describe('release review: smaller hardening', () => {
+  test('a key generated without a duration gets a default one, never non-expiring', async () => {
     const h = await startHarness({
-      config: { 'litellm.teamAdmin.group': 'group:default/team-admins' },
-      client,
-      catalogClient,
+      config: { 'litellm.keyGeneration.teamRequired': false, 'litellm.keyGeneration.allowUnlimitedBudget': true },
     });
     try {
-      const { status, body } = await req(
-        h.baseUrl, 'GET', '/teams/t1/usage?start_date=2026-01-01&end_date=2026-01-31',
-        { authRef: 'user:default/alice' },
-      );
+      const { status } = await req(h.baseUrl, 'POST', '/keys/generate', {
+        authRef: 'user:default/alice', body: { alias: 'k', max_budget: 5 },
+      });
       assert.strictEqual(status, 200);
-      assert.strictEqual(body.total_spend, 50);
-      // Verify getTeamUsage was called
-      assert.strictEqual(client.calls.getTeamUsage.length, 1);
+      const sent = h.client.calls.generateKey[h.client.calls.generateKey.length - 1];
+      assert.strictEqual(sent.duration, '30d');
     } finally {
-      await close(h);
+      h.server.close();
+    }
+  });
+
+  test('a network failure reaching LiteLLM is a generic 502, not a 500', async () => {
+    const h = await startHarness({
+      config: { 'litellm.keyGeneration.teamRequired': false, 'litellm.keyGeneration.allowUnlimitedBudget': true },
+      client: mockClient({
+        generateKey: async () => { throw Object.assign(new TypeError('fetch failed'), { cause: { code: 'ECONNREFUSED' } }); },
+      }),
+    });
+    try {
+      const { status, body } = await req(h.baseUrl, 'POST', '/keys/generate', {
+        authRef: 'user:default/alice', body: { alias: 'k', max_budget: 5 },
+      });
+      assert.strictEqual(status, 502);
+      assert.deepStrictEqual(body, { error: 'LiteLLM is unavailable' });
+    } finally {
+      h.server.close();
     }
   });
 });
@@ -3799,6 +3852,63 @@ describe('router /opencode/connect — enabled', () => {
       assert.strictEqual(h2.client.calls.generateKey.length, 0);
       assert.strictEqual(h2.client.calls.regenerateKey.length, 1);
       assert.strictEqual(h2.client.calls.regenerateKey[0], 'sk-existing');
+    } finally {
+      await new Promise<void>(r => h2.server.close(() => r()));
+    }
+  });
+
+  const existingSlotKey = {
+    key: 'sk-existing',
+    token: 'sk-existing',
+    key_alias: 'opencode-alice@example.com',
+    user_id: 'alice@example.com',
+    spend: 0,
+    created_at: '2026-01-01',
+  };
+
+  test('POST replaces the key (delete + generate) when LiteLLM has no key regeneration', async () => {
+    const h2 = await startHarness({
+      config: { 'litellm.opencode.enabled': true, 'litellm.userIdDomain': 'example.com' },
+      client: mockClient({
+        userInfo: { user_id: 'alice@example.com', teams: ['finance'] },
+        listKeys: () => Promise.resolve([existingSlotKey]),
+        regenerateKey: async () => { throw new LiteLLMUpstreamError(404, 'Not Found', '{"error":"not found"}'); },
+      }),
+    });
+    try {
+      const { status, location } = await reqPostForm(
+        h2.baseUrl, '/opencode/connect',
+        { redirect_uri: 'http://localhost:1456/callback' },
+        { authRef: 'user:default/alice' },
+      );
+      assert.strictEqual(status, 302);
+      assert.ok(new URL(location!).searchParams.get('key'));
+      assert.strictEqual(h2.client.calls.deleteKeys.length, 1);
+      assert.deepStrictEqual(h2.client.calls.deleteKeys[0], { keys: ['sk-existing'] });
+      assert.strictEqual(h2.client.calls.generateKey.length, 1);
+    } finally {
+      await new Promise<void>(r => h2.server.close(() => r()));
+    }
+  });
+
+  test('POST does not fall back (and deletes nothing) when regeneration fails for another reason', async () => {
+    const h2 = await startHarness({
+      config: { 'litellm.opencode.enabled': true, 'litellm.userIdDomain': 'example.com' },
+      client: mockClient({
+        userInfo: { user_id: 'alice@example.com', teams: ['finance'] },
+        listKeys: () => Promise.resolve([existingSlotKey]),
+        regenerateKey: async () => { throw new LiteLLMUpstreamError(500, 'Server Error', 'boom'); },
+      }),
+    });
+    try {
+      const { status } = await reqPostForm(
+        h2.baseUrl, '/opencode/connect',
+        { redirect_uri: 'http://localhost:1456/callback' },
+        { authRef: 'user:default/alice' },
+      );
+      assert.strictEqual(status, 502);
+      assert.strictEqual(h2.client.calls.deleteKeys.length, 0);
+      assert.strictEqual(h2.client.calls.generateKey.length, 0);
     } finally {
       await new Promise<void>(r => h2.server.close(() => r()));
     }
@@ -4052,5 +4162,126 @@ describe('GET /config supportContact', () => {
     } finally {
       h.server.close();
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Release-review regressions
+// ---------------------------------------------------------------------------
+describe('release review: unblock cannot be taken over', () => {
+  test('re-blocking an already-blocked key is a 409 and leaves blocked_by untouched', async () => {
+    const h = await startHarness({
+      config: { 'litellm.userIdDomain': 'example.com' },
+      client: mockClient({
+        listKeys: (uid?: string) =>
+          Promise.resolve([
+            {
+              key: 'sk-...own', token: 'hash-own', key_alias: 'alice-key', user_id: uid,
+              created_at: '', spend: 0, blocked: true,
+              metadata: { blocked_by: 'user:default/admin' },
+            } as VirtualKey,
+          ]),
+      }),
+    });
+    try {
+      const { status } = await req(h.baseUrl, 'POST', '/keys/hash-own/block', { authRef: 'user:default/alice' });
+      assert.strictEqual(status, 409);
+      assert.strictEqual(h.client.calls.blockKey.length, 0);
+      assert.strictEqual(h.client.calls.updateKey.length, 0);
+    } finally {
+      h.server.close();
+    }
+  });
+
+  test('the owner then still cannot unblock the admin-blocked key without the permission', async () => {
+    const deny = mockPermissions({
+      authorize: async (queries: any[]) =>
+        queries.map((q: any) => ({
+          result: q.permission.name === 'litellm.key.unblock' ? AuthorizeResult.DENY : AuthorizeResult.ALLOW,
+        })),
+    });
+    const h = await startHarness({
+      config: { 'litellm.userIdDomain': 'example.com' },
+      permissions: deny,
+      client: mockClient({
+        listKeys: (uid?: string) =>
+          Promise.resolve([
+            {
+              key: 'sk-...own', token: 'hash-own', key_alias: 'alice-key', user_id: uid,
+              created_at: '', spend: 0, blocked: true,
+              metadata: { blocked_by: 'user:default/admin' },
+            } as VirtualKey,
+          ]),
+      }),
+    });
+    try {
+      await req(h.baseUrl, 'POST', '/keys/hash-own/block', { authRef: 'user:default/alice' });
+      const { status } = await req(h.baseUrl, 'POST', '/keys/hash-own/unblock', { authRef: 'user:default/alice' });
+      assert.strictEqual(status, 403);
+      assert.strictEqual(h.client.calls.unblockKey.length, 0);
+    } finally {
+      h.server.close();
+    }
+  });
+
+  test('a client cannot pre-seed server-owned metadata on generate', async () => {
+    const h = await startHarness({
+      config: { 'litellm.keyGeneration.teamRequired': false, 'litellm.keyGeneration.allowUnlimitedBudget': true },
+    });
+    try {
+      for (const metadata of [{ blocked_by: 'user:default/alice' }, { created_by_email: 'x@y.z' }]) {
+        const { status } = await req(h.baseUrl, 'POST', '/keys/generate', {
+          authRef: 'user:default/alice',
+          body: { alias: 'k', max_budget: 5, metadata },
+        });
+        assert.strictEqual(status, 400, JSON.stringify(metadata));
+      }
+      assert.strictEqual(h.client.calls.generateKey.length, 0);
+    } finally {
+      h.server.close();
+    }
+  });
+});
+
+describe('release review: model allow-lists', () => {
+  const generateWith = async (teamModels: string[], models: string[], catalogue: any[] = []) => {
+    const h = await startHarness({
+      config: { 'litellm.keyGeneration.allowUnlimitedBudget': true },
+      client: mockClient({
+        userInfo: { user_id: 'alice@example.com', teams: ['t1'] },
+        getTeamInfo: async () => ({ team_id: 't1', spend: 0, models: teamModels }),
+        listModels: async () => catalogue,
+      }),
+    });
+    try {
+      const r = await req(h.baseUrl, 'POST', '/keys/generate', {
+        authRef: 'user:default/alice',
+        body: { alias: 'k', team_id: 't1', models, max_budget: 5 },
+      });
+      return { ...r, generated: h.client.calls.generateKey.length };
+    } finally {
+      h.server.close();
+    }
+  };
+
+  test('a team on the all-proxy-models sentinel accepts any model', async () => {
+    const r = await generateWith(['all-proxy-models'], ['gpt-4', 'claude-3']);
+    assert.strictEqual(r.status, 200);
+    assert.strictEqual(r.generated, 1);
+  });
+
+  test('a team list may reference an access group', async () => {
+    const catalogue = [{ model_name: 'gpt-4', access_groups: ['premium'] }, { model_name: 'claude-3' }];
+    const ok = await generateWith(['premium'], ['gpt-4'], catalogue);
+    assert.strictEqual(ok.status, 200);
+    const bad = await generateWith(['premium'], ['claude-3'], catalogue);
+    assert.strictEqual(bad.status, 400);
+    assert.deepStrictEqual(bad.body.disallowed_models, ['claude-3']);
+  });
+
+  test('literal restrictions still reject other models', async () => {
+    const r = await generateWith(['gpt-4'], ['gpt-4', 'o1']);
+    assert.strictEqual(r.status, 400);
+    assert.strictEqual(r.generated, 0);
   });
 });

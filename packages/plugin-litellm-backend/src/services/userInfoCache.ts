@@ -151,7 +151,7 @@ export function withUserInfoCache(
 
   // Methods whose names match this pattern indicate a mutation that should
   // invalidate the cache to ensure consistency.
-  const isMutatingMethod = /^(generate|update|delete|block|unblock|reset|create|add|remove|set|regenerate|provision)/i;
+  const isMutatingMethod = /^(generate|update|delete|block|unblock|reset|create|add|remove|set|regenerate|provision|teamMember)/i;
 
   return new Proxy(client, {
     get(target: any, prop: string | symbol) {

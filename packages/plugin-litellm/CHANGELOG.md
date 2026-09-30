@@ -53,6 +53,7 @@ Requires `@acarmisc/backstage-plugin-litellm-backend` `0.16.0` and
   `['module','all-limits']` (`new-key` auto-added for users with no keys),
   redesigned home widget (summary line, themed sparkline with tooltip, route-ref
   footer link), route-ref based links, full-height cards.
+- fix: editing a key sends only the fields that changed (a legacy budget above the new ceiling no longer blocks a rename); validation reasons from the server are shown; the profile cache really is cleared after writes.
 - feat: shared `useLiteLLMProfile` (30 s promise cache, cleared after writes),
   catalog-backed member search, server-side prune, currency and local-date
   formatting fixes (`<$0.01`, local calendar days), usage model filter limited

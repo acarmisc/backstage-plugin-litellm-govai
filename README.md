@@ -637,18 +637,24 @@ source of truth.
   the `litellm.key.resetSpend` permission.
 - Blocking records `metadata.blocked_by` / `blocked_at`. An owner may unblock only
   a key they blocked themselves; anything else needs `litellm.key.unblock`.
-- `GET /teams/:teamId/usage` requires membership of the team (or team-admin
-  rights) and answers `404` otherwise, so team existence isn't leaked.
+- `GET /teams/:teamId/usage` requires membership of the team, or membership of
+  the team's `metadata.owning_group` (with team management enabled), and answers
+  `404` otherwise, so team existence isn't leaked.
+- Blocking an already-blocked key is a `409`, so an owner can't take over an
+  admin's block; `blocked_by` / `blocked_at` (and `created_*` / `updated_*`)
+  metadata can't be set by clients.
+- A key generated without a duration gets `30d` (never a non-expiring key).
 
 **Errors** never pass raw upstream text through: LiteLLM `401`/`403` become `502`
 (so an upstream auth failure can't log the Backstage session out), upstream
-`5xx`/network failures become a generic `502`, and `4xx` messages are stripped of
+`5xx` and network failures become a generic `502`, and `4xx` messages are stripped of
 HTML and capped at 500 characters. `GET /config` exposes `publicBaseUrl` only,
 never the internal `baseUrl`.
 
 **OpenCode connect** (`litellm.opencode.enabled`): `GET /opencode/connect` only
 renders a confirmation page. The state change happens on `POST`, which creates a
-key or **rotates** the existing one via LiteLLM's key regeneration and redirects
+key or **rotates** the existing one via LiteLLM's key regeneration (falling back to
+replacing the key on editions without it) and redirects
 to the local `http://localhost:<port>/callback` with the new plaintext key —
 never a stored hash. Note: the `POST` is not CSRF-token protected beyond the
 localhost-only redirect target; the worst a forged request can do is rotate the

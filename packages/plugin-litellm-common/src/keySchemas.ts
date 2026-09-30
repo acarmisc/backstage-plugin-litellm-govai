@@ -3,6 +3,22 @@ import { z } from 'zod';
 /**
  * Configuration for key validation ceilings and allowed values.
  */
+/**
+ * Metadata keys the server owns. Clients must not set them: `blocked_by` /
+ * `blocked_at` decide who may unblock a key, and `created_*` / `updated_*`
+ * record provenance.
+ */
+export const RESERVED_METADATA_KEYS = ['blocked_by', 'blocked_at'] as const;
+const RESERVED_METADATA_PREFIXES = ['created_', 'updated_'] as const;
+
+export function reservedMetadataKeys(metadata: Record<string, unknown>): string[] {
+  return Object.keys(metadata).filter(
+    k =>
+      (RESERVED_METADATA_KEYS as readonly string[]).includes(k) ||
+      RESERVED_METADATA_PREFIXES.some(p => k.startsWith(p)),
+  );
+}
+
 export interface KeyValidationConfig {
   maxBudget: number;
   maxTpm: number;
@@ -66,6 +82,10 @@ export function createGenerateKeyInputSchema(config: KeyValidationConfig) {
       key_type: z.literal('llm_api').optional(),
       metadata: z
         .record(z.string(), z.string())
+        .refine(m => reservedMetadataKeys(m).length === 0, {
+          message:
+            'metadata may not set server-owned keys (blocked_by, blocked_at, created_*, updated_*)',
+        })
         .optional(),
     })
     .strict();

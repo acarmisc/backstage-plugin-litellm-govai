@@ -164,6 +164,28 @@ export function toHttpError(error: unknown): {
     }
   }
 
+  // Network-level failures reaching LiteLLM (DNS, refused, reset, timeout/abort):
+  // an upstream problem, not an internal one.
+  if (error instanceof Error) {
+    const code = (error as { code?: unknown }).code;
+    const cause = (error as { cause?: { code?: unknown } }).cause;
+    const networkCodes = ['ECONNREFUSED', 'ECONNRESET', 'ENOTFOUND', 'ETIMEDOUT', 'EAI_AGAIN', 'UND_ERR_CONNECT_TIMEOUT'];
+    if (
+      error.name === 'AbortError' ||
+      error.name === 'TimeoutError' ||
+      (error.name === 'TypeError' && error.message === 'fetch failed') ||
+      (typeof code === 'string' && networkCodes.includes(code)) ||
+      (typeof cause?.code === 'string' && networkCodes.includes(cause.code))
+    ) {
+      return {
+        status: 502,
+        body: { error: 'LiteLLM is unavailable' },
+        logLevel: 'error',
+        _logMessage: error.message,
+      };
+    }
+  }
+
   // Fallback: 500 with no message in response
   const message = error instanceof Error ? error.message : String(error);
   return {

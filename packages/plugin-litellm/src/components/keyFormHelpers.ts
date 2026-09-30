@@ -1,5 +1,6 @@
 import { VirtualKey, ModelInfo, GenerateKeyRequest, UpdateKeyRequest } from '../types';
 import { fmtInt } from '../format';
+import { isModelAllowed } from '@acarmisc/backstage-plugin-litellm-common';
 
 export const generateDefaultAlias = (username?: string): string => {
   const base = (username || 'user')
@@ -36,13 +37,8 @@ export const editForm = (k: VirtualKey): UpdateKeyRequest => ({
 // than literal model_name values. Treating either case as a literal
 // model_name allowlist matches nothing, which previously made the whole
 // "Models" field disappear for such teams.
-const ALL_PROXY_MODELS = 'all-proxy-models';
-
 export function isModelAllowedByTeam(model: ModelInfo, teamModels?: string[]): boolean {
-  if (!teamModels || teamModels.length === 0) return true;
-  if (teamModels.includes(ALL_PROXY_MODELS)) return true;
-  if (teamModels.includes(model.model_name)) return true;
-  return !!model.access_groups?.some(group => teamModels.includes(group));
+  return isModelAllowed(model, teamModels);
 }
 
 export function aliasHelperText(aliasError: boolean, aliasDuplicate: boolean): string | undefined {
@@ -63,3 +59,32 @@ export function budgetHelperText(budgetInvalid: boolean, budgetEstimate: number 
   return 'Lifetime cap for this key. It never resets';
 }
 
+
+const sameStrings = (a: string[] = [], b: string[] = []) =>
+  a.length === b.length && a.every((v, i) => v === b[i]);
+
+/**
+ * The fields of an edit that actually changed. Sending only these means an
+ * untouched field (say a legacy budget above the current ceiling) can't make an
+ * unrelated edit fail server-side validation. Returns `{}` when nothing changed.
+ */
+export function changedEditFields(
+  original: UpdateKeyRequest,
+  current: UpdateKeyRequest,
+  unlimitedBudget: boolean,
+): UpdateKeyRequest {
+  const out: UpdateKeyRequest = {};
+  if ((current.key_alias ?? '') !== (original.key_alias ?? '')) {
+    out.key_alias = current.key_alias;
+  }
+  if (!sameStrings(current.models, original.models)) {
+    out.models = current.models ?? [];
+  }
+  const nextBudget = unlimitedBudget ? null : current.max_budget;
+  if ((nextBudget ?? null) !== (original.max_budget ?? null)) {
+    out.max_budget = nextBudget;
+  }
+  if (current.tpm_limit !== original.tpm_limit) out.tpm_limit = current.tpm_limit;
+  if (current.rpm_limit !== original.rpm_limit) out.rpm_limit = current.rpm_limit;
+  return out;
+}
