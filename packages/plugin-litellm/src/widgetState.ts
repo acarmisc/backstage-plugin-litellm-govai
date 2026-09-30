@@ -13,23 +13,34 @@ import { ApiError } from './api';
 export const USAGE_UNAVAILABLE_MSG = 'Usage unavailable';
 export const UNPROVISIONED_MSG = 'LiteLLM account not set up. Ask your admin.';
 
+const UNPROVISIONED_BACKEND_MESSAGE = 'User not found in LiteLLM';
+
 /**
- * Detects whether an ApiError represents a provisioning error.
- * The backend returns a 404 with body { error: 'User not found in LiteLLM' }
- * when the user hasn't been provisioned.
+ * Detects whether an error represents a provisioning error.
+ *
+ * The backend answers 404 with body `{ error: 'User not found in LiteLLM' }`
+ * when the user hasn't been provisioned. `ApiError` uses that `error` text as
+ * its message, and `useLiteLLMProfile` surfaces failures as a plain message
+ * string, so all three shapes are recognised: an ApiError (status + body), an
+ * Error, or the bare message string.
  */
 export function isUnprovisionedError(error: unknown): boolean {
-  if (!(error instanceof ApiError)) {
-    return false;
+  if (typeof error === 'string') {
+    return error === UNPROVISIONED_BACKEND_MESSAGE;
   }
-  if (error.status !== 404) {
-    return false;
+  if (error instanceof ApiError) {
+    const body = error.body as { error?: unknown } | null | undefined;
+    return (
+      error.status === 404 &&
+      !!body &&
+      typeof body === 'object' &&
+      body.error === UNPROVISIONED_BACKEND_MESSAGE
+    );
   }
-  const body = error.body as any;
-  if (!body || typeof body !== 'object') {
-    return false;
+  if (error instanceof Error) {
+    return error.message === UNPROVISIONED_BACKEND_MESSAGE;
   }
-  return body.error === 'User not found in LiteLLM';
+  return false;
 }
 
 export type WidgetViewState =

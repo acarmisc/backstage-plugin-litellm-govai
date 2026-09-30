@@ -12,9 +12,10 @@ module.exports = createConfigForRole(__dirname, 'frontend-plugin', {
       // Allow node: builtin imports (node:test, node:assert) in test files
       // run via `node --test`, which the shared config otherwise restricts
       // on the assumption that tests run under jest/jsdom.
-      files: ['**/*.test.ts'],
+      files: ['**/*.test.ts', '**/*.test.tsx'],
       rules: {
         'no-restricted-imports': 'off',
+        'no-restricted-syntax': 'off',
       },
     },
   ],

@@ -180,6 +180,9 @@ export const KeysTable: React.FC<KeysTableProps> = ({
   const revokePermission = usePermission({ permission: litellmKeyRevokePermission });
   const canManageKeys = !managePermission.loading && managePermission.allowed;
   const canRevokeKeys = !revokePermission.loading && revokePermission.allowed;
+  // Only claim "no permission" after a real denial, not while still checking.
+  const manageDenied = !managePermission.loading && !managePermission.allowed;
+  const revokeDenied = !revokePermission.loading && !revokePermission.allowed;
 
   // Block confirmation
   const [blockConfirmKey, setBlockConfirmKey] = useState<VirtualKey | null>(null);
@@ -380,7 +383,7 @@ export const KeysTable: React.FC<KeysTableProps> = ({
                 <IconButton
                   size="small"
                   onClick={() => clipboard.copy(keyId)}
-                  aria-label="Copy API key"
+                  aria-label="Copy key ID"
                   sx={quietIconButtonSx('accent')}
                 >
                   {clipboard.copied ? <Check sx={{ fontSize: 15 }} /> : <ContentCopy sx={{ fontSize: 15 }} />}
@@ -422,21 +425,21 @@ export const KeysTable: React.FC<KeysTableProps> = ({
           </TableCell>
           <TableCell align="right">
             <Box display="flex" justifyContent="flex-end" gap={0.25}>
-              <Tooltip title={canManageKeys ? 'Edit key' : 'No permission to edit keys'} placement="top">
+              <Tooltip describeChild title={manageDenied ? 'No permission to edit keys' : 'Edit key'} placement="top">
                 <span>
                   <IconButton
                     size="small"
                     onClick={() => handleOpenEdit(key)}
                     disabled={!canManageKeys}
-                    aria-label={canManageKeys ? 'Edit key' : 'No permission to edit keys'}
+                    aria-label={manageDenied ? 'No permission to edit keys' : 'Edit key'}
                     sx={quietIconButtonSx('accent')}
                   >
                     <Edit fontSize="small" />
                   </IconButton>
                 </span>
               </Tooltip>
-              <Tooltip title={(() => {
-                if (!canManageKeys) return 'No permission to block keys';
+              <Tooltip describeChild title={(() => {
+                if (manageDenied) return 'No permission to block keys';
                 return key.blocked ? 'Unblock key' : 'Block key — suspends without revoking';
               })()} placement="top">
                 <span>
@@ -445,7 +448,7 @@ export const KeysTable: React.FC<KeysTableProps> = ({
                     onClick={() => handleToggleBlock(key)}
                     disabled={blockSubmitting || !canManageKeys}
                     aria-label={(() => {
-                      if (!canManageKeys) return 'No permission to block keys';
+                      if (manageDenied) return 'No permission to block keys';
                       return key.blocked ? 'Unblock key' : 'Block key — suspends without revoking';
                     })()}
                     sx={quietIconButtonSx('warning')}
@@ -454,13 +457,13 @@ export const KeysTable: React.FC<KeysTableProps> = ({
                   </IconButton>
                 </span>
               </Tooltip>
-              <Tooltip title={canRevokeKeys ? 'Revoke key' : 'No permission to revoke keys'} placement="top">
+              <Tooltip describeChild title={revokeDenied ? 'No permission to revoke keys' : 'Revoke key'} placement="top">
                 <span>
                   <IconButton
                     size="small"
                     onClick={() => setDeleteConfirmKey(key)}
                     disabled={!canRevokeKeys}
-                    aria-label={canRevokeKeys ? 'Revoke key' : 'No permission to revoke keys'}
+                    aria-label={revokeDenied ? 'No permission to revoke keys' : 'Revoke key'}
                     sx={quietIconButtonSx('danger')}
                   >
                     <Delete fontSize="small" />
