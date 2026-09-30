@@ -1,14 +1,71 @@
 # @acarmisc/backstage-plugin-litellm-backend
 
-This changelog is maintained by hand — this repo is two independent npm
-packages rather than a Changesets-compatible yarn workspace, so there's no
-automated `yarn changeset` release flow. Add an entry here in the same
+This changelog is maintained by hand — this repo is an npm workspace, but it has
+no automated Changesets release flow. Add an entry here in the same
 commit/PR that bumps the version in `package.json`. Format follows the
 [Changesets](https://github.com/changesets/changesets) convention used by
 `backstage/community-plugins`.
 
 Earlier history: `git log -- packages/plugin-litellm-backend` or the
 [GitHub tags](https://github.com/acarmisc/backstage-plugin-litellm-govai/tags).
+
+## 0.16.0
+
+**Security release — contains breaking behaviour changes. Upgrade
+`@acarmisc/backstage-plugin-litellm-common` (new, `0.1.0`) together with this
+package.**
+
+### Breaking Changes
+
+- **User routes only accept Backstage user principals.** `/user/info`, `/keys*`,
+  `/teams` (GET), `/teams/:teamId/usage` and `/usage` return `401` for service /
+  external principals and anonymous callers. The `user_id` query/body fallback
+  is gone; the LiteLLM identity comes only from the verified credential.
+  `client.getUsage` throws on an empty user instead of querying org-wide.
+- **Strict request schemas.** `POST /keys/generate` and `POST /keys/:id/update`
+  reject unknown fields with `400`, and the upstream request is built from the
+  parsed fields. `allowUnlimitedBudget`, `teamRequired`, team membership and the
+  allowed-model check are now enforced server-side. New ceilings:
+  `litellm.keys.maxBudget` (100), `maxTpm` (100000), `maxRpm` (1000),
+  `allowedDurations` (`1d/7d/30d/90d`; a `1y` duration is no longer accepted).
+- **Reset spend and unblock are gated.** Reset needs
+  `litellm.keys.allowOwnerResetSpend: true` (default `false`) plus the new
+  `litellm.key.resetSpend` permission; unblocking a key someone else blocked
+  needs the new `litellm.key.unblock` permission. `unblock` no longer requires
+  `litellm.key.manage` for keys the caller blocked themselves.
+- **`GET /teams/:teamId/usage`** requires team membership or team-admin rights
+  (`404` otherwise).
+- **`GET /config`** returns the configured `publicBaseUrl` only (`null` when
+  unset) — it no longer falls back to the internal `baseUrl`.
+- **CLI bridge** requires `litellm.userIdDomain` and maps identity from a
+  verified email in that domain; ID tokens (`typ: ID`) and unverified or foreign
+  emails are rejected, and verifier error details are no longer returned. Key
+  minting goes through the same validated code path as the UI.
+- **OpenCode connect** no longer mints or returns anything on `GET`: `GET` shows
+  a confirmation page and `POST` creates or **rotates** the key (via LiteLLM key
+  regeneration) — it used to redirect with a key *hash* when a key existed.
+  Clients that drive the flow with a bare browser `GET` redirect must be updated
+  to follow the confirmation.
+- **Error responses are sanitised.** Upstream `401`/`403` → `502`, upstream
+  `5xx`/network → generic `502`, upstream `4xx` messages are stripped of HTML
+  and capped at 500 characters; unexpected errors return `Internal error`.
+
+### Minor Changes
+
+- feat: `POST /keys/prune-expired` (server-side prune returning
+  `{ pruned, failed, failures? }`).
+- feat: per-user `getUserInfo` cache (`litellm.cache.userInfoTtlSeconds`,
+  default 10 s, single-flight, cleared on any mutation).
+- feat: `litellm.supportContact` (served via `GET /config`); `PATCH /teams/:id`
+  honours the client's `expectedUpdatedAtIso` (unchanged) and the UI now sends it.
+- feat: `budget_reset_at` is passed through on the user profile.
+- refactor: `router.ts` split into `routes/*`, `http/*` and
+  `services/keyService.ts`; permissions, key schemas and shared types moved to
+  `@acarmisc/backstage-plugin-litellm-common` (still re-exported from here).
+- refactor: `LoggerService` / `RootConfigService` typing, `@backstage/errors`,
+  `any` usage cut from 95 to 39 sites; declared `litellm.opencode.*`,
+  `userRole` and the new keys in `config.d.ts`.
+- chore: the provisioning log line no longer logs the user id at `info`.
 
 ## 0.15.0
 

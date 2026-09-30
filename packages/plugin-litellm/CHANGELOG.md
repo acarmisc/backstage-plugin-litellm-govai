@@ -10,6 +10,60 @@ commit/PR that bumps the version in `package.json`. Format follows the
 Earlier history: `git log -- packages/plugin-litellm` or the
  [GitHub tags](https://github.com/acarmisc/backstage-plugin-litellm-govai/tags).
 
+## 0.29.0
+
+Requires `@acarmisc/backstage-plugin-litellm-backend` `0.16.0` and
+`@acarmisc/backstage-plugin-litellm-common` `0.1.0`.
+
+### Breaking Changes
+
+- **New Frontend System only.** There are no legacy `createPlugin` /
+  `createCardExtension` exports. Homepage widgets are exported as components
+  (`LiteLLMHomeWidget`, `LiteLLMBudgetGauges`, `LiteLLMBudgetWidget`, all with a
+  `bare` prop); `HomePageWidgetBlueprint` registration is deferred until a
+  Backstage dependency upgrade.
+- **Behaviour follows the stricter backend:** the `1 Year` key duration is gone;
+  Reset spend is hidden unless `litellm.keys.allowOwnerResetSpend` is on and the
+  user holds `litellm.key.resetSpend`; key action buttons are gated with
+  `usePermission`.
+- The API base URL is resolved through `discoveryApi` (`LiteLlmApi` takes a
+  `DiscoveryApi` or a fixed base string). `LiteLlmConfig.baseUrl` may be `null`
+  ("Endpoint not configured").
+- The Claude Code snippet's "Option 2" now reads the key from the OS keychain via
+  `apiKeyHelper` instead of embedding it in a script.
+
+### Minor Changes
+
+- feat(keys): one-time secret protection (no Esc/backdrop dismissal, warning
+  alert, confirm on closing uncopied), async copy-to-clipboard hook with
+  feedback, confirmations for Block and Revoke (naming the key), in-flight
+  dialogs can't be dismissed, duplicate "Generate" button removed.
+- feat(form): validation on blur/submit with first-invalid focus, field order
+  Team → Models → Budget → Duration → Alias → Advanced, `$` budget adornment,
+  expiry preview, priciest-model token estimate, edit-mode models filtered by
+  the key's team.
+- feat(states): fetch failures render as errors with Retry (not as empty states),
+  "–" counts when keys failed, skeleton loading and quiet "account not set up" /
+  "Usage unavailable" states in the widgets, onboarding empty state,
+  `?tab=keys&filter=expired|expiring` deep links, `alertApi` toasts.
+- feat(budget): "Budget left" KPI from the user's own spend/cap and reset
+  window; period chart relabelled "Spend in period".
+- feat(widgets): responsive gauges with an MTD **spend** chart and cap line,
+  `role="meter"` semantics and "Over cap" text, CTAs default to
+  `['module','all-limits']` (`new-key` auto-added for users with no keys),
+  redesigned home widget (summary line, themed sparkline with tooltip, route-ref
+  footer link), route-ref based links, full-height cards.
+- feat: shared `useLiteLLMProfile` (30 s promise cache, cleared after writes),
+  catalog-backed member search, server-side prune, currency and local-date
+  formatting fixes (`<$0.01`, local calendar days), usage model filter limited
+  to models with usage.
+- a11y: named icon buttons with tooltips, capability chips instead of emoji,
+  colour-blind-safe success/failure series, decorative dots hidden from AT.
+- refactor: `ui.tsx` split into `ui/*`, key snippets and form helpers extracted
+  from `KeyFormDialog`; automatic JSX runtime and named React imports.
+- test: jsdom component tests (KeysTable, KeyFormDialog, widgets), and a fix for
+  nested test files that previously never ran.
+
 ## 0.28.0
 
 ### Minor Changes
