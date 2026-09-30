@@ -181,7 +181,25 @@ export function registerBridgeRoutes(router: Router, ctx: RouterContext, bridgeO
           logger,
           bridgeIdentity,
         );
-        res.json({ user_id: user.user_id, teams: user.teams ?? [] });
+        
+        // Enrich team list with metadata (display names, etc.)
+        const teamIds = user.teams ?? [];
+        const teamMetadata: Array<{ id: string; name?: string }> = [];
+        for (const teamId of teamIds) {
+          try {
+            const teamInfo = await client.getTeamInfo(teamId);
+            teamMetadata.push({
+              id: teamId,
+              name: teamInfo.team_alias || teamId, // Use alias as display name, fallback to ID
+            });
+          } catch (e) {
+            // If we can't fetch team info, just use the ID
+            logger.debug(`Could not fetch team info for ${teamId}: ${(e as Error).message}`);
+            teamMetadata.push({ id: teamId });
+          }
+        }
+        
+        res.json({ user_id: user.user_id, teams: teamMetadata });
       } catch (error: unknown) {
         handleBridgeError(error, res);
       }
