@@ -9,6 +9,16 @@ commit/PR that bumps the version in `package.json`. Format follows the
 Earlier history: `git log -- packages/plugin-litellm-backend` or the
 [GitHub tags](https://github.com/acarmisc/backstage-plugin-litellm-govai/tags).
 
+## 0.17.4
+
+### Patch Changes
+
+- **fix(bridge): exempt `/bridge/user/info` from the Backstage auth policy.**
+  The route added in 0.17.3 was not in the unauthenticated-paths list, so the
+  framework answered 401 to the Keycloak Bearer before the bridge verifier ran.
+  The list is now a single exported constant, with a test that fails when a
+  route registered in `routes/bridge.ts` is missing from it.
+
 ## 0.17.3
 
 ### Patch Changes

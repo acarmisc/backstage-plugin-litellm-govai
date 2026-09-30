@@ -3,6 +3,18 @@ import { createRouter } from './router';
 import { readBridgeConfig } from './bridge';
 import { litellmPermissions } from '@acarmisc/backstage-plugin-litellm-common';
 
+/**
+ * Bridge routes exempt from Backstage's default auth policy (they verify the
+ * Keycloak JWT themselves). Every route registered in routes/bridge.ts must be
+ * listed here, or the framework answers 401 before the bridge verifier runs.
+ */
+export const BRIDGE_UNAUTHENTICATED_PATHS = [
+  '/bridge/health',
+  '/bridge/keys',
+  '/bridge/models',
+  '/bridge/user/info',
+];
+
 export const litellmPlugin = createBackendPlugin({
   pluginId: 'litellm',
   register(reg) {
@@ -40,11 +52,7 @@ export const litellmPlugin = createBackendPlugin({
         // policy, otherwise the framework rejects the Keycloak Bearer with
         // "Illegal token" before the bridge verifier ever runs.
         if (readBridgeConfig(config).enabled) {
-          for (const path of [
-            '/bridge/health',
-            '/bridge/keys',
-            '/bridge/models',
-          ]) {
+          for (const path of BRIDGE_UNAUTHENTICATED_PATHS) {
             httpRouter.addAuthPolicy({ path, allow: 'unauthenticated' });
           }
         }
