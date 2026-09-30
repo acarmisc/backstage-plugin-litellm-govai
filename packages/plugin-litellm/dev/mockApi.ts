@@ -33,8 +33,11 @@ const models: ModelInfo[] = [
 
 const keys: VirtualKey[] = [
   { key: 'sk-...ab12', key_alias: 'jane-doe-personal', created_at: iso(30), expires_at: iso(-60), spend: 4.32, max_budget: 10, tpm_limit: 100000, rpm_limit: 1000, models: ['gpt-4o', 'claude-3-5-sonnet'], user_id: 'user:default/jane.doe' },
-  { key: 'sk-...cd34', key_alias: 'platform-ai-bot', created_at: iso(12), spend: 41.8, max_budget: 100, models: [], user_id: 'user:default/jane.doe', team_id: 'team-platform-eng' },
+  { key: 'sk-...cd34', key_alias: 'platform-ai-bot', created_at: iso(12), spend: 41.8, max_budget: 100, budget_duration: '30d', models: [], user_id: 'user:default/jane.doe', team_id: 'team-platform-eng' },
   { key: 'sk-...ef56', key_alias: 'quick-test-key', created_at: iso(2), expires_at: iso(-5), spend: 0.02, max_budget: 5, models: ['gpt-4o'], user_id: 'user:default/jane.doe', blocked: true },
+  // Long alias, past its cap: the row that used to stretch a whole grid
+  // column and swap its percentage for a wide "Over cap" word.
+  { key: 'sk-...gh78', key_alias: 'andrea-carmisciano-claude', created_at: iso(1), spend: 128.4, max_budget: 100, budget_duration: '30d', models: ['claude-3-5-sonnet'], user_id: 'user:default/jane.doe' },
 ];
 
 const teams: TeamInfo[] = [

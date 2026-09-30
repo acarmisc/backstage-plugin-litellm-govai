@@ -1,5 +1,6 @@
 import { fmtUsd } from './format';
 import { fmtCompact, fmtDateShort } from './components/ui/tokens';
+import { toLocalDay } from './dates';
 import type { UsageMetrics } from './types';
 
 /**
@@ -44,6 +45,23 @@ export function sparklineAriaLabel(points: Array<{ date: string; spend: number }
   const peakDate = fmtDateShort(maxPoint.date);
 
   return `Daily spend over ${dayCount} day${dayCount === 1 ? '' : 's'}, total ${fmtUsd(total)}, peak ${fmtUsd(maxPoint.spend)} on ${peakDate}`;
+}
+
+/**
+ * Spend recorded on the local calendar day `now` (defaults to today) in a
+ * daily-spend series. Days the API omits count as zero — no spend recorded
+ * yet — so a chart that simply hasn't seen a request today still answers
+ * `$0.00` instead of `undefined`.
+ *
+ * `now` is overridable so the same helper yields yesterday's figure
+ * (`spendOnDay(points, yesterday)`) for a day-over-day hint.
+ */
+export function spendOnDay(
+  points: Array<{ date: string; spend: number }>,
+  now: Date = new Date(),
+): number {
+  const day = toLocalDay(now);
+  return points.find(p => p.date === day)?.spend ?? 0;
 }
 
 /**

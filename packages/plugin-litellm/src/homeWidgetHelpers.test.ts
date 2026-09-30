@@ -1,7 +1,44 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert';
-import { rangeCaption, sparklineAriaLabel, usageSummary, mtdCaption, meterAria } from './homeWidgetHelpers';
+import { rangeCaption, sparklineAriaLabel, usageSummary, mtdCaption, meterAria, spendOnDay } from './homeWidgetHelpers';
+import { toLocalDay } from './dates';
 import type { UsageMetrics } from './types';
+
+describe('spendOnDay', () => {
+  const day = (offset: number) => {
+    const d = new Date();
+    d.setDate(d.getDate() - offset);
+    return toLocalDay(d);
+  };
+
+  test('returns the spend recorded for the local day of `now`', () => {
+    const points = [
+      { date: day(2), spend: 3.5 },
+      { date: day(1), spend: 9.1 },
+      { date: day(0), spend: 12.4 },
+    ];
+    assert.strictEqual(spendOnDay(points), 12.4);
+  });
+
+  test('yesterday is reachable by passing a shifted date', () => {
+    const points = [
+      { date: day(1), spend: 9.1 },
+      { date: day(0), spend: 12.4 },
+    ];
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    assert.strictEqual(spendOnDay(points, yesterday), 9.1);
+  });
+
+  test('a day the API omitted counts as zero, not undefined', () => {
+    assert.strictEqual(spendOnDay([{ date: '2020-01-01', spend: 4 }]), 0);
+    assert.strictEqual(spendOnDay([]), 0);
+  });
+
+  test('zero-spend days reported by the API stay zero', () => {
+    assert.strictEqual(spendOnDay([{ date: day(0), spend: 0 }]), 0);
+  });
+});
 
 describe('rangeCaption', () => {
   test('formats a date range correctly', () => {

@@ -93,20 +93,28 @@ export const Gauge: FC<{
           lineHeight: 1,
         }}
       >
+        {/* Past 100% the number stays visible — a wide "Over cap" word in a
+            small ring both overflows and collides with the stroke, so the
+            status is spelled out in the row that owns the gauge instead. */}
         <Typography
           sx={{
             fontSize: size <= 64 ? 15 : 18,
             fontWeight: 700,
             fontVariantNumeric: 'tabular-nums',
-            color: 'text.primary',
+            color: isOverCap ? 'currentColor' : 'text.primary',
           }}
         >
-          {isOverCap ? 'Over cap' : (label ?? `${Math.round(value)}%`)}
+          {label ?? `${Math.round(value)}%`}
         </Typography>
         {caption && (
           <Typography
             variant="caption"
-            sx={{ fontSize: 9.5, color: 'text.secondary', mt: 0.25 }}
+            sx={{
+              fontSize: 9.5,
+              color: 'text.secondary',
+              mt: 0.25,
+              whiteSpace: 'nowrap',
+            }}
           >
             {caption}
           </Typography>

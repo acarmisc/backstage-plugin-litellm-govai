@@ -358,7 +358,13 @@ Like the home widget it needs the backend plugin configured and the user provisi
 
 ### Budget Gauges (condensed homepage card)
 
-When the full `LiteLLMBudgetWidget` takes too much vertical space — e.g. a homepage column beside other cards — `LiteLLMBudgetGauges` is the condensed form: **one ring gauge per enforcement level**, `Key` · `User` · `Team`, **plus a month-to-date daily spend mini-chart**, in a responsive row (rings shrink below the `sm` breakpoint). Each ring shows the limit at that level **nearest its cap** (percent in the centre), with the limit's name, spend-vs-cap, and reset window under it. When a level holds several limits, the ring is the closest to its cap and a `+N more` link counts the rest through to the Keys tab; a level with no cap renders an empty ring with a short note, so the card keeps a stable shape. The chart plots daily spend from the 1st of the current month through today (frozen period — no selector), with a dashed line at your cap when you have one and a `Sep 1 – Sep 29`-style caption underneath. Rings and meters expose `role="meter"` with a descriptive label, and show `Over cap` past 100%.
+When the full `LiteLLMBudgetWidget` takes too much vertical space — e.g. a homepage column beside other cards — `LiteLLMBudgetGauges` is the condensed form, built as **two spend KPIs on one line, one inline row per enforcement level** (`Key` · `User` · `Team`), and a full-width month-to-date spend strip.
+
+**KPIs.** `Today spent`, with a `vs $9.10 yesterday` hint, and `Month to date`. Both come from the single month-to-date usage call the chart already makes, so the today indicator costs no extra request.
+
+**Rows.** Each row carries the limit at that level **nearest its cap** across three fixed tracks: the ring (percentage in the centre — a limit past 100% keeps its real number instead of swapping the figure for a wide word, and a second line inside the ring would collide with the stroke), the level tag with the limit's name and one short note — `Over cap` in the tone colour, a `+N more` link, or the key id / email / team slug — and the right-aligned `$spend / $cap` in tabular figures over the reset window, so each fact is printed exactly once per row. Long names ellipsize inside a `minmax(0, 1fr)` track, so a key alias like `andrea-carmisciano-claude` can no longer stretch its column or push the neighbouring captions out of line. When a level holds several limits, the ring is the closest to its cap and the `+N more` link counts the rest through to the Keys tab; a level with no cap renders an empty ring with a short note, so the card keeps a stable shape.
+
+**Chart.** Daily spend from the 1st of the current month through today (frozen period — no selector), with a dashed line at your cap when you have one; the caption line pairs `SPENT (MTD)` and the `Sep 1 – Sep 29`-style range with the month's total. Rings expose `role="meter"` with a descriptive label and announce `… — over cap` past 100%.
 
 **Composable CTAs.** The bar under the card is assembled from a `ctas` list, so each host picks the actions it wants, in the order it wants:
 
@@ -402,7 +408,7 @@ Passing `ctas={[]}` hides the bar; `action` still renders on its own. `expanded`
 | Prop | Type | Default | Description |
 |------|------|---------|-------------|
 | `title` | `string` | `'Budget'` | Card title override |
-| `size` | `number` | `72` | Ring diameter in px |
+| `size` | `number` | `56` | Ring diameter in px (rings shrink further below the `sm` breakpoint) |
 | `keysHref` | `string` | `` `${moduleHref}?tab=keys` `` | Where the `+N more` key link points |
 | `moduleHref` | `string` | `'/litellm'` | Where the `module` CTA and `new-key` deep-link point |
 | `onCreateKey` | `() => void` | — | Handle the `new-key` CTA yourself instead of deep-linking |

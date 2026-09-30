@@ -12,6 +12,7 @@ import { LiteLLMBudgetGauges } from './LiteLLMBudgetGauges';
 import { liteLlmApiRef } from '../api';
 import { ApiError } from '../api';
 import { UserInfo, VirtualKey, TeamInfo } from '../types';
+import { toLocalDay } from '../dates';
 
 // Mock the route-resolution API for useRouteRef
 afterEach(() => cleanup());
@@ -196,5 +197,79 @@ describe('LiteLLMBudgetGauges', () => {
       // Should show some budget information
       assert.ok(screen.getByText(/Budget/));
     });
+  });
+
+  /** A `daily_usage` point with every required field filled in. */
+  const dailyPoint = (date: string, spend: number) => ({
+    date,
+    spend,
+    total_tokens: 1000,
+    prompt_tokens: 700,
+    completion_tokens: 300,
+    api_requests: 5,
+    successful_requests: 5,
+    failed_requests: 0,
+  });
+
+  test('shows an inline today-spent KPI beside month-to-date spend', async () => {
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+
+    renderWidget({}, {
+      getUsage: async () => ({
+        total_spend: 116.51,
+        daily_usage: [
+          dailyPoint(toLocalDay(yesterday), 9.1),
+          dailyPoint(toLocalDay(new Date()), 12.4),
+        ],
+        daily_by_model: [],
+      }),
+    });
+
+    await waitFor(() => assert.ok(screen.getByText('Today spent')));
+    assert.ok(screen.getByText('$12.40'));
+    assert.ok(screen.getByText('vs $9.10 yesterday'));
+    assert.ok(screen.getByText('Month to date'));
+    assert.ok(screen.getAllByText('$116.51').length > 0);
+  });
+
+  test('renders one inline row per enforcement level, ring first', async () => {
+    renderWidget();
+
+    await waitFor(() => assert.ok(screen.getByText('Team')));
+    for (const level of ['Key', 'User', 'Team']) {
+      assert.ok(screen.getAllByText(level).length >= 1, `level tag ${level}`);
+    }
+    assert.strictEqual(screen.getAllByRole('meter').length, 3);
+  });
+
+  test('prints the reset window once per row and the key id under the name', async () => {
+    renderWidget();
+
+    await waitFor(() => assert.ok(screen.getByText('test-key-1')));
+    // The identifying detail sits under the limit name…
+    assert.ok(screen.getByText('sk-key-1'));
+
+    // …and the reset window only in the right track, not repeated under the
+    // name where it used to print twice in the same row.
+    const name = screen.getByText('test-key-1');
+    const row = name.parentElement?.parentElement;
+    assert.ok(row, 'the limit name sits inside a row grid');
+    const resetLines = Array.from(row.querySelectorAll('*')).filter(
+      el => el.children.length === 0 && /^never resets$|^resets /.test(el.textContent ?? ''),
+    );
+    assert.strictEqual(resetLines.length, 1, 'reset caption appears exactly once');
+  });
+
+  test('keeps the percentage in the ring when a limit is over cap', async () => {
+    renderWidget({ keys: [{ ...mockKeys[0], spend: 60, max_budget: 50 }] });
+
+    await waitFor(() => assert.ok(screen.getByText('120%')));
+    assert.ok(screen.getByText('Over cap'));
+    assert.ok(screen.getAllByText('$60.00 / $50.00').length > 0);
+    // The status rides in the row: a second line inside the ring collides
+    // with the stroke at this size.
+    const m = screen.getByRole('meter', { name: 'Key budget used: 120%' });
+    assert.ok(!m.textContent?.includes('Over cap'), 'ring holds only the number');
   });
 });

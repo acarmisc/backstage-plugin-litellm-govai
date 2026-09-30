@@ -10,6 +10,32 @@ commit/PR that bumps the version in `package.json`. Format follows the
 Earlier history: `git log -- packages/plugin-litellm` or the
  [GitHub tags](https://github.com/acarmisc/backstage-plugin-litellm-govai/tags).
 
+## 0.31.0
+
+Requires `@acarmisc/backstage-plugin-litellm-backend` `0.17.0`.
+
+### Minor Changes
+
+- feat(`LiteLLMBudgetGauges`): the condensed card is rows, not columns — two
+  inline spend KPIs (**Today spent**, with a `vs $9.10 yesterday` hint, and
+  **Month to date**, both from the month-to-date usage call the chart already
+  makes) over one inline row per enforcement level: ring, level tag + limit
+  name + one short note (`Over cap`, `+N more`, or the key id / email), and
+  right-aligned `$spend / $cap` over the reset window in tabular figures, so
+  the reset caption is no longer printed twice in the same row. A long key
+  alias now ellipsizes inside a `minmax(0, 1fr)` track instead of stretching
+  its grid column, and the captions under the rings no longer drift out of
+  line. The MTD chart is a full-width strip with the total and the
+  `Sep 1 – Sep 30` range on one caption line. Ring diameter default `72` → `56`
+  (rings still shrink below the `sm` breakpoint).
+- fix(`Gauge`): past 100% the centre keeps the real percentage — instead of
+  swapping the number for a wide word that overflowed the ring — and the
+  owning row spells `Over cap` out beside the limit name in the tone colour,
+  since a second line inside a 56px ring collides with the stroke;
+  `aria-valuetext` still announces `124% — over cap`.
+- chore: `./package.json` is exported so tooling (including the Backstage CLI's
+  config-schema collection in the dev harness) can resolve the package.
+
 ## 0.30.0
 
 Requires `@acarmisc/backstage-plugin-litellm-backend` `0.17.0`.
