@@ -666,7 +666,7 @@ export const LiteLLMPage: FC = () => {
         membersOnly={manageTeam?.mode === 'members'}
         currentUserId={userInfo?.user_id}
         memberManagerRoles={liteLlmConfig?.teamManagement?.memberManagerRoles}
-        onSubmit={async payload => {
+        onSubmit={async (payload, initialMembers) => {
           try {
             if (manageTeam?.mode === 'edit' && manageTeam.team) {
               const loadedAt = manageTeam.team.metadata?.updated_at_iso;
@@ -676,7 +676,25 @@ export const LiteLLMPage: FC = () => {
                 ...(typeof loadedAt === 'string' ? { expectedUpdatedAtIso: loadedAt } : {}),
               });
             } else {
-              await api.createTeam(payload as CreateTeamRequest);
+              const created = await api.createTeam(payload as CreateTeamRequest);
+              // Members picked in the create dialog; one failure must not
+              // hide the team that was created.
+              const failed: string[] = [];
+              for (const m of initialMembers ?? []) {
+                try {
+                  await api.addTeamMember(created.team_id, m);
+                } catch (e: any) {
+                  failed.push(`${m.userEntityRef} (${e.message})`);
+                }
+              }
+              if (failed.length) {
+                alertApi.post({
+                  message: `Team created, but some members could not be added: ${failed.join(', ')}`,
+                  severity: 'warning',
+                });
+                refreshTeams();
+                return;
+              }
             }
             const alert = toastFor('teamSaveSuccess');
             if (alert) alertApi.post(alert);

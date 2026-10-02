@@ -2,10 +2,10 @@ import '../testing/setupDom';
 import { TestTheme } from '../testing/TestTheme';
 import { describe, test, afterEach } from 'node:test';
 import assert from 'node:assert';
-import { render, cleanup, screen } from '@testing-library/react';
+import { render, cleanup, screen, fireEvent, waitFor } from '@testing-library/react';
 import { TestApiProvider } from '@backstage/test-utils';
 import { catalogApiRef } from '@backstage/plugin-catalog-react';
-import { ManageTeamDialog } from './ManageTeamDialog';
+import { ManageTeamDialog, InitialMember } from './ManageTeamDialog';
 import { TeamUsage } from './TeamUsage';
 import { TeamInfo } from '../types';
 
@@ -24,7 +24,10 @@ const team: TeamInfo = {
   ],
 } as TeamInfo;
 
-const catalogApi = { getEntities: async () => ({ items: [] }) };
+const catalogApi = {
+  getEntities: async () => ({ items: [] }),
+  queryEntities: async () => ({ items: [], totalItems: 0, pageInfo: {} }),
+};
 
 const renderDialog = () =>
   render(
@@ -101,5 +104,47 @@ describe('TeamUsage', () => {
       </TestTheme>,
     );
     assert.strictEqual(screen.getAllByText('Manage members').length, 1);
+  });
+});
+
+describe('ManageTeamDialog create', () => {
+  test('collects initial members and hands them to onSubmit', async () => {
+    let submitted: InitialMember[] | undefined;
+    render(
+      <TestTheme>
+        <TestApiProvider apis={[[catalogApiRef, catalogApi]]}>
+          <ManageTeamDialog
+            open
+            onClose={() => {}}
+            mode="create"
+            allModels={[{ model_name: 'gold' } as any]}
+            onSubmit={async (_payload, initialMembers) => {
+              submitted = initialMembers;
+            }}
+            canManageMembers
+          />
+        </TestApiProvider>
+      </TestTheme>,
+    );
+    assert.ok(screen.getByText('Initial members'));
+    fireEvent.change(screen.getByLabelText(/Add member/), {
+      target: { value: 'user:default/dev' },
+    });
+    fireEvent.click(screen.getByText('Add', { selector: 'button' }));
+    assert.ok(await screen.findByText('user:default/dev', { selector: 'p' }));
+
+    fireEvent.change(screen.getByLabelText(/Team Alias/), {
+      target: { value: 'New team' },
+    });
+    // Models autocomplete: type and pick the only option.
+    const models = screen.getByLabelText(/Models/);
+    fireEvent.change(models, { target: { value: 'gold' } });
+    fireEvent.keyDown(models, { key: 'ArrowDown' });
+    fireEvent.keyDown(models, { key: 'Enter' });
+
+    fireEvent.click(screen.getByText('Create team', { selector: 'button' }));
+    await waitFor(() =>
+      assert.deepStrictEqual(submitted, [{ userEntityRef: 'user:default/dev' }]),
+    );
   });
 });

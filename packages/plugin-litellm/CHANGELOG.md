@@ -10,6 +10,20 @@ commit/PR that bumps the version in `package.json`. Format follows the
 Earlier history: `git log -- packages/plugin-litellm` or the
  [GitHub tags](https://github.com/acarmisc/backstage-plugin-litellm-govai/tags).
 
+## 0.33.0
+
+Requires `@acarmisc/backstage-plugin-litellm-backend` `0.18.0`.
+
+### Minor Changes
+
+- feat(`ManageTeamDialog`): **Create Team** now has an *Initial members*
+  section. Picked members are added right after the team is created; if some
+  cannot be added, the team is kept and a warning lists the failures.
+- feat(`ManageTeamDialog`): wider two-column layout — settings on the left,
+  members on the right (stacked below the `md` breakpoint); budget and
+  budget duration share a row, and the models hint is shorter. The
+  members-only dialog stays narrow. The create button reads **Create team**.
+
 ## 0.32.0
 
 Requires `@acarmisc/backstage-plugin-litellm-backend` `0.18.0`.

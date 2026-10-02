@@ -31,6 +31,16 @@ import { TeamInfo, ModelInfo, LiteLlmConfig, CreateTeamRequest, UpdateTeamReques
 import { StatusPill, dataTableSx } from './ui';
 
 /** A catalog User entity flattened into what the member picker needs. */
+export interface InitialMember {
+  userEntityRef: string;
+  maxBudgetInTeam?: number;
+}
+
+/** A member picked while creating a team, added after the team exists. */
+interface PendingMember extends InitialMember {
+  label: string;
+}
+
 interface UserOption {
   ref: string;
   label: string;
@@ -55,7 +65,14 @@ interface ManageTeamDialogProps {
   team?: TeamInfo;
   allModels: ModelInfo[];
   config?: LiteLlmConfig;
-  onSubmit: (payload: CreateTeamRequest | UpdateTeamRequest) => Promise<void>;
+  /**
+   * Saves the team. In create mode, `initialMembers` lists the members picked
+   * in the dialog; the parent adds them once the team exists.
+   */
+  onSubmit: (
+    payload: CreateTeamRequest | UpdateTeamRequest,
+    initialMembers?: InitialMember[],
+  ) => Promise<void>;
   /** When true, the Members section (edit mode only) exposes add/remove controls. */
   canManageMembers?: boolean;
   /** Called to add a member; the parent is expected to refresh `team` on success. */
@@ -119,6 +136,7 @@ export const ManageTeamDialog: FC<ManageTeamDialogProps> = ({
   const [memberBudget, setMemberBudget] = useState('');
   const [memberBusy, setMemberBusy] = useState(false);
   const [memberError, setMemberError] = useState<string | null>(null);
+  const [pendingMembers, setPendingMembers] = useState<PendingMember[]>([]);
 
   const [kbIds, setKbIds] = useState<string[]>([]);
   const [kbBusy, setKbBusy] = useState(false);
@@ -136,8 +154,22 @@ export const ManageTeamDialog: FC<ManageTeamDialogProps> = ({
   const hideBudgetForManagers = config?.display?.hideTeamBudgetForManagers ?? false;
   const budgetWriteOnly = hideBudgetForManagers && mode === 'edit';
 
-  const members = useMemo(() => team?.members_with_roles ?? [], [team]);
-  const showMembers = (mode === 'edit' && !!canManageMembers) || membersOnly;
+  const creating = mode === 'create';
+  // While creating, the table lists the picked members (added on save).
+  const members = useMemo(
+    () =>
+      creating
+        ? pendingMembers.map(p => ({
+            user_id: p.userEntityRef,
+            user_email: p.label,
+            role: 'user',
+          }))
+        : team?.members_with_roles ?? [],
+    [creating, pendingMembers, team],
+  );
+  const showMembers = !!canManageMembers || !!membersOnly;
+  // Settings and members side by side; members-only stays a narrow dialog.
+  const wide = showMembers && !membersOnly;
 
   // Catalog users for the member picker, fetched on demand with debounced search.
   // Failures degrade to an empty option list — the field stays usable as a
@@ -197,8 +229,9 @@ export const ManageTeamDialog: FC<ManageTeamDialogProps> = ({
         };
       })
       .filter(o => !(o.email && existingEmails.has(o.email.toLowerCase())))
+      .filter(o => !pendingMembers.some(p => p.userEntityRef === o.ref))
       .sort((a, b) => a.label.localeCompare(b.label));
-  }, [searchUsers, members]);
+  }, [searchUsers, members, pendingMembers]);
 
   // Clean up debounce timer on unmount.
   useEffect(() => {
@@ -237,6 +270,7 @@ export const ManageTeamDialog: FC<ManageTeamDialogProps> = ({
       setMemberRef('');
       setMemberBudget('');
       setMemberError(null);
+      setPendingMembers([]);
       setKbIds(team?.object_permission?.vector_stores ?? []);
       setKbError(null);
       setMcpIds(team?.object_permission?.mcp_servers ?? []);
@@ -305,7 +339,15 @@ export const ManageTeamDialog: FC<ManageTeamDialogProps> = ({
         } as UpdateTeamRequest;
       }
 
-      await onSubmit(payload);
+      await onSubmit(
+        payload,
+        creating
+          ? pendingMembers.map(({ userEntityRef, maxBudgetInTeam }) => ({
+              userEntityRef,
+              ...(maxBudgetInTeam !== undefined && { maxBudgetInTeam }),
+            }))
+          : undefined,
+      );
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');
@@ -315,7 +357,7 @@ export const ManageTeamDialog: FC<ManageTeamDialogProps> = ({
   };
 
   const handleAddMember = async () => {
-    if (!onAddMember || !memberRef.trim()) return;
+    if (!memberRef.trim() || (!creating && !onAddMember)) return;
     setMemberError(null);
     // Members-only managers cannot set member budgets (server refuses it).
     const budget =
@@ -324,9 +366,22 @@ export const ManageTeamDialog: FC<ManageTeamDialogProps> = ({
       setMemberError('Max budget in team must be a positive number');
       return;
     }
+    if (creating) {
+      const ref = memberRef.trim();
+      if (!pendingMembers.some(p => p.userEntityRef === ref)) {
+        setPendingMembers(list => [
+          ...list,
+          { userEntityRef: ref, label: memberQuery.trim() || ref, maxBudgetInTeam: budget },
+        ]);
+      }
+      setMemberQuery('');
+      setMemberRef('');
+      setMemberBudget('');
+      return;
+    }
     try {
       setMemberBusy(true);
-      await onAddMember(memberRef.trim(), budget);
+      await onAddMember!(memberRef.trim(), budget);
       setMemberQuery('');
       setMemberRef('');
       setMemberBudget('');
@@ -338,6 +393,10 @@ export const ManageTeamDialog: FC<ManageTeamDialogProps> = ({
   };
 
   const handleRemoveMember = async (userId: string) => {
+    if (creating) {
+      setPendingMembers(list => list.filter(p => p.userEntityRef !== userId));
+      return;
+    }
     if (!onRemoveMember) return;
     setMemberError(null);
     try {
@@ -403,6 +462,8 @@ export const ManageTeamDialog: FC<ManageTeamDialogProps> = ({
     return { disabled: false };
   };
 
+  const submitLabel = creating ? 'Create team' : 'Save';
+
   const getDialogTitle = () => {
     if (membersOnly) {
       return `Manage members — ${team?.team_alias || 'Untitled team'}`;
@@ -411,7 +472,7 @@ export const ManageTeamDialog: FC<ManageTeamDialogProps> = ({
   };
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+    <Dialog open={open} onClose={onClose} maxWidth={wide ? 'md' : 'sm'} fullWidth>
       <DialogTitle>{getDialogTitle()}</DialogTitle>
       <DialogContent sx={{ pt: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
         {error && <Alert severity="error">{error}</Alert>}
@@ -422,220 +483,246 @@ export const ManageTeamDialog: FC<ManageTeamDialogProps> = ({
           </Alert>
         )}
 
-        {!membersOnly && (
-          <>
-            <TextField
-              label="Team Alias"
-              value={alias}
-              onChange={e => setAlias(e.target.value)}
-              disabled={submitting}
-              fullWidth
-            />
-
-            <Autocomplete
-              multiple
-              options={modelNames}
-              value={models}
-              onChange={(_, newValue) => setModels(newValue)}
-              disabled={submitting}
-              renderInput={params => (
-                <TextField
-                  {...params}
-                  label="Models"
-                  required
-                  helperText="At least one model is required here — this delegated flow only grants access to models your admin has allow-listed for team creation, not every proxy model. (Teams with no model restriction shown elsewhere were configured directly in LiteLLM.)"
-                />
-              )}
-            />
-
-            <TextField
-              label={budgetWriteOnly ? 'New Max Budget ($)' : 'Max Budget ($)'}
-              type="number"
-              value={maxBudget}
-              onChange={e => setMaxBudget(e.target.value)}
-              disabled={submitting || unlimited}
-              inputProps={{ min: 0, max: maxBudgetCeiling }}
-              helperText={
-                budgetWriteOnly
-                  ? 'Current budget is hidden — leave blank to keep it, or enter a new value'
-                  : `Maximum: $${maxBudgetCeiling}`
-              }
-              fullWidth
-            />
-
-            {allowUnlimitedBudget && (
-              <FormControlLabel
-                control={<Checkbox checked={unlimited} onChange={e => setUnlimited(e.target.checked)} disabled={submitting} />}
-                label="Unlimited Budget"
+        <Box
+          sx={{
+            display: 'grid',
+            gridTemplateColumns: {
+              xs: '1fr',
+              md: wide ? 'minmax(0, 1fr) minmax(0, 1fr)' : '1fr',
+            },
+            gap: 3,
+            alignItems: 'start',
+          }}
+        >
+          {!membersOnly && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              {wide && <Typography variant="subtitle2">Settings</Typography>}
+              <TextField
+                label="Team Alias"
+                value={alias}
+                onChange={e => setAlias(e.target.value)}
+                disabled={submitting}
+                fullWidth
               />
-            )}
 
-            <TextField
-              select
-              label="Budget Duration"
-              value={budgetDuration}
-              onChange={e => setBudgetDuration(e.target.value)}
-              disabled={submitting || unlimited}
-              helperText="Spend-reset period for the team budget"
-              fullWidth
-            >
-              {durationOptions.map(o => (
-                <MenuItem key={o.value} value={o.value}>
-                  {o.label}
-                </MenuItem>
-              ))}
-            </TextField>
-          </>
-        )}
-
-        {showMembers && (
-          <Box>
-            <Divider sx={{ my: 1 }} />
-            <Typography variant="subtitle2" sx={{ mb: 1 }}>
-              Members
-            </Typography>
-            {memberError && (
-              <Alert severity="error" sx={{ mb: 1 }} onClose={() => setMemberError(null)}>
-                {memberError}
-              </Alert>
-            )}
-            {members.length === 0 ? (
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                No members yet.
-              </Typography>
-            ) : (
-              <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 1.5, mb: 1.5 }}>
-                <Table size="small" sx={dataTableSx}>
-                  <TableHead>
-                    <TableRow>
-                      <TableCell>User</TableCell>
-                      <TableCell align="right">Role</TableCell>
-                      <TableCell align="right" sx={{ width: 40 }} />
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {members.map(m => (
-                      <TableRow key={m.user_id}>
-                        <TableCell>
-                          {m.user_email ? (
-                            <>
-                              <Typography variant="body2">{m.user_email}</Typography>
-                              <Typography
-                                variant="caption"
-                                color="text.secondary"
-                                sx={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 11 }}
-                              >
-                                {m.user_id}
-                              </Typography>
-                            </>
-                          ) : (
-                            <Typography
-                              variant="body2"
-                              sx={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' }}
-                            >
-                              {m.user_id}
-                            </Typography>
-                          )}
-                        </TableCell>
-                        <TableCell align="right">
-                          <StatusPill label={m.role} tone={m.role === 'admin' ? 'accent' : 'neutral'} dot={false} />
-                        </TableCell>
-                        <TableCell align="right">
-                          {(() => {
-                            const { disabled, reason } = isRemovalDisabled(m.user_id, m.role);
-                            // span wrapper: a disabled button emits no hover events
-                            return (
-                              <Tooltip title={reason ?? ''}>
-                                <span>
-                                  <IconButton
-                                    edge="end"
-                                    size="small"
-                                    aria-label={`remove ${m.user_id}`}
-                                    disabled={memberBusy || disabled}
-                                    onClick={() => handleRemoveMember(m.user_id)}
-                                  >
-                                    <DeleteIcon fontSize="small" />
-                                  </IconButton>
-                                </span>
-                              </Tooltip>
-                            );
-                          })()}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </TableContainer>
-            )}
-            <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start', flexWrap: 'wrap' }}>
               <Autocomplete
-                freeSolo
-                autoHighlight
-                options={userOptions}
-                loading={usersLoading}
-                inputValue={memberQuery}
-                onInputChange={(_, newInputValue, reason) => {
-                  setMemberQuery(newInputValue);
-                  // 'reset' fires when a selection sets the input programmatically —
-                  // memberRef is already set by onChange in that case, so only sync
-                  // free typing (and clearing) back into the submitted ref here.
-                  if (reason === 'input' || reason === 'clear') {
-                    setMemberRef(newInputValue);
-                    // Trigger a debounced search for new results.
-                    handleUserSearch(newInputValue);
-                  }
-                }}
-                onChange={(_, newValue) => {
-                  if (newValue && typeof newValue !== 'string') {
-                    setMemberQuery(newValue.label);
-                    setMemberRef(newValue.ref);
-                  }
-                }}
-                getOptionLabel={o => (typeof o === 'string' ? o : o.label)}
-                isOptionEqualToValue={(o, v) => o.ref === (typeof v === 'string' ? v : v.ref)}
-                disabled={memberBusy}
-                sx={{ flex: 1, minWidth: 260 }}
+                multiple
+                options={modelNames}
+                value={models}
+                onChange={(_, newValue) => setModels(newValue)}
+                disabled={submitting}
                 renderInput={params => (
                   <TextField
                     {...params}
-                    label="Add member"
-                    placeholder="Search by name or email…"
-                    size="small"
-                    helperText="Pick a catalog user, or paste a user entity ref"
-                    InputProps={{
-                      ...params.InputProps,
-                      endAdornment: (
-                        <>
-                          {usersLoading ? <CircularProgress color="inherit" size={14} /> : null}
-                          {params.InputProps.endAdornment}
-                        </>
-                      ),
-                    }}
+                    label="Models"
+                    required
+                    helperText="Only models your admin allow-listed for teams. At least one is required."
                   />
                 )}
               />
-              {!membersOnly && (
+
+              <Box
+                sx={{
+                  display: 'grid',
+                  gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' },
+                  gap: 2,
+                }}
+              >
                 <TextField
-                  label="Max budget in team ($)"
+                  label={budgetWriteOnly ? 'New Max Budget ($)' : 'Max Budget ($)'}
                   type="number"
-                  value={memberBudget}
-                  onChange={e => setMemberBudget(e.target.value)}
-                  disabled={memberBusy}
-                  size="small"
-                  sx={{ width: 160 }}
+                  value={maxBudget}
+                  onChange={e => setMaxBudget(e.target.value)}
+                  disabled={submitting || unlimited}
+                  inputProps={{ min: 0, max: maxBudgetCeiling }}
+                  helperText={
+                    budgetWriteOnly
+                      ? 'Current budget is hidden — leave blank to keep it, or enter a new value'
+                      : `Maximum: $${maxBudgetCeiling}`
+                  }
+                  fullWidth
+                />
+
+                <TextField
+                  select
+                  label="Budget Duration"
+                  value={budgetDuration}
+                  onChange={e => setBudgetDuration(e.target.value)}
+                  disabled={submitting || unlimited}
+                  helperText="Spend-reset period for the team budget"
+                  fullWidth
+                >
+                  {durationOptions.map(o => (
+                    <MenuItem key={o.value} value={o.value}>
+                      {o.label}
+                    </MenuItem>
+                  ))}
+                </TextField>
+              </Box>
+
+              {allowUnlimitedBudget && (
+                <FormControlLabel
+                  control={<Checkbox checked={unlimited} onChange={e => setUnlimited(e.target.checked)} disabled={submitting} />}
+                  label="Unlimited Budget"
                 />
               )}
-              <Button
-                onClick={handleAddMember}
-                disabled={memberBusy || !memberRef.trim()}
-                variant="outlined"
-                sx={{ mt: 0.5 }}
-              >
-                Add
-              </Button>
             </Box>
-          </Box>
-        )}
+          )}
+
+          {showMembers && (
+            <Box>
+              <Typography variant="subtitle2" sx={{ mb: creating ? 0.25 : 1 }}>
+                {creating ? 'Initial members' : 'Members'}
+              </Typography>
+              {creating && (
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                  Added as team users right after the team is created.
+                </Typography>
+              )}
+              {memberError && (
+                <Alert severity="error" sx={{ mb: 1 }} onClose={() => setMemberError(null)}>
+                  {memberError}
+                </Alert>
+              )}
+              {members.length === 0 ? (
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                  {creating ? 'No members picked yet — you can also add them later.' : 'No members yet.'}
+                </Typography>
+              ) : (
+                <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 1.5, mb: 1.5 }}>
+                  <Table size="small" sx={dataTableSx}>
+                    <TableHead>
+                      <TableRow>
+                        <TableCell>User</TableCell>
+                        <TableCell align="right">Role</TableCell>
+                        <TableCell align="right" sx={{ width: 40 }} />
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {members.map(m => (
+                        <TableRow key={m.user_id}>
+                          <TableCell>
+                            {m.user_email ? (
+                              <>
+                                <Typography variant="body2">{m.user_email}</Typography>
+                                <Typography
+                                  variant="caption"
+                                  color="text.secondary"
+                                  sx={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 11 }}
+                                >
+                                  {m.user_id}
+                                </Typography>
+                              </>
+                            ) : (
+                              <Typography
+                                variant="body2"
+                                sx={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' }}
+                              >
+                                {m.user_id}
+                              </Typography>
+                            )}
+                          </TableCell>
+                          <TableCell align="right">
+                            <StatusPill label={m.role} tone={m.role === 'admin' ? 'accent' : 'neutral'} dot={false} />
+                          </TableCell>
+                          <TableCell align="right">
+                            {(() => {
+                              const { disabled, reason } = isRemovalDisabled(m.user_id, m.role);
+                              // span wrapper: a disabled button emits no hover events
+                              return (
+                                <Tooltip title={reason ?? ''}>
+                                  <span>
+                                    <IconButton
+                                      edge="end"
+                                      size="small"
+                                      aria-label={`remove ${m.user_id}`}
+                                      disabled={memberBusy || disabled}
+                                      onClick={() => handleRemoveMember(m.user_id)}
+                                    >
+                                      <DeleteIcon fontSize="small" />
+                                    </IconButton>
+                                  </span>
+                                </Tooltip>
+                              );
+                            })()}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              )}
+              <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+                <Autocomplete
+                  freeSolo
+                  autoHighlight
+                  options={userOptions}
+                  loading={usersLoading}
+                  inputValue={memberQuery}
+                  onInputChange={(_, newInputValue, reason) => {
+                    setMemberQuery(newInputValue);
+                    // 'reset' fires when a selection sets the input programmatically —
+                    // memberRef is already set by onChange in that case, so only sync
+                    // free typing (and clearing) back into the submitted ref here.
+                    if (reason === 'input' || reason === 'clear') {
+                      setMemberRef(newInputValue);
+                      // Trigger a debounced search for new results.
+                      handleUserSearch(newInputValue);
+                    }
+                  }}
+                  onChange={(_, newValue) => {
+                    if (newValue && typeof newValue !== 'string') {
+                      setMemberQuery(newValue.label);
+                      setMemberRef(newValue.ref);
+                    }
+                  }}
+                  getOptionLabel={o => (typeof o === 'string' ? o : o.label)}
+                  isOptionEqualToValue={(o, v) => o.ref === (typeof v === 'string' ? v : v.ref)}
+                  disabled={memberBusy}
+                  sx={{ flex: '1 1 240px' }}
+                  renderInput={params => (
+                    <TextField
+                      {...params}
+                      label="Add member"
+                      placeholder="Search by name or email…"
+                      size="small"
+                      helperText="Pick a catalog user, or paste a user entity ref"
+                      InputProps={{
+                        ...params.InputProps,
+                        endAdornment: (
+                          <>
+                            {usersLoading ? <CircularProgress color="inherit" size={14} /> : null}
+                            {params.InputProps.endAdornment}
+                          </>
+                        ),
+                      }}
+                    />
+                  )}
+                />
+                {!membersOnly && (
+                  <TextField
+                    label="Max budget in team ($)"
+                    type="number"
+                    value={memberBudget}
+                    onChange={e => setMemberBudget(e.target.value)}
+                    disabled={memberBusy}
+                    size="small"
+                    sx={{ width: 150 }}
+                  />
+                )}
+                <Button
+                  onClick={handleAddMember}
+                  disabled={memberBusy || !memberRef.trim()}
+                  variant="outlined"
+                  sx={{ mt: 0.5 }}
+                >
+                  Add
+                </Button>
+              </Box>
+            </Box>
+          )}
+
+        </Box>
 
         {!membersOnly && showKnowledgeBases && (
           <Box>
@@ -720,7 +807,7 @@ export const ManageTeamDialog: FC<ManageTeamDialogProps> = ({
         </Button>
         {!membersOnly && (
           <Button onClick={handleSubmit} disabled={submitting} variant="contained">
-            {submitting ? 'Saving...' : 'Save'}
+            {submitting ? 'Saving...' : submitLabel}
           </Button>
         )}
       </DialogActions>
