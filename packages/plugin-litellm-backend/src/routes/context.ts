@@ -70,8 +70,9 @@ export interface RouterContext {
     req: Request,
     res: Response,
     permission: BasicPermission,
+    opts?: { allowTeamRole?: boolean },
   ): Promise<
-    | { teamId: string; owningGroup: string; actor: string; team: TeamInfo }
+    | { teamId: string; owningGroup: string; actor: string; team: TeamInfo; via: 'group' | 'teamRole' }
     | null
   >;
 }

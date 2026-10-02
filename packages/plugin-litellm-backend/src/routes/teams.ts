@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { TeamInfo } from '../types';
-import { toLiteLLMUserId, getOrProvisionUser, ProvisioningError } from '../provisioning';
+import { toLiteLLMUserId, getOrProvisionUser, ProvisioningError, isUserMemberOfGroup } from '../provisioning';
 import {
   litellmTeamCreatePermission,
   litellmTeamManagePermission,
@@ -73,6 +73,13 @@ export function registerTeamsRoutes(router: Router, ctx: RouterContext): void {
       return;
     }
 
+    if (teamAdminCfg.readOnly) {
+      res.status(403).json({
+        error: 'Team management is read-only (litellm.teamAdmin.readOnly): teams are managed outside Backstage',
+      });
+      return;
+    }
+
     const check = await assertTeamAdmin({
       req,
       auth,
@@ -86,6 +93,21 @@ export function registerTeamsRoutes(router: Router, ctx: RouterContext): void {
     if (!check.ok) {
       res.status(check.status).json({ error: check.error });
       return;
+    }
+
+    // createGroups narrows creation to a subset of the admin group.
+    if (teamAdminCfg.createGroups.length > 0) {
+      const memberships = await Promise.all(
+        teamAdminCfg.createGroups.map(group =>
+          isUserMemberOfGroup(check.userEntityRef, group, catalogClient, auth, logger),
+        ),
+      );
+      if (!memberships.some(Boolean)) {
+        res.status(403).json({
+          error: `Access denied: team creation is limited to ${teamAdminCfg.createGroups.join(', ')}`,
+        });
+        return;
+      }
     }
 
     const v = validateTeamWriteInput(req.body ?? {}, teamAdminCfg);
@@ -307,9 +329,14 @@ export function registerTeamsRoutes(router: Router, ctx: RouterContext): void {
   router.post(
     '/teams/:teamId/members',
     async (req: Request, res: Response) => {
-      const authz = await authorizeTeamSubresource(req, res, litellmTeamMembersManagePermission);
+      const authz = await authorizeTeamSubresource(
+        req,
+        res,
+        litellmTeamMembersManagePermission,
+        { allowTeamRole: true },
+      );
       if (!authz) return;
-      const { teamId, owningGroup, actor } = authz;
+      const { teamId, owningGroup, actor, via } = authz;
 
       const body = (req.body ?? {}) as {
         userEntityRef?: string;
@@ -340,6 +367,12 @@ export function registerTeamsRoutes(router: Router, ctx: RouterContext): void {
           return;
         }
         maxBudgetInTeam = body.maxBudgetInTeam;
+        if (via === 'teamRole') {
+          res.status(403).json({
+            error: 'Team member managers cannot set member budgets',
+          });
+          return;
+        }
       }
 
       // (a) the member must be a real User in the Backstage catalog
@@ -404,6 +437,7 @@ export function registerTeamsRoutes(router: Router, ctx: RouterContext): void {
           teamId,
           member: litellmUserId,
           owningGroup,
+          via,
         });
         const updated = await withTeamFetchRetry(() => client.getTeamInfo(teamId));
         res.json(
@@ -423,9 +457,14 @@ export function registerTeamsRoutes(router: Router, ctx: RouterContext): void {
   router.delete(
     '/teams/:teamId/members',
     async (req: Request, res: Response) => {
-      const authz = await authorizeTeamSubresource(req, res, litellmTeamMembersManagePermission);
+      const authz = await authorizeTeamSubresource(
+        req,
+        res,
+        litellmTeamMembersManagePermission,
+        { allowTeamRole: true },
+      );
       if (!authz) return;
-      const { teamId, owningGroup, actor } = authz;
+      const { teamId, owningGroup, actor, team, via } = authz;
 
       const userEntityRef = String(req.query.userEntityRef ?? '').trim();
       if (!userEntityRef) {
@@ -434,7 +473,26 @@ export function registerTeamsRoutes(router: Router, ctx: RouterContext): void {
           .json({ error: 'userEntityRef query parameter is required' });
         return;
       }
+
       const litellmUserId = toLiteLLMUserId(userEntityRef, userIdDomain);
+      // Team-role managers change membership only: they cannot remove
+      // themselves nor a peer holding a manager role.
+      if (via === 'teamRole') {
+        if (litellmUserId === toLiteLLMUserId(actor, userIdDomain)) {
+          res.status(400).json({ error: 'You cannot remove yourself from the team' });
+          return;
+        }
+        const role = team.members_with_roles?.find(
+          m => m.user_id === litellmUserId,
+        )?.role;
+        if (role && teamAdminCfg.memberManagerRoles.includes(role)) {
+          res.status(403).json({
+            error: `Only platform team admins can remove a team ${role}`,
+          });
+          return;
+        }
+      }
+
       try {
         await client.teamMemberDelete({
           team_id: teamId,
@@ -445,6 +503,7 @@ export function registerTeamsRoutes(router: Router, ctx: RouterContext): void {
           teamId,
           member: litellmUserId,
           owningGroup,
+          via,
         });
         const updated = await withTeamFetchRetry(() => client.getTeamInfo(teamId));
         res.json(

@@ -27,6 +27,8 @@ export function registerConfigRoutes(router: Router, ctx: RouterContext): void {
         maxBudgetCeiling: ctx.teamAdminCfg.maxBudgetCeiling,
         allowUnlimitedBudget: ctx.teamAdminCfg.allowUnlimitedBudget,
         objectPermissionsEnabled: ctx.objectPermsEnabled,
+        readOnly: ctx.teamAdminCfg.readOnly,
+        memberManagerRoles: ctx.teamAdminCfg.memberManagerRoles,
       },
       display: {
         hideTeamBudgetForMembers:

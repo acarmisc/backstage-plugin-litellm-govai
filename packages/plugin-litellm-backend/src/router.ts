@@ -7,6 +7,8 @@ import { LiteLLMClient, LiteLLMUpstreamError } from './client';
 import { TeamInfo } from './types';
 import {
   resolveCredentials,
+  resolveUserId,
+  toLiteLLMUserId,
   readProvisioningDefaults,
   readRoleConfigs,
   isUserMemberOfGroup,
@@ -226,13 +228,27 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
       req: Request,
       res: Response,
       permission: BasicPermission,
+      opts?: { allowTeamRole?: boolean },
     ): Promise<
-      | { teamId: string; owningGroup: string; actor: string; team: TeamInfo }
+      | {
+          teamId: string;
+          owningGroup: string;
+          actor: string;
+          team: TeamInfo;
+          via: 'group' | 'teamRole';
+        }
       | null
     > => {
       if (!ctx.requireTeamMgmt(res)) return null;
       if (!teamAdminCfg.group) {
         res.status(500).json({ error: 'Team management is misconfigured (group is missing)' });
+        return null;
+      }
+      if (teamAdminCfg.readOnly) {
+        res.status(403).json({
+          error:
+            'Team management is read-only (litellm.teamAdmin.readOnly): teams are managed outside Backstage',
+        });
         return null;
       }
 
@@ -245,7 +261,12 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
         permission,
         logger,
       });
-      if (!check.ok) {
+      // A caller outside the admin group may still qualify through their
+      // LiteLLM team role (litellm.teamAdmin.memberManagerRoles), so a 403
+      // here is deferred until that path has been tried.
+      const teamRoleEligible =
+        !!opts?.allowTeamRole && teamAdminCfg.memberManagerRoles.length > 0;
+      if (!check.ok && !(check.status === 403 && teamRoleEligible)) {
         res.status(check.status).json({ error: check.error });
         return null;
       }
@@ -256,7 +277,7 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
         return null;
       }
 
-      let existing;
+      let existing: TeamInfo;
       try {
         existing = await withTeamFetchRetry(() => client.getTeamInfo(teamId));
       } catch (err: unknown) {
@@ -272,33 +293,66 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
         typeof existing.metadata?.owning_group === 'string'
           ? existing.metadata.owning_group
           : undefined;
-      if (!owningGroup) {
-        res.status(403).json({
+
+      // Group path: admin-group member whose group owns the team.
+      let denial: { status: number; error: string };
+      if (!check.ok) {
+        denial = { status: check.status, error: check.error };
+      } else if (!owningGroup) {
+        denial = {
+          status: 403,
           error:
             'This team is not managed by Backstage team admins and cannot be edited here',
-        });
-        return null;
-      }
-      const owns = await isUserMemberOfGroup(
-        check.userEntityRef,
-        owningGroup,
-        catalogClient,
-        auth,
-        logger,
-      );
-      if (!owns) {
-        res
-          .status(403)
-          .json({ error: `Access denied: team is owned by ${owningGroup}` });
-        return null;
+        };
+      } else if (
+        await isUserMemberOfGroup(
+          check.userEntityRef,
+          owningGroup,
+          catalogClient,
+          auth,
+          logger,
+        )
+      ) {
+        return {
+          teamId,
+          owningGroup,
+          actor: check.userEntityRef,
+          team: existing,
+          via: 'group',
+        };
+      } else {
+        denial = {
+          status: 403,
+          error: `Access denied: team is owned by ${owningGroup}`,
+        };
       }
 
-      return {
-        teamId,
-        owningGroup,
-        actor: check.userEntityRef,
-        team: existing,
-      };
+      // Team-role path: the caller holds an allowed role in this very team.
+      // The permission framework still has the final say.
+      if (teamRoleEligible) {
+        const actor = await resolveUserId(req, auth);
+        const litellmUserId = actor && toLiteLLMUserId(actor, userIdDomain);
+        const role = existing.members_with_roles?.find(
+          m => m.user_id === litellmUserId,
+        )?.role;
+        if (
+          actor &&
+          role &&
+          teamAdminCfg.memberManagerRoles.includes(role) &&
+          (await ctx.assertPermission(req, permission))
+        ) {
+          return {
+            teamId,
+            owningGroup: owningGroup ?? '',
+            actor,
+            team: existing,
+            via: 'teamRole',
+          };
+        }
+      }
+
+      res.status(denial.status).json({ error: denial.error });
+      return null;
     },
   };
 

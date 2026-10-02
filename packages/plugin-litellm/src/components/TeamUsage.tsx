@@ -15,7 +15,8 @@ import IconButton from '@mui/material/IconButton';
 import Button from '@mui/material/Button';
 import CircularProgress from '@mui/material/CircularProgress';
 import { alpha } from '@mui/material/styles';
-import { ExpandMore, Group, Add } from '@mui/icons-material';
+import MuiTooltip from '@mui/material/Tooltip';
+import { ExpandMore, Group, Add, LockOutlined, GroupAddOutlined } from '@mui/icons-material';
 import {
   AreaChart,
   Area,
@@ -67,10 +68,13 @@ interface TeamCardProps {
   usageLoading: boolean;
   canManage?: boolean;
   onEditTeam?: (team: TeamInfo) => void;
+  /** Members-only management (team-role path); hidden when `canManage`. */
+  canManageMembers?: boolean;
+  onManageMembers?: (team: TeamInfo) => void;
   onExpand?: (team: TeamInfo) => void;
 }
 
-const TeamCard: FC<TeamCardProps> = ({ team, usage, usageLoading, canManage, onEditTeam, onExpand }) => {
+const TeamCard: FC<TeamCardProps> = ({ team, usage, usageLoading, canManage, onEditTeam, canManageMembers, onManageMembers, onExpand }) => {
   const [expanded, setExpanded] = useState(false);
   const chart = useChartTheme();
 
@@ -198,6 +202,19 @@ const TeamCard: FC<TeamCardProps> = ({ team, usage, usageLoading, canManage, onE
           >
             Edit
           </Button>
+        )}
+        {canManageMembers && onManageMembers && !canManage && (
+          <MuiTooltip title="Add or remove members of this team">
+            <Button
+              size="small"
+              variant="text"
+              startIcon={<GroupAddOutlined />}
+              onClick={() => onManageMembers(team)}
+              sx={{ textTransform: 'none' }}
+            >
+              Manage members
+            </Button>
+          </MuiTooltip>
         )}
         <IconButton
           size="small"
@@ -355,6 +372,11 @@ interface TeamUsageProps {
   onCreateTeam?: () => void;
   /** Called when a team card is expanded to trigger data loading. */
   onTeamExpand?: (team: TeamInfo) => void;
+  /** Per-team: whether the caller may manage this team's members only. */
+  canManageMembers?: (team: TeamInfo) => boolean;
+  onManageMembers?: (team: TeamInfo) => void;
+  /** Teams are synced from an identity provider: show a badge, no write controls. */
+  readOnly?: boolean;
 }
 
 export const TeamUsage: FC<TeamUsageProps> = ({
@@ -367,8 +389,22 @@ export const TeamUsage: FC<TeamUsageProps> = ({
   canCreate,
   onCreateTeam,
   onTeamExpand,
+  canManageMembers,
+  onManageMembers,
+  readOnly,
 }) => {
-  const createAction =
+  const readOnlyBadge = (
+    <MuiTooltip title="Teams and memberships are managed in your identity provider. Changes made here would be overwritten, so editing is disabled.">
+      <Box
+        component="span"
+        sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, color: 'text.secondary', fontSize: 12.5 }}
+      >
+        <LockOutlined sx={{ fontSize: 15 }} />
+        Synced from identity provider
+      </Box>
+    </MuiTooltip>
+  );
+  const createButton =
     canCreate && onCreateTeam ? (
       <Button
         variant="contained"
@@ -380,6 +416,7 @@ export const TeamUsage: FC<TeamUsageProps> = ({
         Create Team
       </Button>
     ) : undefined;
+  const createAction = readOnly ? readOnlyBadge : createButton;
 
   if (loading) {
     return (
@@ -416,6 +453,8 @@ export const TeamUsage: FC<TeamUsageProps> = ({
             usageLoading={getTeamUsageLoading(team.team_id)}
             canManage={canManage}
             onEditTeam={onEditTeam}
+            canManageMembers={canManageMembers?.(team)}
+            onManageMembers={onManageMembers}
             onExpand={onTeamExpand}
           />
         ))}

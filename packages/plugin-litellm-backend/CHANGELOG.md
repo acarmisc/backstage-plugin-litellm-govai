@@ -9,6 +9,28 @@ commit/PR that bumps the version in `package.json`. Format follows the
 Earlier history: `git log -- packages/plugin-litellm-backend` or the
 [GitHub tags](https://github.com/acarmisc/backstage-plugin-litellm-govai/tags).
 
+## 0.18.0
+
+### Minor Changes
+
+- **feat(teams): delegated member management, creation groups and read-only
+  mode.** Three new fail-closed keys under `litellm.teamAdmin`:
+  - `readOnly` (default `false`) — every team write (create, edit, block,
+    delete, members, KB / MCP) returns `403`, admins included. Meant for
+    instances whose teams are synced from an identity provider. Reads keep
+    working.
+  - `createGroups` (default `[]`) — when set, `POST /teams` additionally
+    requires membership in one of these groups (narrows `group`, never widens).
+  - `memberManagerRoles` (default `[]`, off) — LiteLLM team roles (e.g.
+    `admin`) whose holders may add/remove members of **their own** team via
+    `POST`/`DELETE /teams/:id/members` without being in `group`. On this path
+    `maxBudgetInTeam` is refused, managers cannot remove themselves or a peer
+    manager, and the `litellm.team.members.manage` permission decision still
+    applies. Team settings, budget and models stay admin-only.
+  - `GET /config` exposes `teamManagement.readOnly` and
+    `teamManagement.memberManagerRoles`; member audit events carry
+    `via: group | teamRole`.
+
 ## 0.17.4
 
 ### Patch Changes

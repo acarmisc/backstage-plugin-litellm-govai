@@ -35,6 +35,7 @@ import {
 } from '../permissions';
 import { DateRange, GenerateKeyRequest, GenerateKeyResponse, UpdateKeyRequest, UsageMetrics, CreateTeamRequest, UpdateTeamRequest, TeamInfo, VirtualKey } from '../types';
 import { toastFor } from '../feedback';
+import { isTeamMemberManager } from '../teamMemberManager';
 import {
   getUnprovisionedTitle,
   getUnprovisionedMessage,
@@ -148,7 +149,7 @@ export const LiteLLMPage: FC = () => {
     );
   }, [setSearchParams]);
 
-  const [manageTeam, setManageTeam] = useState<{ mode: 'create' | 'edit'; team?: TeamInfo } | null>(null);
+  const [manageTeam, setManageTeam] = useState<{ mode: 'create' | 'edit' | 'members'; team?: TeamInfo } | null>(null);
   /** Which key is open in the shared key form dialog; null = create mode. */
   const [keyToEdit, setKeyToEdit] = useState<VirtualKey | null>(null);
   const keyFormOpen = generateDialogOpen || !!keyToEdit;
@@ -586,16 +587,26 @@ export const LiteLLMPage: FC = () => {
         for (const t of managedTeams ?? []) teamsById.set(t.team_id, t);
         for (const t of teams ?? []) teamsById.set(t.team_id, t);
         const visibleTeams = Array.from(teamsById.values());
+        const readOnly = liteLlmConfig?.teamManagement?.readOnly ?? false;
+        const memberManagerRoles = liteLlmConfig?.teamManagement?.memberManagerRoles ?? [];
+
         return (
           <TeamUsage
             teams={visibleTeams}
             loading={teamsLoading}
             getTeamUsage={teamId => teamUsageCache[teamId] ?? null}
             getTeamUsageLoading={teamId => teamUsageLoading[teamId] ?? false}
-            canManage={teamMgmtEnabled && canManageTeam}
+            canManage={teamMgmtEnabled && canManageTeam && !readOnly}
             onEditTeam={t => setManageTeam({ mode: 'edit', team: t })}
-            canCreate={teamMgmtEnabled && canCreateTeam}
+            canCreate={teamMgmtEnabled && canCreateTeam && !readOnly}
             onCreateTeam={() => setManageTeam({ mode: 'create' })}
+            canManageMembers={t =>
+              teamMgmtEnabled &&
+              canManageMembers &&
+              isTeamMemberManager(t, userInfo?.user_id, memberManagerRoles, readOnly)
+            }
+            onManageMembers={t => setManageTeam({ mode: 'members', team: t })}
+            readOnly={readOnly}
             onTeamExpand={team => loadTeamUsage(team.team_id)}
           />
         );
@@ -648,10 +659,13 @@ export const LiteLLMPage: FC = () => {
       <ManageTeamDialog
         open={!!manageTeam}
         onClose={() => setManageTeam(null)}
-        mode={manageTeam?.mode ?? 'create'}
+        mode={manageTeam?.mode === 'members' ? 'edit' : (manageTeam?.mode ?? 'create')}
         team={manageTeam?.team}
         allModels={allModels ?? []}
         config={liteLlmConfig}
+        membersOnly={manageTeam?.mode === 'members'}
+        currentUserId={userInfo?.user_id}
+        memberManagerRoles={liteLlmConfig?.teamManagement?.memberManagerRoles}
         onSubmit={async payload => {
           try {
             if (manageTeam?.mode === 'edit' && manageTeam.team) {
@@ -672,7 +686,7 @@ export const LiteLLMPage: FC = () => {
             if (alert) alertApi.post(alert);
           }
         }}
-        canManageMembers={teamMgmtEnabled && canManageMembers}
+        canManageMembers={teamMgmtEnabled && canManageMembers && !liteLlmConfig?.teamManagement?.readOnly}
         onAddMember={async (userEntityRef, maxBudgetInTeam) => {
           if (!manageTeam?.team) return;
           const updated = await api.addTeamMember(manageTeam.team.team_id, {

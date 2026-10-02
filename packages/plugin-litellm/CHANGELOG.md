@@ -10,6 +10,23 @@ commit/PR that bumps the version in `package.json`. Format follows the
 Earlier history: `git log -- packages/plugin-litellm` or the
  [GitHub tags](https://github.com/acarmisc/backstage-plugin-litellm-govai/tags).
 
+## 0.32.0
+
+Requires `@acarmisc/backstage-plugin-litellm-backend` `0.18.0`.
+
+### Minor Changes
+
+- feat(Teams): **Manage members** action for team members holding a role in
+  `litellm.teamAdmin.memberManagerRoles`. It opens a members-only dialog
+  (`Manage members — <team>`) with an explanation banner, no alias / models /
+  budget fields, no per-member budget, and remove buttons disabled — with a
+  tooltip saying why — for yourself and for peer managers. Shown per team, only
+  where the caller holds the role.
+- feat(Teams): with `litellm.teamAdmin.readOnly`, the Teams header shows a
+  *Synced from identity provider* badge (tooltip explains why editing is off)
+  instead of **Create Team**, and Edit / member / KB / MCP controls are hidden.
+- Team member role badges are shown in the members table of the team dialog.
+
 ## 0.31.0
 
 Requires `@acarmisc/backstage-plugin-litellm-backend` `0.17.0`.

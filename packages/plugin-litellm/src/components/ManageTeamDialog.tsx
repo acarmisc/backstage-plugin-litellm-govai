@@ -15,6 +15,7 @@ import Box from '@mui/material/Box';
 import Divider from '@mui/material/Divider';
 import Typography from '@mui/material/Typography';
 import IconButton from '@mui/material/IconButton';
+import Tooltip from '@mui/material/Tooltip';
 import Paper from '@mui/material/Paper';
 import Table from '@mui/material/Table';
 import TableBody from '@mui/material/TableBody';
@@ -73,6 +74,12 @@ interface ManageTeamDialogProps {
   mcpServers?: McpServerInfo[];
   /** Called to replace the team's attached MCP servers; parent refreshes `team`. */
   onSaveMcpServers?: (mcpServerIds: string[]) => Promise<void>;
+  /** When true, only members section is shown (not budget/models/KB/MCP); title changes; Save becomes Done. */
+  membersOnly?: boolean;
+  /** Current user's LiteLLM ID; used in membersOnly mode to prevent self-removal and role-restricted removal. */
+  currentUserId?: string;
+  /** Roles that can manage members in membersOnly mode; used to disable removal of role holders. */
+  memberManagerRoles?: string[];
 }
 
 export const ManageTeamDialog: FC<ManageTeamDialogProps> = ({
@@ -92,6 +99,9 @@ export const ManageTeamDialog: FC<ManageTeamDialogProps> = ({
   canManageMcpServers,
   mcpServers,
   onSaveMcpServers,
+  membersOnly,
+  currentUserId,
+  memberManagerRoles,
 }) => {
   const [alias, setAlias] = useState('');
   const [models, setModels] = useState<string[]>([]);
@@ -127,7 +137,7 @@ export const ManageTeamDialog: FC<ManageTeamDialogProps> = ({
   const budgetWriteOnly = hideBudgetForManagers && mode === 'edit';
 
   const members = useMemo(() => team?.members_with_roles ?? [], [team]);
-  const showMembers = mode === 'edit' && !!canManageMembers;
+  const showMembers = (mode === 'edit' && !!canManageMembers) || membersOnly;
 
   // Catalog users for the member picker, fetched on demand with debounced search.
   // Failures degrade to an empty option list — the field stays usable as a
@@ -307,7 +317,9 @@ export const ManageTeamDialog: FC<ManageTeamDialogProps> = ({
   const handleAddMember = async () => {
     if (!onAddMember || !memberRef.trim()) return;
     setMemberError(null);
-    const budget = memberBudget ? parseFloat(memberBudget) : undefined;
+    // Members-only managers cannot set member budgets (server refuses it).
+    const budget =
+      !membersOnly && memberBudget ? parseFloat(memberBudget) : undefined;
     if (budget !== undefined && (isNaN(budget) || budget <= 0)) {
       setMemberError('Max budget in team must be a positive number');
       return;
@@ -379,73 +391,102 @@ export const ManageTeamDialog: FC<ManageTeamDialogProps> = ({
   const mcpLabel = (id: string) =>
     (mcpServers ?? []).find(s => s.id === id)?.name ?? id;
 
+  // In membersOnly mode, determine if a member removal is disabled
+  const isRemovalDisabled = (memberUserId: string, memberRole: string): { disabled: boolean; reason?: string } => {
+    if (!membersOnly) return { disabled: false };
+    if (memberUserId === currentUserId) {
+      return { disabled: true, reason: "You can't remove yourself" };
+    }
+    if (memberManagerRoles?.includes(memberRole)) {
+      return { disabled: true, reason: `Only platform admins can remove a team ${memberRole}` };
+    }
+    return { disabled: false };
+  };
+
+  const getDialogTitle = () => {
+    if (membersOnly) {
+      return `Manage members — ${team?.team_alias || 'Untitled team'}`;
+    }
+    return mode === 'create' ? 'Create Team' : 'Edit Team';
+  };
+
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle>{mode === 'create' ? 'Create Team' : 'Edit Team'}</DialogTitle>
+      <DialogTitle>{getDialogTitle()}</DialogTitle>
       <DialogContent sx={{ pt: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
         {error && <Alert severity="error">{error}</Alert>}
 
-        <TextField
-          label="Team Alias"
-          value={alias}
-          onChange={e => setAlias(e.target.value)}
-          disabled={submitting}
-          fullWidth
-        />
-
-        <Autocomplete
-          multiple
-          options={modelNames}
-          value={models}
-          onChange={(_, newValue) => setModels(newValue)}
-          disabled={submitting}
-          renderInput={params => (
-            <TextField
-              {...params}
-              label="Models"
-              required
-              helperText="At least one model is required here — this delegated flow only grants access to models your admin has allow-listed for team creation, not every proxy model. (Teams with no model restriction shown elsewhere were configured directly in LiteLLM.)"
-            />
-          )}
-        />
-
-        <TextField
-          label={budgetWriteOnly ? 'New Max Budget ($)' : 'Max Budget ($)'}
-          type="number"
-          value={maxBudget}
-          onChange={e => setMaxBudget(e.target.value)}
-          disabled={submitting || unlimited}
-          inputProps={{ min: 0, max: maxBudgetCeiling }}
-          helperText={
-            budgetWriteOnly
-              ? 'Current budget is hidden — leave blank to keep it, or enter a new value'
-              : `Maximum: $${maxBudgetCeiling}`
-          }
-          fullWidth
-        />
-
-        {allowUnlimitedBudget && (
-          <FormControlLabel
-            control={<Checkbox checked={unlimited} onChange={e => setUnlimited(e.target.checked)} disabled={submitting} />}
-            label="Unlimited Budget"
-          />
+        {membersOnly && (
+          <Alert severity="info">
+            As a team {team?.members_with_roles?.find(m => m.user_id === currentUserId)?.role || 'member'} you can add or remove members. Budgets and models are managed by your platform admins.
+          </Alert>
         )}
 
-        <TextField
-          select
-          label="Budget Duration"
-          value={budgetDuration}
-          onChange={e => setBudgetDuration(e.target.value)}
-          disabled={submitting || unlimited}
-          helperText="Spend-reset period for the team budget"
-          fullWidth
-        >
-          {durationOptions.map(o => (
-            <MenuItem key={o.value} value={o.value}>
-              {o.label}
-            </MenuItem>
-          ))}
-        </TextField>
+        {!membersOnly && (
+          <>
+            <TextField
+              label="Team Alias"
+              value={alias}
+              onChange={e => setAlias(e.target.value)}
+              disabled={submitting}
+              fullWidth
+            />
+
+            <Autocomplete
+              multiple
+              options={modelNames}
+              value={models}
+              onChange={(_, newValue) => setModels(newValue)}
+              disabled={submitting}
+              renderInput={params => (
+                <TextField
+                  {...params}
+                  label="Models"
+                  required
+                  helperText="At least one model is required here — this delegated flow only grants access to models your admin has allow-listed for team creation, not every proxy model. (Teams with no model restriction shown elsewhere were configured directly in LiteLLM.)"
+                />
+              )}
+            />
+
+            <TextField
+              label={budgetWriteOnly ? 'New Max Budget ($)' : 'Max Budget ($)'}
+              type="number"
+              value={maxBudget}
+              onChange={e => setMaxBudget(e.target.value)}
+              disabled={submitting || unlimited}
+              inputProps={{ min: 0, max: maxBudgetCeiling }}
+              helperText={
+                budgetWriteOnly
+                  ? 'Current budget is hidden — leave blank to keep it, or enter a new value'
+                  : `Maximum: $${maxBudgetCeiling}`
+              }
+              fullWidth
+            />
+
+            {allowUnlimitedBudget && (
+              <FormControlLabel
+                control={<Checkbox checked={unlimited} onChange={e => setUnlimited(e.target.checked)} disabled={submitting} />}
+                label="Unlimited Budget"
+              />
+            )}
+
+            <TextField
+              select
+              label="Budget Duration"
+              value={budgetDuration}
+              onChange={e => setBudgetDuration(e.target.value)}
+              disabled={submitting || unlimited}
+              helperText="Spend-reset period for the team budget"
+              fullWidth
+            >
+              {durationOptions.map(o => (
+                <MenuItem key={o.value} value={o.value}>
+                  {o.label}
+                </MenuItem>
+              ))}
+            </TextField>
+          </>
+        )}
 
         {showMembers && (
           <Box>
@@ -500,15 +541,25 @@ export const ManageTeamDialog: FC<ManageTeamDialogProps> = ({
                           <StatusPill label={m.role} tone={m.role === 'admin' ? 'accent' : 'neutral'} dot={false} />
                         </TableCell>
                         <TableCell align="right">
-                          <IconButton
-                            edge="end"
-                            size="small"
-                            aria-label={`remove ${m.user_id}`}
-                            disabled={memberBusy}
-                            onClick={() => handleRemoveMember(m.user_id)}
-                          >
-                            <DeleteIcon fontSize="small" />
-                          </IconButton>
+                          {(() => {
+                            const { disabled, reason } = isRemovalDisabled(m.user_id, m.role);
+                            // span wrapper: a disabled button emits no hover events
+                            return (
+                              <Tooltip title={reason ?? ''}>
+                                <span>
+                                  <IconButton
+                                    edge="end"
+                                    size="small"
+                                    aria-label={`remove ${m.user_id}`}
+                                    disabled={memberBusy || disabled}
+                                    onClick={() => handleRemoveMember(m.user_id)}
+                                  >
+                                    <DeleteIcon fontSize="small" />
+                                  </IconButton>
+                                </span>
+                              </Tooltip>
+                            );
+                          })()}
                         </TableCell>
                       </TableRow>
                     ))}
@@ -563,15 +614,17 @@ export const ManageTeamDialog: FC<ManageTeamDialogProps> = ({
                   />
                 )}
               />
-              <TextField
-                label="Max budget in team ($)"
-                type="number"
-                value={memberBudget}
-                onChange={e => setMemberBudget(e.target.value)}
-                disabled={memberBusy}
-                size="small"
-                sx={{ width: 160 }}
-              />
+              {!membersOnly && (
+                <TextField
+                  label="Max budget in team ($)"
+                  type="number"
+                  value={memberBudget}
+                  onChange={e => setMemberBudget(e.target.value)}
+                  disabled={memberBusy}
+                  size="small"
+                  sx={{ width: 160 }}
+                />
+              )}
               <Button
                 onClick={handleAddMember}
                 disabled={memberBusy || !memberRef.trim()}
@@ -584,7 +637,7 @@ export const ManageTeamDialog: FC<ManageTeamDialogProps> = ({
           </Box>
         )}
 
-        {showKnowledgeBases && (
+        {!membersOnly && showKnowledgeBases && (
           <Box>
             <Divider sx={{ my: 1 }} />
             <Typography variant="subtitle2" sx={{ mb: 1 }}>
@@ -622,7 +675,7 @@ export const ManageTeamDialog: FC<ManageTeamDialogProps> = ({
           </Box>
         )}
 
-        {showMcpServers && (
+        {!membersOnly && showMcpServers && (
           <Box>
             <Divider sx={{ my: 1 }} />
             <Typography variant="subtitle2" sx={{ mb: 1 }}>
@@ -663,11 +716,13 @@ export const ManageTeamDialog: FC<ManageTeamDialogProps> = ({
       </DialogContent>
       <DialogActions>
         <Button onClick={onClose} disabled={submitting}>
-          Cancel
+          {membersOnly ? 'Done' : 'Cancel'}
         </Button>
-        <Button onClick={handleSubmit} disabled={submitting} variant="contained">
-          {submitting ? 'Saving...' : 'Save'}
-        </Button>
+        {!membersOnly && (
+          <Button onClick={handleSubmit} disabled={submitting} variant="contained">
+            {submitting ? 'Saving...' : 'Save'}
+          </Button>
+        )}
       </DialogActions>
     </Dialog>
   );

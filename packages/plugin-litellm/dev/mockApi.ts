@@ -197,6 +197,17 @@ export class MockLiteLlmApi implements LiteLlmApiInterface {
     };
   }
   async getConfig(): Promise<LiteLlmConfig> {
-    return { baseUrl: 'https://llm-gw.example.com', keyGeneration: { allowUnlimitedBudget: false, teamRequired: true } };
+    return {
+      baseUrl: 'https://llm-gw.example.com',
+      keyGeneration: { allowUnlimitedBudget: false, teamRequired: true },
+      teamManagement: {
+        enabled: true,
+        maxBudgetCeiling: 1000,
+        allowUnlimitedBudget: false,
+        objectPermissionsEnabled: true,
+        readOnly: false,
+        memberManagerRoles: ['admin'],
+      },
+    };
   }
 }

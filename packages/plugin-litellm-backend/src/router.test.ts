@@ -552,6 +552,24 @@ describe('router /config', () => {
       await new Promise<void>(r => h2.server.close(() => r()));
     }
   });
+
+  test('/config exposes readOnly and memberManagerRoles', async () => {
+    const h2 = await startHarness({
+      config: {
+        'permission.enabled': true,
+        'litellm.teamAdmin.group': 'group:default/admins',
+        'litellm.teamAdmin.readOnly': true,
+        'litellm.teamAdmin.memberManagerRoles': ['admin', 'team-lead'],
+      },
+    });
+    try {
+      const { body } = await req(h2.baseUrl, 'GET', '/config');
+      assert.strictEqual(body.teamManagement.readOnly, true);
+      assert.deepStrictEqual(body.teamManagement.memberManagerRoles, ['admin', 'team-lead']);
+    } finally {
+      await new Promise<void>(r => h2.server.close(() => r()));
+    }
+  });
 });
 
 describe('router /keys/generate', () => {
@@ -2116,6 +2134,80 @@ describe('router POST /teams', () => {
       await new Promise<void>(r => h.server.close(() => r()));
     }
   });
+
+  test('readOnly: admin gets 403 on POST /teams', async () => {
+    const h = await startHarness({
+      config: {
+        'permission.enabled': true,
+        'litellm.teamAdmin.group': 'group:default/admins',
+        'litellm.teamAdmin.allowedModels': ['gpt-4o'],
+        'litellm.teamAdmin.maxBudgetCeiling': 1000,
+        'litellm.teamAdmin.readOnly': true,
+      },
+      catalogClient: mockCatalog(['group:default/admins']),
+    });
+    try {
+      const { status, body } = await req(h.baseUrl, 'POST', '/teams', {
+        authRef: 'user:default/alice',
+        body: { team_alias: 'squad-a', models: ['gpt-4o'], max_budget: 500 },
+      });
+      assert.strictEqual(status, 403);
+      assert.match(body.error, /read-only/i);
+      assert.match(body.error, /managed outside/i);
+    } finally {
+      await new Promise<void>(r => h.server.close(() => r()));
+    }
+  });
+
+  test('createGroups: caller not in any createGroup => 403', async () => {
+    const h = await startHarness({
+      config: {
+        'permission.enabled': true,
+        'litellm.teamAdmin.group': 'group:default/admins',
+        'litellm.teamAdmin.allowedModels': ['gpt-4o'],
+        'litellm.teamAdmin.maxBudgetCeiling': 1000,
+        'litellm.teamAdmin.createGroups': ['group:default/creators'],
+      },
+      catalogClient: mockCatalog(['group:default/admins']),
+    });
+    try {
+      const { status, body } = await req(h.baseUrl, 'POST', '/teams', {
+        authRef: 'user:default/alice',
+        body: { team_alias: 'squad-a', models: ['gpt-4o'], max_budget: 500 },
+      });
+      assert.strictEqual(status, 403);
+      assert.match(body.error, /team creation is limited/i);
+      assert.match(body.error, /group:default\/creators/);
+    } finally {
+      await new Promise<void>(r => h.server.close(() => r()));
+    }
+  });
+
+  test('createGroups: caller in createGroup => 200', async () => {
+    const h = await startHarness({
+      config: {
+        'permission.enabled': true,
+        'litellm.teamAdmin.group': 'group:default/admins',
+        'litellm.teamAdmin.allowedModels': ['gpt-4o'],
+        'litellm.teamAdmin.maxBudgetCeiling': 1000,
+        'litellm.teamAdmin.createGroups': ['group:default/creators'],
+      },
+      catalogClient: mockCatalog(['group:default/admins', 'group:default/creators']),
+      client: mockClient({
+        createTeam: async (r: any) => ({ team_id: 't_new', ...r }),
+      }),
+    });
+    try {
+      const { status, body } = await req(h.baseUrl, 'POST', '/teams', {
+        authRef: 'user:default/alice',
+        body: { team_alias: 'squad-a', models: ['gpt-4o'], max_budget: 500 },
+      });
+      assert.strictEqual(status, 200);
+      assert.strictEqual(body.team_id, 't_new');
+    } finally {
+      await new Promise<void>(r => h.server.close(() => r()));
+    }
+  });
 });
 
 describe('router PATCH /teams/:id', () => {
@@ -2390,6 +2482,36 @@ describe('router PATCH /teams/:id', () => {
       });
       assert.strictEqual(status, 200);
       assert.strictEqual(h.client.calls.updateTeam.length, 1);
+    } finally {
+      await new Promise<void>(r => h.server.close(() => r()));
+    }
+  });
+
+  test('readOnly: admin gets 403 on PATCH', async () => {
+    const h = await startHarness({
+      config: {
+        'permission.enabled': true,
+        'litellm.teamAdmin.group': 'group:default/admins',
+        'litellm.teamAdmin.allowedModels': ['gpt-4o'],
+        'litellm.teamAdmin.maxBudgetCeiling': 1000,
+        'litellm.teamAdmin.readOnly': true,
+      },
+      catalogClient: mockCatalog(['group:default/admins']),
+      client: mockClient({
+        getTeamInfo: async () => ({
+          team_id: 't1',
+          spend: 0,
+          metadata: { owning_group: 'group:default/admins' },
+        }),
+      }),
+    });
+    try {
+      const { status, body } = await req(h.baseUrl, 'PATCH', '/teams/t1', {
+        authRef: 'user:default/alice',
+        body: { max_budget: 250 },
+      });
+      assert.strictEqual(status, 403);
+      assert.match(body.error, /read-only/i);
     } finally {
       await new Promise<void>(r => h.server.close(() => r()));
     }
@@ -2674,6 +2796,34 @@ describe('router GET /teams/managed', () => {
       await new Promise<void>(r => h.server.close(() => r()));
     }
   });
+
+  test('readOnly: admin gets 403 on DELETE', async () => {
+    const h = await startHarness({
+      config: {
+        'permission.enabled': true,
+        'litellm.teamAdmin.group': 'group:default/admins',
+        'litellm.teamAdmin.readOnly': true,
+        'litellm.teamAdmin.allowTeamDelete': true,
+      },
+      catalogClient: mockCatalog(['group:default/admins']),
+      client: mockClient({
+        getTeamInfo: async () => ({
+          team_id: 't1',
+          spend: 0,
+          metadata: { owning_group: 'group:default/admins' },
+        }),
+      }),
+    });
+    try {
+      const { status, body } = await req(h.baseUrl, 'DELETE', '/teams/t1', {
+        authRef: 'user:default/alice',
+      });
+      assert.strictEqual(status, 403);
+      assert.match(body.error, /read-only/i);
+    } finally {
+      await new Promise<void>(r => h.server.close(() => r()));
+    }
+  });
 });
 
 describe('router POST /teams/:id/members', () => {
@@ -2892,6 +3042,134 @@ describe('router POST /teams/:id/members', () => {
       await new Promise<void>(r => h.server.close(() => r()));
     }
   });
+
+  test('readOnly: admin gets 403 on POST /teams/:id/members', async () => {
+    const h = await startHarness({
+      config: {
+        'permission.enabled': true,
+        'litellm.teamAdmin.group': 'group:default/admins',
+        'litellm.teamAdmin.readOnly': true,
+        'litellm.userIdDomain': 'example.com',
+      },
+      catalogClient: mockCatalog(['group:default/admins']),
+      client: mockClient({
+        getTeamInfo: async () => ({
+          team_id: 't1',
+          spend: 0,
+          members_with_roles: [],
+          metadata: { owning_group: 'group:default/admins' },
+        }),
+      }),
+    });
+    try {
+      const { status, body } = await req(h.baseUrl, 'POST', '/teams/t1/members', {
+        authRef: 'user:default/alice',
+        body: { userEntityRef: 'user:default/bob' },
+      });
+      assert.strictEqual(status, 403);
+      assert.match(body.error, /read-only/i);
+    } finally {
+      await new Promise<void>(r => h.server.close(() => r()));
+    }
+  });
+
+  test('teamRole path: non-admin with role in memberManagerRoles can add member', async () => {
+    const h = await startHarness({
+      config: {
+        'permission.enabled': true,
+        'litellm.teamAdmin.group': 'group:default/admins',
+        'litellm.teamAdmin.memberManagerRoles': ['admin'],
+        'litellm.userIdDomain': 'example.com',
+      },
+      catalogClient: mockCatalog([]),
+      client: mockClient({
+        getTeamInfo: async () => ({
+          team_id: 't1',
+          spend: 0,
+          members_with_roles: [
+            { user_id: 'alice@example.com', role: 'admin' },
+          ],
+          metadata: { owning_group: 'group:default/admins' },
+        }),
+        userInfo: { user_id: 'bob@example.com' },
+        teamMemberAdd: async () => ({}),
+      }),
+    });
+    try {
+      const { status, body } = await req(h.baseUrl, 'POST', '/teams/t1/members', {
+        authRef: 'user:default/alice',
+        body: { userEntityRef: 'user:default/bob' },
+      });
+      assert.strictEqual(status, 200);
+      assert.strictEqual(body.team_id, 't1');
+    } finally {
+      await new Promise<void>(r => h.server.close(() => r()));
+    }
+  });
+
+  test('teamRole path: admin-group member falls back to team role on a team their group does not own', async () => {
+    const h = await startHarness({
+      config: {
+        'permission.enabled': true,
+        'litellm.teamAdmin.group': 'group:default/admins',
+        'litellm.teamAdmin.memberManagerRoles': ['admin'],
+        'litellm.userIdDomain': 'example.com',
+      },
+      catalogClient: mockCatalog(['group:default/admins']),
+      client: mockClient({
+        getTeamInfo: async () => ({
+          team_id: 't1',
+          spend: 0,
+          members_with_roles: [
+            { user_id: 'alice@example.com', role: 'admin' },
+          ],
+        }),
+        userInfo: { user_id: 'bob@example.com' },
+        teamMemberAdd: async () => ({}),
+      }),
+    });
+    try {
+      const { status } = await req(h.baseUrl, 'POST', '/teams/t1/members', {
+        authRef: 'user:default/alice',
+        body: { userEntityRef: 'user:default/bob' },
+      });
+      assert.strictEqual(status, 200);
+    } finally {
+      await new Promise<void>(r => h.server.close(() => r()));
+    }
+  });
+
+  test('teamRole: rejects maxBudgetInTeam from team member manager', async () => {
+    const h = await startHarness({
+      config: {
+        'permission.enabled': true,
+        'litellm.teamAdmin.group': 'group:default/admins',
+        'litellm.teamAdmin.memberManagerRoles': ['admin'],
+        'litellm.userIdDomain': 'example.com',
+      },
+      catalogClient: mockCatalog([]),
+      client: mockClient({
+        getTeamInfo: async () => ({
+          team_id: 't1',
+          spend: 0,
+          members_with_roles: [
+            { user_id: 'alice@example.com', role: 'admin' },
+          ],
+          metadata: { owning_group: 'group:default/admins' },
+        }),
+      }),
+    });
+    try {
+      const { status, body } = await req(h.baseUrl, 'POST', '/teams/t1/members', {
+        authRef: 'user:default/alice',
+        body: { userEntityRef: 'user:default/bob', maxBudgetInTeam: 100 },
+      });
+      assert.strictEqual(status, 403);
+      assert.match(body.error, /cannot set member budgets/i);
+    } finally {
+      await new Promise<void>(r => h.server.close(() => r()));
+    }
+  });
 });
 
 describe('router DELETE /teams/:id/members', () => {
@@ -3008,6 +3286,143 @@ describe('router DELETE /teams/:id/members', () => {
         team_id: 't1',
         user_id: 'bob@example.com',
       });
+    } finally {
+      await new Promise<void>(r => h.server.close(() => r()));
+    }
+  });
+
+  test('readOnly: admin gets 403 on DELETE /teams/:id/members', async () => {
+    const h = await startHarness({
+      config: {
+        'permission.enabled': true,
+        'litellm.teamAdmin.group': 'group:default/admins',
+        'litellm.teamAdmin.readOnly': true,
+        'litellm.userIdDomain': 'example.com',
+      },
+      catalogClient: mockCatalog(['group:default/admins']),
+      client: mockClient({
+        getTeamInfo: async () => ({
+          team_id: 't1',
+          spend: 0,
+          members_with_roles: [],
+          metadata: { owning_group: 'group:default/admins' },
+        }),
+      }),
+    });
+    try {
+      const { status, body } = await req(
+        h.baseUrl,
+        'DELETE',
+        '/teams/t1/members?userEntityRef=user:default/bob',
+        { authRef: 'user:default/alice' },
+      );
+      assert.strictEqual(status, 403);
+      assert.match(body.error, /read-only/i);
+    } finally {
+      await new Promise<void>(r => h.server.close(() => r()));
+    }
+  });
+
+  test('teamRole path: non-admin can remove non-admin member from their team', async () => {
+    const h = await startHarness({
+      config: {
+        'permission.enabled': true,
+        'litellm.teamAdmin.group': 'group:default/admins',
+        'litellm.teamAdmin.memberManagerRoles': ['admin'],
+        'litellm.userIdDomain': 'example.com',
+      },
+      catalogClient: mockCatalog([]),
+      client: mockClient({
+        getTeamInfo: async () => ({
+          team_id: 't1',
+          spend: 0,
+          members_with_roles: [
+            { user_id: 'alice@example.com', role: 'admin' },
+            { user_id: 'bob@example.com', role: 'user' },
+          ],
+          metadata: { owning_group: 'group:default/admins' },
+        }),
+        teamMemberDelete: async () => ({}),
+      }),
+    });
+    try {
+      const { status, body } = await req(
+        h.baseUrl,
+        'DELETE',
+        '/teams/t1/members?userEntityRef=user:default/bob',
+        { authRef: 'user:default/alice' },
+      );
+      assert.strictEqual(status, 200);
+      assert.strictEqual(body.team_id, 't1');
+    } finally {
+      await new Promise<void>(r => h.server.close(() => r()));
+    }
+  });
+
+  test('teamRole: refuses to remove a team member with the same role as caller', async () => {
+    const h = await startHarness({
+      config: {
+        'permission.enabled': true,
+        'litellm.teamAdmin.group': 'group:default/admins',
+        'litellm.teamAdmin.memberManagerRoles': ['admin'],
+        'litellm.userIdDomain': 'example.com',
+      },
+      catalogClient: mockCatalog([]),
+      client: mockClient({
+        getTeamInfo: async () => ({
+          team_id: 't1',
+          spend: 0,
+          members_with_roles: [
+            { user_id: 'alice@example.com', role: 'admin' },
+            { user_id: 'charlie@example.com', role: 'admin' },
+          ],
+          metadata: { owning_group: 'group:default/admins' },
+        }),
+      }),
+    });
+    try {
+      const { status, body } = await req(
+        h.baseUrl,
+        'DELETE',
+        '/teams/t1/members?userEntityRef=user:default/charlie',
+        { authRef: 'user:default/alice' },
+      );
+      assert.strictEqual(status, 403);
+      assert.match(body.error, /Only platform team admins can remove/i);
+    } finally {
+      await new Promise<void>(r => h.server.close(() => r()));
+    }
+  });
+
+  test('teamRole: refuses self-removal', async () => {
+    const h = await startHarness({
+      config: {
+        'permission.enabled': true,
+        'litellm.teamAdmin.group': 'group:default/admins',
+        'litellm.teamAdmin.memberManagerRoles': ['admin'],
+        'litellm.userIdDomain': 'example.com',
+      },
+      catalogClient: mockCatalog([]),
+      client: mockClient({
+        getTeamInfo: async () => ({
+          team_id: 't1',
+          spend: 0,
+          members_with_roles: [
+            { user_id: 'alice@example.com', role: 'admin' },
+          ],
+          metadata: { owning_group: 'group:default/admins' },
+        }),
+      }),
+    });
+    try {
+      const { status, body } = await req(
+        h.baseUrl,
+        'DELETE',
+        '/teams/t1/members?userEntityRef=user:default/alice',
+        { authRef: 'user:default/alice' },
+      );
+      assert.strictEqual(status, 400);
+      assert.match(body.error, /cannot remove yourself/i);
     } finally {
       await new Promise<void>(r => h.server.close(() => r()));
     }

@@ -58,6 +58,10 @@ export interface LiteLlmConfig {
     allowUnlimitedBudget: boolean;
     /** Whether knowledge-base / MCP management routes are enabled (opt-in). */
     objectPermissionsEnabled?: boolean;
+    /** When true, all team writes (create, edit, delete, members, KB/MCP) are rejected server-side; teams are managed in the identity provider. */
+    readOnly?: boolean;
+    /** LiteLLM team roles (e.g. ["admin"]) whose holders may add/remove members of their own team via POST/DELETE /teams/:id/members endpoints. */
+    memberManagerRoles?: string[];
   };
   /** Team-budget hiding switches, set via litellm.display in app-config.yaml. */
   display?: {

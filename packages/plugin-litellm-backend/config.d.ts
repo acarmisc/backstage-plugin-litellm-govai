@@ -325,6 +325,34 @@ export interface Config {
       allowTeamDelete?: boolean;
 
       /**
+       * When true, all team write operations return 403 even for admins:
+       * POST /teams, PATCH /teams/:id, DELETE /teams/:id,
+       * POST/DELETE /teams/:id/members, and PUT objectPermissions routes.
+       * Reads (GET /teams, GET /teams/managed) keep working.
+       * Error message: 'Team management is read-only (litellm.teamAdmin.readOnly): teams are managed outside Backstage'.
+       * @default false
+       */
+      readOnly?: boolean;
+
+      /**
+       * Backstage group refs that must include the caller for team creation.
+       * When non-empty, POST /teams additionally requires the caller to be
+       * a member of at least one of these groups, narrowing the permission.
+       * Error message: 'Access denied: team creation is limited to <comma-joined groups>'.
+       * @default []
+       */
+      createGroups?: string[];
+
+      /**
+       * LiteLLM team roles whose holders may add/remove members of their own team.
+       * When non-empty, callers with one of these roles in members_with_roles
+       * can POST/DELETE /teams/:teamId/members without owning the team's group.
+       * Allows non-admins to manage their team's membership without full admin access.
+       * @default []
+       */
+      memberManagerRoles?: string[];
+
+      /**
        * Object-permission management (attaching knowledge bases / MCP servers
        * to a team). This is the highest-risk surface — attaching a vector store
        * exposes its documents to every team key, and attaching an MCP server

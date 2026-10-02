@@ -210,6 +210,13 @@ litellm:
     # Allow DELETE /teams/:id (otherwise the route 403s — block a team instead).
     allowTeamDelete: false                        # default: false
 
+    # Refuse every team write, admins included (teams synced from an IdP).
+    readOnly: false                               # default: false
+    # When set, only members of one of these groups (on top of `group`) may create teams.
+    createGroups: []                              # default: []
+    # LiteLLM team roles that may add/remove members of their own team.
+    memberManagerRoles: []                        # default: [] (off)
+
     # Knowledge-base (vector store) and MCP-server management. Highest-risk
     # surface — only enable with a real permission policy installed.
     objectPermissions:
@@ -264,6 +271,9 @@ litellm:
 | `litellm.teamAdmin.maxBudgetCeiling` | number | no | — | Hard USD ceiling for an admin-set team budget |
 | `litellm.teamAdmin.allowUnlimitedBudget` | boolean | no | `false` | Let an admin create a team with no budget cap |
 | `litellm.teamAdmin.allowTeamDelete` | boolean | no | `false` | Enable `DELETE /teams/:id` |
+| `litellm.teamAdmin.readOnly` | boolean | no | `false` | Refuse every team write, admins included; reads keep working |
+| `litellm.teamAdmin.createGroups` | string[] | no | `[]` | Narrow team creation to members of these groups (in addition to `group`) |
+| `litellm.teamAdmin.memberManagerRoles` | string[] | no | `[]` | LiteLLM team roles (e.g. `admin`) allowed to add/remove members of their own team |
 | `litellm.teamAdmin.objectPermissions.enabled` | boolean | no | `false` | Enable knowledge-base / MCP management routes |
 | `litellm.teamAdmin.allowedVectorStores` | string[] | no | `[]` | Vector stores a team admin may attach as knowledge bases |
 | `litellm.teamAdmin.allowedMcpServers` | string[] | no | `[]` | MCP servers a team admin may attach |
@@ -509,6 +519,32 @@ Server-side, an admin can only ever assign models in `allowedModels` /
 `allowedModelAccessGroups`, a budget `≤ maxBudgetCeiling`, and knowledge
 bases / MCP servers in the corresponding allowlists — anything else is a
 `400`, never silently dropped.
+
+### Delegating member management to a team role
+
+`memberManagerRoles: [admin]` lets anyone holding that LiteLLM team role
+(`members_with_roles[].role`) add and remove members of **their own** team
+from the Teams tab, without being in `litellm.teamAdmin.group`. They get a
+**Manage members** action that opens a members-only dialog; team settings stay
+out of reach. Server-side, on this path:
+
+- only the member routes are open — `PATCH` / `DELETE` of the team, KB and MCP
+  still require the admin group;
+- members are added with the `user` role, and `maxBudgetInTeam` is refused;
+- a manager cannot remove themselves nor another member holding a manager role;
+- the permission policy must still `ALLOW` `litellm.team.members.manage` for
+  these users (with RBAC, bind it to a role they hold).
+
+Audit events (`team.member.add` / `team.member.remove`) carry `via: group | teamRole`.
+
+### Read-only mode (teams synced from an identity provider)
+
+When teams and memberships are owned elsewhere — e.g. a reconciler that mirrors
+Keycloak groups into LiteLLM — set `readOnly: true`. Every team write
+(create, edit, block, delete, members, KB / MCP) returns `403` for everyone,
+admins included, and the UI shows a *Synced from identity provider* badge
+instead of the edit controls. Reads keep working, so allowlists and the rest
+of the `teamAdmin` block can stay in place.
 
 ### Granting the capability with `@backstage-community/plugin-rbac`
 

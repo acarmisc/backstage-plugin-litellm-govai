@@ -72,6 +72,33 @@ export interface TeamAdminConfig {
    * Allow an admin to delete a team (vs. only block/deactivate).
    */
   allowTeamDelete: boolean;
+
+  /**
+   * When true, all team write operations return 403 even for admins:
+   * POST /teams, PATCH /teams/:id, DELETE /teams/:id,
+   * POST/DELETE /teams/:id/members, and PUT objectPermissions routes.
+   * Reads (GET /teams, GET /teams/managed) keep working.
+   * Fail-closed: defaults to false (writes allowed).
+   */
+  readOnly: boolean;
+
+  /**
+   * Backstage group refs that must include the caller for team creation.
+   * Empty => no group restriction, admin group check alone suffices.
+   * When non-empty, POST /teams additionally requires the caller to be
+   * a member of at least one of these groups, narrowing the permission.
+   * Fail-closed: defaults to [] (no extra restriction).
+   */
+  createGroups: string[];
+
+  /**
+   * LiteLLM team roles whose holders may add/remove members of their own team.
+   * Empty => feature off, only admins can manage members.
+   * When non-empty, callers with one of these roles in members_with_roles
+   * can POST/DELETE /teams/:teamId/members without owning the team's group.
+   * Fail-closed: defaults to [] (off).
+   */
+  memberManagerRoles: string[];
 }
 
 /**
@@ -221,6 +248,12 @@ export function readTeamAdminConfig(config: Config): TeamAdminConfig {
       ) ?? [],
     allowTeamDelete:
       config.getOptionalBoolean('litellm.teamAdmin.allowTeamDelete') ?? false,
+    readOnly:
+      config.getOptionalBoolean('litellm.teamAdmin.readOnly') ?? false,
+    createGroups:
+      config.getOptionalStringArray('litellm.teamAdmin.createGroups') ?? [],
+    memberManagerRoles:
+      config.getOptionalStringArray('litellm.teamAdmin.memberManagerRoles') ?? [],
   };
 }
 

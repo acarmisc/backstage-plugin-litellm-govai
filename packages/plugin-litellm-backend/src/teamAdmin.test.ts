@@ -27,6 +27,9 @@ describe('readTeamAdminConfig', () => {
     assert.deepStrictEqual(result.allowedMcpServers, []);
     assert.deepStrictEqual(result.allowedMcpAccessGroups, []);
     assert.strictEqual(result.allowTeamDelete, false);
+    assert.strictEqual(result.readOnly, false);
+    assert.deepStrictEqual(result.createGroups, []);
+    assert.deepStrictEqual(result.memberManagerRoles, []);
   });
 
   test('reads fully-populated config correctly', () => {
@@ -40,6 +43,9 @@ describe('readTeamAdminConfig', () => {
       'litellm.teamAdmin.allowedMcpServers': ['mcp-server-1'],
       'litellm.teamAdmin.allowedMcpAccessGroups': ['mcp-group-1'],
       'litellm.teamAdmin.allowTeamDelete': true,
+      'litellm.teamAdmin.readOnly': true,
+      'litellm.teamAdmin.createGroups': ['group:default/creators'],
+      'litellm.teamAdmin.memberManagerRoles': ['admin', 'team-lead'],
     });
     const result = readTeamAdminConfig(config);
     assert.strictEqual(result.group, 'group:default/litellm-team-admins');
@@ -51,16 +57,32 @@ describe('readTeamAdminConfig', () => {
     assert.deepStrictEqual(result.allowedMcpServers, ['mcp-server-1']);
     assert.deepStrictEqual(result.allowedMcpAccessGroups, ['mcp-group-1']);
     assert.strictEqual(result.allowTeamDelete, true);
+    assert.strictEqual(result.readOnly, true);
+    assert.deepStrictEqual(result.createGroups, ['group:default/creators']);
+    assert.deepStrictEqual(result.memberManagerRoles, ['admin', 'team-lead']);
   });
 
   test('booleans explicitly set to false stay false', () => {
     const config = mockConfig({
       'litellm.teamAdmin.allowUnlimitedBudget': false,
       'litellm.teamAdmin.allowTeamDelete': false,
+      'litellm.teamAdmin.readOnly': false,
     });
     const result = readTeamAdminConfig(config);
     assert.strictEqual(result.allowUnlimitedBudget, false);
     assert.strictEqual(result.allowTeamDelete, false);
+    assert.strictEqual(result.readOnly, false);
+  });
+
+  test('new governance fields default to fail-closed', () => {
+    const config = mockConfig({
+      'litellm.teamAdmin.group': 'group:default/admins',
+      'litellm.teamAdmin.allowedModels': ['gpt-4'],
+    });
+    const result = readTeamAdminConfig(config);
+    assert.strictEqual(result.readOnly, false);
+    assert.deepStrictEqual(result.createGroups, []);
+    assert.deepStrictEqual(result.memberManagerRoles, []);
   });
 
   test('arrays given as [] stay []', () => {
