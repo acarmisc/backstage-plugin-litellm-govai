@@ -1,4 +1,4 @@
-// Re-export common types for backward compatibility
+// Re-export shared API types from the common package for consumers of this package
 export {
   type UserInfo,
   type TeamMember,

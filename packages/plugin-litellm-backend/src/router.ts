@@ -166,23 +166,6 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
       return { tokenEntityRef, userId, key };
     },
 
-    sendOwnershipError: (err: unknown, res: Response): boolean => {
-      // Handle NotAllowedError from authorizeKeyAction
-      if (err instanceof NotAllowedError) {
-        res.status(403).json({ error: err.message });
-        return true;
-      }
-      // Fallback for legacy errors with status and body
-      if (err && typeof err === 'object' && 'status' in err && 'body' in err) {
-        const errObj = err as any;
-        if (typeof errObj.status === 'number' && errObj.body) {
-          res.status(errObj.status).json(errObj.body);
-          return true;
-        }
-      }
-      return false;
-    },
-
     assertPermission: async (req: Request, permission: BasicPermission): Promise<boolean> => {
       const credentials = await resolveCredentials(req, auth);
       if (!credentials) return false;

@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { toLiteLLMUserId, resolveUserId, getOrProvisionUser } from '../../provisioning';
+import { UserInfo } from '../../types';
 import type { RouterContext } from '../context';
 
 /**
@@ -30,13 +31,13 @@ export function createRequireUser(ctx: RouterContext) {
  * Returns the user info or throws ProvisioningError (which the caller must handle and respond to).
  *
  * This deduplicates the repeated pattern:
- *   const userInfo = await getOrProvisionUser(...);
+ *   const userInfo = await getProvisionedUser(...);
  *   if (error instanceof ProvisioningError) { res.status(...).json(...); return; }
  */
 export async function getProvisionedUser(
   ctx: RouterContext,
   res: Response,
-): Promise<any> {
+): Promise<UserInfo> {
   const tokenEntityRef = res.locals.tokenEntityRef as string;
   const userId = res.locals.userId as string;
 

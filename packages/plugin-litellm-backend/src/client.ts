@@ -17,24 +17,10 @@ import {
   UpdateTeamRequest,
   AuditLogsParams,
   PaginatedAuditLogs,
-  SpendLogEntry,
-  SpendLogsParams,
 } from './types';
 
 const DEFAULT_TIMEOUT = 30000;
 
-/**
- * LiteLLM versions differ on `request_tags`: an array of `k:v` strings in
- * current builds, but historically an object map. Normalise both to a flat
- * string array so callers can `includes('session:...')` uniformly.
- */
-export function normalizeRequestTags(
-  tags: SpendLogEntry['request_tags'],
-): string[] {
-  if (!tags) return [];
-  if (Array.isArray(tags)) return tags.filter((t): t is string => typeof t === 'string');
-  return Object.entries(tags).map(([k, v]) => `${k}:${v}`);
-}
 
 /**
  * Typed error for failed upstream LiteLLM responses. Preserves the HTTP
@@ -124,6 +110,34 @@ export class LiteLLMClient {
   }
 
   /**
+   * Normalizes a raw LiteLLM user response to the UserInfo contract.
+   * Handles both `/user/info` (with `user_info` wrapper) and `/user/list`
+   * response shapes, and converts team arrays to team_id strings.
+   */
+  private normalizeUserInfo(raw: any, fallbackUserId?: string): UserInfo {
+    const inner = raw?.user_info ?? {};
+    const teamIds: string[] = Array.isArray(raw?.teams)
+      ? raw.teams
+          .map((t: any) => (typeof t === 'string' ? t : t?.team_id))
+          .filter((t: unknown): t is string => typeof t === 'string')
+      : [];
+    return {
+      user_id: raw?.user_id ?? inner.user_id ?? fallbackUserId ?? '',
+      user_email: inner.user_email ?? raw?.user_email,
+      email: inner.email ?? raw?.email,
+      teams: teamIds,
+      models: inner.models ?? raw?.models,
+      max_budget: inner.max_budget ?? raw?.max_budget,
+      budget_duration: inner.budget_duration ?? raw?.budget_duration,
+      budget_reset_at: inner.budget_reset_at ?? raw?.budget_reset_at,
+      spend: inner.spend ?? raw?.spend,
+      current_spend: inner.current_spend ?? raw?.current_spend,
+      soft_limit: inner.soft_limit ?? raw?.soft_limit,
+      hard_limit: inner.hard_limit ?? raw?.hard_limit,
+    };
+  }
+
+  /**
    * Returns null when the user is not found in LiteLLM (404).
    * Throws on all other errors so callers know something went wrong.
    *
@@ -136,26 +150,7 @@ export class LiteLLMClient {
     const query = userId ? `?user_id=${encodeURIComponent(userId)}` : '';
     try {
       const raw = await this.request<any>(`/user/info${query}`);
-      const inner = raw?.user_info ?? {};
-      const teamIds: string[] = Array.isArray(raw?.teams)
-        ? raw.teams
-            .map((t: any) => (typeof t === 'string' ? t : t?.team_id))
-            .filter((t: unknown): t is string => typeof t === 'string')
-        : [];
-      return {
-        user_id: raw?.user_id ?? inner.user_id ?? userId ?? '',
-        user_email: inner.user_email ?? raw?.user_email,
-        email: inner.email ?? raw?.email,
-        teams: teamIds,
-        models: inner.models ?? raw?.models,
-        max_budget: inner.max_budget ?? raw?.max_budget,
-        budget_duration: inner.budget_duration ?? raw?.budget_duration,
-        budget_reset_at: inner.budget_reset_at ?? raw?.budget_reset_at,
-        spend: inner.spend ?? raw?.spend,
-        current_spend: inner.current_spend ?? raw?.current_spend,
-        soft_limit: inner.soft_limit ?? raw?.soft_limit,
-        hard_limit: inner.hard_limit ?? raw?.hard_limit,
-      };
+      return this.normalizeUserInfo(raw, userId);
     } catch (err: unknown) {
       if (err instanceof LiteLLMUpstreamError && err.status === 404) return null;
       throw err;
@@ -186,27 +181,7 @@ export class LiteLLMClient {
             .toLowerCase() === email.toLowerCase(),
       );
       if (!found) return null;
-      // Normalize to UserInfo shape (same as getUserInfo does)
-      const inner = found.user_info ?? {};
-      const teamIds: string[] = Array.isArray(found.teams)
-        ? found.teams
-            .map((t: any) => (typeof t === 'string' ? t : t?.team_id))
-            .filter((t: unknown): t is string => typeof t === 'string')
-        : [];
-      return {
-        user_id: found.user_id ?? inner.user_id ?? '',
-        user_email: inner.user_email ?? found.user_email,
-        email: inner.email ?? found.email,
-        teams: teamIds,
-        models: inner.models ?? found.models,
-        max_budget: inner.max_budget ?? found.max_budget,
-        budget_duration: inner.budget_duration ?? found.budget_duration,
-        budget_reset_at: inner.budget_reset_at ?? found.budget_reset_at,
-        spend: inner.spend ?? found.spend,
-        current_spend: inner.current_spend ?? found.current_spend,
-        soft_limit: inner.soft_limit ?? found.soft_limit,
-        hard_limit: inner.hard_limit ?? found.hard_limit,
-      };
+      return this.normalizeUserInfo(found);
     } catch (err: unknown) {
       if (err instanceof LiteLLMUpstreamError && err.status === 404) return null;
       throw err;
@@ -498,19 +473,6 @@ export class LiteLLMClient {
     });
   }
 
-  async blockTeam(teamId: string): Promise<unknown> {
-    return this.request<unknown>('/team/block', {
-      method: 'POST',
-      body: JSON.stringify({ team_id: teamId }),
-    });
-  }
-
-  async unblockTeam(teamId: string): Promise<unknown> {
-    return this.request<unknown>('/team/unblock', {
-      method: 'POST',
-      body: JSON.stringify({ team_id: teamId }),
-    });
-  }
 
   /**
    * Adds a member to a team. LiteLLM's `/team/member_add` nests the member
@@ -593,44 +555,6 @@ export class LiteLLMClient {
       .filter(r => r.id);
   }
 
-  /**
-   * Reads per-request spend logs from LiteLLM (`GET /spend/logs`), filtered
-   * by date range and optionally by key/user/team. Rows are normalised so
-   * `request_tags` is always a `string[]` (LiteLLM returns either an array
-   * or an object depending on version) — callers group by tag to attribute
-   * spend to a conversation or caller.
-   *
-   * This is the admin/DB-backed endpoint: it can return a large number of
-   * rows, so callers should keep the date window tight and cap `page_size`.
-   */
-  async getSpendLogs(params: SpendLogsParams): Promise<SpendLogEntry[]> {
-    const query = new URLSearchParams({
-      start_date: params.start_date,
-      end_date: params.end_date,
-    });
-    if (params.api_key) query.append('api_key', params.api_key);
-    if (params.user_id) query.append('user_id', params.user_id);
-    if (params.team_id) query.append('team_id', params.team_id);
-    if (params.page_size) query.append('page_size', String(params.page_size));
-
-    const raw = await this.request<any>(`/spend/logs?${query.toString()}`);
-    const rows: any[] = Array.isArray(raw) ? raw : raw?.data ?? [];
-    return rows.map(row => ({
-      request_id: row?.request_id,
-      startTime: row?.startTime ?? row?.start_time,
-      endTime: row?.endTime ?? row?.end_time,
-      spend: row?.spend ?? 0,
-      total_tokens: row?.total_tokens ?? 0,
-      prompt_tokens: row?.prompt_tokens ?? 0,
-      completion_tokens: row?.completion_tokens ?? 0,
-      model: row?.model,
-      api_key: row?.api_key,
-      user: row?.user,
-      team_id: row?.team_id,
-      request_tags: normalizeRequestTags(row?.request_tags),
-      metadata: row?.metadata,
-    }));
-  }
 
   private emptyUsage(): UsageMetrics {
     return {

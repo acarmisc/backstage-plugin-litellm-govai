@@ -2,7 +2,6 @@ import { Router, Request, Response } from 'express';
 import { VirtualKey, ModelInfo, UsageMetrics, UpdateKeyRequest } from '../types';
 import {
   resolveUserId,
-  getOrProvisionUser,
   isUserMemberOfGroup,
   ProvisioningError,
 } from '../provisioning';
@@ -36,17 +35,12 @@ export function registerKeysRoutes(router: Router, ctx: RouterContext): void {
     catalogClient,
     auth,
     logger,
-    userIdDomain,
-    provisioningEnabled,
-    provisioningDefaults,
-    roleConfigs,
     auditGroup,
     allowUnlimitedBudget,
     teamRequired,
     allowOwnerResetSpend,
     keyValidationConfig,
     authorizeKeyAction,
-    sendOwnershipError,
     assertPermission,
     sendPermissionDenied,
   } = ctx;
@@ -186,7 +180,9 @@ export function registerKeysRoutes(router: Router, ctx: RouterContext): void {
       }
 
       const tokenEntityRef = res.locals.tokenEntityRef as string;
-      const resolvedUserId = res.locals.userId as string;
+
+      // ── Resolve and provision user ──────────────────────────────────────
+      const userInfo = await getProvisionedUser(ctx, res);
 
       // ── Create key via unified service ──────────────────────────────────
       const keyCreateCtx: KeyCreateContext = {
@@ -199,13 +195,9 @@ export function registerKeysRoutes(router: Router, ctx: RouterContext): void {
         auth,
         logger,
         keyValidationConfig,
-        provisioningEnabled,
-        provisioningDefaults,
-        roleConfigs,
-        userIdDomain,
       };
       const result = await createKeyForUser(
-        { tokenEntityRef, userId: resolvedUserId },
+        { tokenEntityRef, userInfo },
         input,
         keyCreateCtx,
       );
@@ -346,7 +338,6 @@ export function registerKeysRoutes(router: Router, ctx: RouterContext): void {
       logger.info('key.update', { userId: tokenEntityRef ?? 'unknown', keyId });
       res.json(result);
     } catch (error: unknown) {
-      if (sendOwnershipError(error, res)) return;
       sendError(res, error, logger, 'update key');
     }
   });
@@ -369,7 +360,6 @@ export function registerKeysRoutes(router: Router, ctx: RouterContext): void {
       logger.info('key.delete', { userId: tokenEntityRef ?? 'unknown', keyId });
       res.json({ success: true });
     } catch (error: unknown) {
-      if (sendOwnershipError(error, res)) return;
       sendError(res, error, logger, 'delete key');
     }
   });
@@ -409,7 +399,6 @@ export function registerKeysRoutes(router: Router, ctx: RouterContext): void {
       logger.info('key.block', { userId: tokenEntityRef ?? 'unknown', keyId });
       res.json({ success: true });
     } catch (error: unknown) {
-      if (sendOwnershipError(error, res)) return;
       sendError(res, error, logger, 'block key');
     }
   });
@@ -451,7 +440,6 @@ export function registerKeysRoutes(router: Router, ctx: RouterContext): void {
       logger.info('key.unblock', { userId: tokenEntityRef ?? 'unknown', keyId });
       res.json({ success: true });
     } catch (error: unknown) {
-      if (sendOwnershipError(error, res)) return;
       sendError(res, error, logger, 'unblock key');
     }
   });
@@ -479,7 +467,6 @@ export function registerKeysRoutes(router: Router, ctx: RouterContext): void {
       logger.info('key.reset_spend', { userId: tokenEntityRef ?? 'unknown', keyId });
       res.json({ success: true });
     } catch (error: unknown) {
-      if (sendOwnershipError(error, res)) return;
       sendError(res, error, logger, 'reset key spend');
     }
   });
@@ -545,25 +532,15 @@ export function registerKeysRoutes(router: Router, ctx: RouterContext): void {
         res.status(400).json({ error: 'start_date and end_date are required' });
         return;
       }
-      const tokenEntityRef = res.locals.tokenEntityRef as string;
-      const userId = res.locals.userId as string;
 
-      await getOrProvisionUser(
-        client,
-        tokenEntityRef,
-        userId,
-        provisioningEnabled,
-        provisioningDefaults,
-        roleConfigs,
-        catalogClient,
-        auth,
-        logger,
-      );
+      await getProvisionedUser(ctx, res);
 
+      // Always filter by the caller's id: an empty user_id makes LiteLLM
+      // return org-wide activity.
       const usage: UsageMetrics = await client.getUsage(
         start_date as string,
         end_date as string,
-        userId,
+        res.locals.userId as string,
       );
       res.json(usage);
     } catch (error: unknown) {

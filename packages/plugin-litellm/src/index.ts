@@ -1,4 +1,4 @@
-export { litellmPlugin } from './plugin';
+export { litellmPlugin, litellmPlugin as default } from './plugin';
 export { LiteLLMPage } from './components/LiteLLMPage';
 export { DashboardHeader } from './components/DashboardHeader';
 export { KeysTable } from './components/KeysTable';
@@ -19,7 +19,6 @@ export { KeyFormDialog } from './components/KeyFormDialog';
 export type { KeyFormDialogMode, KeyFormDialogProps } from './components/KeyFormDialog';
 export { GenerateKeyButton } from './components/GenerateKeyButton';
 export type { GenerateKeyButtonProps } from './components/GenerateKeyButton';
-export { GenerateKeyDialog } from './components/GenerateKeyDialog';
 export { ManageTeamDialog } from './components/ManageTeamDialog';
 export { LiteLlmApi, liteLlmApiRef } from './api';
 export {
@@ -28,6 +27,6 @@ export {
   litellmTeamMembersManagePermission,
   litellmTeamKnowledgebaseManagePermission,
   litellmTeamMcpManagePermission,
-} from './permissions';
+} from '@acarmisc/backstage-plugin-litellm-common';
 export type { LiteLlmApiInterface } from './api';
 export * from './types';

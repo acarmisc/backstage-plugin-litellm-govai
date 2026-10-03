@@ -1010,16 +1010,7 @@ Usage analytics refresh when the date range selector is changed. If data appears
 
 ## Development
 
-### Build
-
-Build from within your Backstage monorepo:
-
-```bash
-yarn workspace @acarmisc/backstage-plugin-litellm build
-yarn workspace @acarmisc/backstage-plugin-litellm-backend build
-```
-
-### Testing
+### Build and test
 
 The repo is an **npm workspace** with a single root `package-lock.json`. From the root:
 
@@ -1057,15 +1048,6 @@ cd ../plugin-litellm-backend && npm run api-report
 
 This isn't enforced in CI yet — treat a `report.api.md` diff as a review
 signal for accidental breaking changes to the public API.
-
-### Standalone Dev Mode
-
-For frontend-only iteration:
-
-```bash
-cd packages/plugin-litellm
-yarn start
-```
 
 ## Release
 

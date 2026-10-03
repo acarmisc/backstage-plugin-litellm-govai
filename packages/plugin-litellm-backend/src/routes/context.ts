@@ -51,8 +51,6 @@ export interface RouterContext {
     keyId: string,
   ): Promise<{ tokenEntityRef: string; userId: string; key: VirtualKey }>;
 
-  sendOwnershipError(err: unknown, res: Response): boolean;
-
   assertPermission(
     req: Request,
     permission: BasicPermission,

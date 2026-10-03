@@ -10,7 +10,6 @@ import {
   getOrProvisionUserFromClaims,
   newDefaultVerifier,
   readBridgeConfig,
-  resolveBridgeUserId,
   type BridgeIdentityOptions,
 } from '../bridge';
 import { isModelAllowed, ALL_PROXY_MODELS, type GenerateKeyInput } from '@acarmisc/backstage-plugin-litellm-common';
@@ -26,7 +25,6 @@ export function registerBridgeRoutes(router: Router, ctx: RouterContext, bridgeO
     userIdDomain,
     provisioningEnabled,
     provisioningDefaults,
-    roleConfigs,
     allowUnlimitedBudget,
     teamRequired,
     keyValidationConfig,
@@ -136,8 +134,15 @@ export function registerBridgeRoutes(router: Router, ctx: RouterContext, bridgeO
           input.max_budget = provisioningDefaults.maxBudget;
         }
 
-        // ── Resolve user identity from verified claims ───────────────────────
-        const userId = resolveBridgeUserId(claims, bridgeIdentity);
+        // ── Resolve and provision user from verified claims ──────────────────
+        const userInfo = await getOrProvisionUserFromClaims(
+          client,
+          claims,
+          provisioningEnabled,
+          provisioningDefaults,
+          logger,
+          bridgeIdentity,
+        );
 
         // ── Create key via unified service ──────────────────────────────────
         const keyCreateCtx: KeyCreateContext = {
@@ -146,19 +151,11 @@ export function registerBridgeRoutes(router: Router, ctx: RouterContext, bridgeO
             allowUnlimitedBudget,
             teamRequired,
           },
-          // Bridge does not have Backstage catalogClient/auth
-          // so provisioning from JWT claims only (no Backstage profile enrichment)
-          catalogClient: undefined,
-          auth: undefined,
           logger,
           keyValidationConfig,
-          provisioningEnabled,
-          provisioningDefaults,
-          roleConfigs,
-          userIdDomain,
         };
         const result = await createKeyForUser(
-          { userId },
+          { userInfo, createdVia: 'abby-cli' },
           input,
           keyCreateCtx,
         );
@@ -182,22 +179,23 @@ export function registerBridgeRoutes(router: Router, ctx: RouterContext, bridgeO
           bridgeIdentity,
         );
 
-        // Enrich team list with metadata (display names, etc.)
+        // Enrich team list with metadata (display names, etc.) in parallel
         const teamIds = user.teams ?? [];
-        const teamMetadata: Array<{ id: string; name?: string }> = [];
-        for (const teamId of teamIds) {
-          try {
-            const teamInfo = await client.getTeamInfo(teamId);
-            teamMetadata.push({
-              id: teamId,
-              name: teamInfo.team_alias || teamId, // Use alias as display name, fallback to ID
-            });
-          } catch (e) {
-            // If we can't fetch team info, just use the ID
-            logger.debug(`Could not fetch team info for ${teamId}: ${(e as Error).message}`);
-            teamMetadata.push({ id: teamId });
-          }
-        }
+        const teamMetadata = await Promise.all(
+          teamIds.map(async (teamId) => {
+            try {
+              const teamInfo = await client.getTeamInfo(teamId);
+              return {
+                id: teamId,
+                name: teamInfo.team_alias || teamId, // Use alias as display name, fallback to ID
+              };
+            } catch (e) {
+              // If we can't fetch team info, just use the ID
+              logger.debug(`Could not fetch team info for ${teamId}: ${(e as Error).message}`);
+              return { id: teamId };
+            }
+          }),
+        );
 
         res.json({ user_id: user.user_id, teams: teamIds, team_metadata: teamMetadata });
       } catch (error: unknown) {

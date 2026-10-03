@@ -91,31 +91,6 @@ describe('LiteLLMClient team CRUD methods', () => {
     assert.deepStrictEqual(body, { team_ids: ['t1'] });
   });
 
-  test('blockTeam POSTs to /team/block with team_id', async () => {
-    stubFetch({ success: true });
-
-    const client = new LiteLLMClient(mockConfig);
-    await client.blockTeam('t1');
-
-    assert.strictEqual(fetchCalls.length, 1);
-    assert.ok(fetchCalls[0].url.includes('/team/block'));
-    assert.strictEqual(fetchCalls[0].init.method, 'POST');
-    const body = JSON.parse(fetchCalls[0].init.body as string);
-    assert.deepStrictEqual(body, { team_id: 't1' });
-  });
-
-  test('unblockTeam POSTs to /team/unblock with team_id', async () => {
-    stubFetch({ success: true });
-
-    const client = new LiteLLMClient(mockConfig);
-    await client.unblockTeam('t1');
-
-    assert.strictEqual(fetchCalls.length, 1);
-    assert.ok(fetchCalls[0].url.includes('/team/unblock'));
-    assert.strictEqual(fetchCalls[0].init.method, 'POST');
-    const body = JSON.parse(fetchCalls[0].init.body as string);
-    assert.deepStrictEqual(body, { team_id: 't1' });
-  });
 
   test('getTeamInfo surfaces metadata, object_permission, blocked, team_member_budget', async () => {
     const response = {
@@ -369,52 +344,6 @@ describe('LiteLLMClient team CRUD methods', () => {
     );
   });
 
-  test('getSpendLogs GETs /spend/logs with the date window and normalises rows', async () => {
-    stubFetch([
-      {
-        request_id: 'r1',
-        startTime: '2026-09-19T10:00:00Z',
-        spend: 0.012,
-        total_tokens: 1234,
-        model: 'bedrock/claude',
-        request_tags: ['channel:backstage', 'session:t1', 'invoked-by:user:default/jane'],
-        metadata: { trace_user_id: 'user:default/jane' },
-      },
-      {
-        request_id: 'r2',
-        spend: '0.5',
-        request_tags: { channel: 'mcp', session: 't2' },
-      },
-    ]);
-    const client = new LiteLLMClient(mockConfig);
-    const rows = await client.getSpendLogs({
-      start_date: '2026-09-01',
-      end_date: '2026-09-19',
-      api_key: 'sk-abc',
-    });
-    assert.match(fetchCalls[0].url, /\/spend\/logs\?/);
-    assert.match(fetchCalls[0].url, /start_date=2026-09-01/);
-    assert.match(fetchCalls[0].url, /end_date=2026-09-19/);
-    assert.match(fetchCalls[0].url, /api_key=sk-abc/);
-    assert.strictEqual(rows.length, 2);
-    assert.strictEqual(rows[0].spend, 0.012);
-    assert.deepStrictEqual(rows[0].request_tags, [
-      'channel:backstage',
-      'session:t1',
-      'invoked-by:user:default/jane',
-    ]);
-    // Object-shaped tags are flattened to `k:v`.
-    assert.deepStrictEqual(rows[1].request_tags, ['channel:mcp', 'session:t2']);
-    assert.strictEqual(rows[1].total_tokens, 0);
-  });
-
-  test('getSpendLogs tolerates a { data: [...] } envelope', async () => {
-    stubFetch({ data: [{ request_id: 'a', request_tags: [] }] });
-    const client = new LiteLLMClient(mockConfig);
-    const rows = await client.getSpendLogs({ start_date: '2026-09-01', end_date: '2026-09-02' });
-    assert.strictEqual(rows.length, 1);
-    assert.deepStrictEqual(rows[0].request_tags, []);
-  });
 
   test('regenerateKey POSTs to /key/{key}/regenerate and returns plaintext key', async () => {
     const keyHash = 'sk-old-hash';

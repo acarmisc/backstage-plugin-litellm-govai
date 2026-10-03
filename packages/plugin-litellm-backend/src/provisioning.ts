@@ -4,6 +4,7 @@ import { CatalogClient } from '@backstage/catalog-client';
 import { Request } from 'express';
 import { LiteLLMClient, LiteLLMUpstreamError } from './client';
 import { UserInfo, ProvisioningDefaults, RoleConfig } from './types';
+import { sanitizeUpstreamMessage } from './errors';
 
 /**
  * Converts a Backstage user entity ref to a LiteLLM user_id.
@@ -125,13 +126,15 @@ export function readProvisioningDefaults(config: Config): {
  * Extracts the authenticated Backstage user identity from the request token.
  * Returns the userEntityRef (e.g. "user:default/john.doe") or undefined when
  * the request carries no user credential (service-to-service calls).
+ * Only accepts headers starting with 'Bearer ' (case-sensitive as Backstage sends it).
  */
 export async function resolveUserId(
   req: Request,
   auth: AuthService,
 ): Promise<string | undefined> {
-  const rawToken = req.headers.authorization?.slice(7);
-  if (!rawToken) return undefined;
+  const authHeader = req.headers.authorization ?? '';
+  if (!authHeader.startsWith('Bearer ')) return undefined;
+  const rawToken = authHeader.slice(7);
   try {
     const credentials = await auth.authenticate(rawToken);
     const principal = credentials.principal as any;
@@ -139,7 +142,7 @@ export async function resolveUserId(
       return principal.userEntityRef as string;
     }
   } catch {
-    // invalid or service token — caller gets query-param fallback
+    // invalid or service token
   }
   return undefined;
 }
@@ -147,13 +150,15 @@ export async function resolveUserId(
 /**
  * Like resolveUserId, but returns the raw BackstageCredentials object
  * (rather than just the entity ref) for passing into PermissionsService.authorize().
+ * Only accepts headers starting with 'Bearer ' (case-sensitive as Backstage sends it).
  */
 export async function resolveCredentials(
   req: Request,
   auth: AuthService,
 ): Promise<BackstageCredentials | undefined> {
-  const rawToken = req.headers.authorization?.slice(7);
-  if (!rawToken) return undefined;
+  const authHeader = req.headers.authorization ?? '';
+  if (!authHeader.startsWith('Bearer ')) return undefined;
+  const rawToken = authHeader.slice(7);
   try {
     return await auth.authenticate(rawToken);
   } catch {
@@ -285,20 +290,6 @@ export async function provisionUser(
  * requests for a re-deleted user can still trigger fresh provisioning.
  */
 const provisioningInFlight = new Map<string, Promise<UserInfo>>();
-
-/**
- * Strips any echoed Authorization bearer token from upstream LiteLLM error
- * messages before they're shipped back to the browser. LiteLLM normally does
- * not echo the master key, but defense in depth: never let a `Bearer …`
- * substring travel out in a response body.
- */
-function sanitizeUpstreamMessage(message: string): string {
-  if (!message) return 'unknown error';
-  return message
-    .replace(/Bearer\s+[A-Za-z0-9._\-+/=]+/g, 'Bearer [redacted]')
-    .replace(/sk-[A-Za-z0-9_\-]{8,}/g, 'sk-[redacted]')
-    .slice(0, 500);
-}
 
 export class ProvisioningError extends Error {
   status: number;

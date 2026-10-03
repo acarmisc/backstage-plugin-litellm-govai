@@ -838,13 +838,13 @@ export const KeyFormDialog: FC<KeyFormDialogProps> = ({
   );
 };
 
-export function fmtCost(perToken?: number): string | null {
+function fmtCost(perToken?: number): string | null {
   if (!perToken) return null;
   const per1k = perToken * 1000;
   return per1k < 0.01 ? `$${(perToken * 1_000_000).toFixed(2)}/M` : `$${per1k.toFixed(3)}/1K`;
 }
 
-export function formatContextWindow(
+function formatContextWindow(
   maxInput?: number,
   maxOutput?: number,
 ): string | null {

@@ -9,6 +9,38 @@ commit/PR that bumps the version in `package.json`. Format follows the
 Earlier history: `git log -- packages/plugin-litellm-backend` or the
 [GitHub tags](https://github.com/acarmisc/backstage-plugin-litellm-govai/tags).
 
+## 0.19.0
+
+### Minor Changes
+
+- **fix(bridge): `POST /bridge/keys` resolves the user like `GET /bridge/keys`.**
+  It used its own provisioning path, which created users without role,
+  metadata or email (the user id was stored as the email) and skipped the
+  lookup by email. Both routes now go through `getOrProvisionUserFromClaims`.
+- **fix(bridge): bridge-minted keys carry `created_via: abby-cli` and
+  `created_by: <user_id>`**, as documented, instead of
+  `created_via: backstage` / `created_by_backstage_user: unknown`.
+- **fix(security): upstream error messages are redacted everywhere.** The
+  shared sanitizer now strips `Bearer …` tokens and `sk-…` keys before
+  truncating, for every route (previously only the provisioning path did).
+- **fix(teams): a `POST /teams` that joined an in-flight creation of the same
+  team returned the budget unredacted** even with
+  `litellm.display.hideTeamBudgetForManagers`.
+- **fix: user credentials are read only from `Authorization: Bearer …`
+  headers.** Other schemes were sliced blindly.
+- **BREAKING (public API):** removed `bridgeGenerateKey` (unused by the
+  routes; it forwarded an unvalidated request to LiteLLM), the legacy
+  bare-string form of the bridge identity argument (pass
+  `{ userIdDomain }`), and the unused `LiteLLMClient` methods `blockTeam`,
+  `unblockTeam`, `getSpendLogs` together with `normalizeRequestTags` and the
+  `SpendLogEntry` / `SpendLogsParams` types.
+- refactor: key creation no longer provisions users (callers resolve the user
+  first), error responses all go through `sendError`, team responses use one
+  redaction helper, and duplicated user normalisation was merged. Removed the
+  unused `@backstage/catalog-model`, `@backstage/types` and `zod`
+  dependencies.
+- docs: the package now has a README.
+
 ## 0.18.0
 
 ### Minor Changes

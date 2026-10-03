@@ -14,7 +14,6 @@ import {
   readBridgeConfig,
   getOrProvisionUserFromClaims,
   bridgeListKeys,
-  bridgeGenerateKey,
 } from './bridge';
 import { ProvisioningError } from './provisioning';
 
@@ -135,7 +134,7 @@ describe('getOrProvisionUserFromClaims', () => {
       true,
       defaults,
       silentLogger(),
-      'example.com',
+      { userIdDomain: 'example.com' },
     );
     assert.equal(u.user_id, 'alice@example.com');
     assert.equal(c.calls.createUser.length, 0);
@@ -151,7 +150,7 @@ describe('getOrProvisionUserFromClaims', () => {
           false,
           defaults,
           silentLogger(),
-          'example.com',
+          { userIdDomain: 'example.com' },
         ),
       (err: unknown) =>
         err instanceof ProvisioningError && err.status === 404,
@@ -174,7 +173,7 @@ describe('getOrProvisionUserFromClaims', () => {
       true,
       defaults,
       silentLogger(),
-      'example.com',
+      { userIdDomain: 'example.com' },
     );
     assert.equal(u.user_id, 'alice@example.com');
     assert.equal(c.calls.createUser.length, 1);
@@ -199,7 +198,7 @@ describe('getOrProvisionUserFromClaims', () => {
       true,
       defaults,
       silentLogger(),
-      'example.com',
+      { userIdDomain: 'example.com' },
     );
     assert.equal(u.user_id, 'alice');
     assert.equal(c.calls.getUserInfo.length, 1);
@@ -209,7 +208,7 @@ describe('getOrProvisionUserFromClaims', () => {
 });
 
 // ---------------------------------------------------------------------------
-// bridgeListKeys / bridgeGenerateKey
+// bridgeListKeys
 // ---------------------------------------------------------------------------
 
 describe('bridgeListKeys', () => {
@@ -227,42 +226,10 @@ describe('bridgeListKeys', () => {
       true,
       defaults,
       silentLogger(),
-      'example.com',
+      { userIdDomain: 'example.com' },
     );
     assert.equal(keys.length, 1);
     assert.equal(keys[0].user_id, 'alice@example.com');
-  });
-});
-
-describe('bridgeGenerateKey', () => {
-  test('provisions then mints a key stamped with ownership metadata', async () => {
-    let captured: any;
-    const c = mockClient({
-      userInfo: { user_id: 'alice@example.com' },
-      generateKey: (r: any) => {
-        captured = r;
-        return Promise.resolve({ key: 'sk-new' });
-      },
-    });
-    const res = await bridgeGenerateKey(
-      c,
-      { sub: 's1', email: 'alice@example.com', email_verified: true, azp: 'abby-cli' },
-      true,
-      defaults,
-      silentLogger(),
-      { alias: 'abby-laptop', models: ['glm-5.2:cloud'] },
-      'example.com',
-    );
-    assert.equal(res.key, 'sk-new');
-    // The bridge owns: resolving user_id, passing alias through (the real
-    // LiteLLMClient renames alias -> key_alias), and stamping ownership
-    // metadata. Verify all three. The user_id in the key metadata is the actual
-    // user_id returned from getOrProvisionUserFromClaims, not the computed one.
-    assert.equal(captured.user_id, 'alice@example.com');
-    assert.equal(captured.alias, 'abby-laptop');
-    assert.deepEqual(captured.models, ['glm-5.2:cloud']);
-    assert.equal(captured.metadata.created_via, 'abby-cli');
-    assert.equal(captured.metadata.created_by, 'alice@example.com');
   });
 });
 
@@ -443,7 +410,7 @@ describe('resolveBridgeUserId (PR-6 identity validation)', () => {
         email_verified: true,
         azp: 'abby-cli',
       },
-      'example.com',
+      { userIdDomain: 'example.com' },
     );
     assert.equal(userId, 'alice@example.com');
   });
@@ -458,7 +425,7 @@ describe('resolveBridgeUserId (PR-6 identity validation)', () => {
             email_verified: true,
             azp: 'abby-cli',
           },
-          'example.com',
+          { userIdDomain: 'example.com' },
         ),
       (err: unknown) =>
         err instanceof BridgeIdentityError &&
@@ -477,7 +444,7 @@ describe('resolveBridgeUserId (PR-6 identity validation)', () => {
             email_verified: false,
             azp: 'abby-cli',
           },
-          'example.com',
+          { userIdDomain: 'example.com' },
         ),
       (err: unknown) =>
         err instanceof BridgeIdentityError &&
@@ -494,7 +461,7 @@ describe('resolveBridgeUserId (PR-6 identity validation)', () => {
             sub: 's1',
             azp: 'abby-cli',
           },
-          'example.com',
+          { userIdDomain: 'example.com' },
         ),
       (err: unknown) => err instanceof BridgeIdentityError && err.status === 403,
     );
@@ -575,7 +542,7 @@ describe('resolveBridgeUserId: trusted domains and UI-consistent ids', () => {
 
   test('trusted domains work without userIdDomain, and userIdDomain alone trusts itself', () => {
     assert.strictEqual(resolveBridgeUserId(verified(), { trustedEmailDomains: ['ABSTRACT.IT'] }), 'degiorgis');
-    assert.strictEqual(resolveBridgeUserId(verified(), 'abstract.it'), 'degiorgis@abstract.it');
+    assert.strictEqual(resolveBridgeUserId(verified(), { userIdDomain: 'abstract.it' }), 'degiorgis@abstract.it');
   });
 
   test('fails closed with no trusted domain configured', () => {

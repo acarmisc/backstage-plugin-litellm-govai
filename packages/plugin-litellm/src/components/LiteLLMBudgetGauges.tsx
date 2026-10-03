@@ -524,9 +524,6 @@ function statHint(loading: boolean, unavailable: boolean, hint?: string): string
   return hint;
 }
 
-// monthToDateRange is imported from dates.ts above; re-export for backwards compatibility
-export { monthToDateRange } from '../dates';
-
 export const LiteLLMBudgetGauges: FC<LiteLLMBudgetGaugesProps> = ({
   title = 'Budget',
   bare = false,

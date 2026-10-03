@@ -4,15 +4,48 @@
 
 ```ts
 
+import { AuditLogEntry } from '@acarmisc/backstage-plugin-litellm-common';
 import { AuthService } from '@backstage/backend-plugin-api';
 import { BackendFeature } from '@backstage/backend-plugin-api';
 import { BasicPermission } from '@backstage/plugin-permission-common';
+import { BudgetStatus } from '@acarmisc/backstage-plugin-litellm-common';
 import { CatalogClient } from '@backstage/catalog-client';
 import { Config } from '@backstage/config';
+import { CreateTeamResponse } from '@acarmisc/backstage-plugin-litellm-common';
 import { DiscoveryService } from '@backstage/backend-plugin-api';
+import { GenerateKeyRequest } from '@acarmisc/backstage-plugin-litellm-common';
+import { GenerateKeyResponse } from '@acarmisc/backstage-plugin-litellm-common';
+import { litellmAuditReadPermission } from '@acarmisc/backstage-plugin-litellm-common';
+import { litellmKeyCreatePermission } from '@acarmisc/backstage-plugin-litellm-common';
+import { litellmKeyManagePermission } from '@acarmisc/backstage-plugin-litellm-common';
+import { litellmKeyResetSpendPermission } from '@acarmisc/backstage-plugin-litellm-common';
+import { litellmKeyRevokePermission } from '@acarmisc/backstage-plugin-litellm-common';
+import { litellmKeyUnblockPermission } from '@acarmisc/backstage-plugin-litellm-common';
+import { litellmPermissions } from '@acarmisc/backstage-plugin-litellm-common';
+import { litellmTeamCreatePermission } from '@acarmisc/backstage-plugin-litellm-common';
+import { litellmTeamDeletePermission } from '@acarmisc/backstage-plugin-litellm-common';
+import { litellmTeamKnowledgebaseManagePermission } from '@acarmisc/backstage-plugin-litellm-common';
+import { litellmTeamManagePermission } from '@acarmisc/backstage-plugin-litellm-common';
+import { litellmTeamMcpManagePermission } from '@acarmisc/backstage-plugin-litellm-common';
+import { litellmTeamMembersManagePermission } from '@acarmisc/backstage-plugin-litellm-common';
+import { LoggerService } from '@backstage/backend-plugin-api';
+import { ModelInfo } from '@acarmisc/backstage-plugin-litellm-common';
+import { PaginatedAuditLogs } from '@acarmisc/backstage-plugin-litellm-common';
 import { PermissionsService } from '@backstage/backend-plugin-api';
 import { Request as Request_2 } from 'express';
+import { RootConfigService } from '@backstage/backend-plugin-api';
 import { Router } from 'express';
+import { TeamInfo } from '@acarmisc/backstage-plugin-litellm-common';
+import { TeamMember } from '@acarmisc/backstage-plugin-litellm-common';
+import { TeamObjectPermission } from '@acarmisc/backstage-plugin-litellm-common';
+import { UpdateKeyRequest } from '@acarmisc/backstage-plugin-litellm-common';
+import { UsageDailyModelPoint } from '@acarmisc/backstage-plugin-litellm-common';
+import { UsageDailyPoint } from '@acarmisc/backstage-plugin-litellm-common';
+import { UsageKeyBreakdown } from '@acarmisc/backstage-plugin-litellm-common';
+import { UsageMetrics } from '@acarmisc/backstage-plugin-litellm-common';
+import { UsageModelBreakdown } from '@acarmisc/backstage-plugin-litellm-common';
+import { UserInfo } from '@acarmisc/backstage-plugin-litellm-common';
+import { VirtualKey } from '@acarmisc/backstage-plugin-litellm-common';
 
 // @public
 export function applyRoleOverrides(defaults: ProvisioningDefaults, role: RoleConfig): ProvisioningDefaults;
@@ -25,30 +58,10 @@ export function assertTeamAdmin(opts: {
     catalogClient: CatalogClient;
     teamAdminGroup: string;
     permission: BasicPermission;
-    logger: any;
+    logger: LoggerService;
 }): Promise<TeamAdminCheck>;
 
-// @public (undocumented)
-export interface AuditLogEntry {
-    // (undocumented)
-    action?: string;
-    // (undocumented)
-    before_value?: Record<string, unknown> | null;
-    // (undocumented)
-    changed_by?: string;
-    // (undocumented)
-    changed_by_api_key?: string;
-    // (undocumented)
-    id: string;
-    // (undocumented)
-    object_id?: string;
-    // (undocumented)
-    table_name?: string;
-    // (undocumented)
-    updated_at: string;
-    // (undocumented)
-    updated_values?: Record<string, unknown> | null;
-}
+export { AuditLogEntry }
 
 // @public (undocumented)
 export interface AuditLogsParams {
@@ -88,30 +101,29 @@ export interface BridgeClaims {
     // (undocumented)
     email?: string;
     // (undocumented)
+    email_verified?: boolean;
+    // (undocumented)
     name?: string;
     // (undocumented)
     preferred_username?: string;
     // (undocumented)
     sub: string;
+    typ?: string;
 }
 
 // @public (undocumented)
 export interface BridgeConfig {
+    allowedEmailDomains: string[];
     clientId: string;
     // (undocumented)
     enabled: boolean;
     issuer?: string;
 }
 
+// Warning: (ae-forgotten-export) The symbol "BridgeIdentityOptions" needs to be exported by the entry point index.d.ts
+//
 // @public
-export function bridgeGenerateKey(client: LiteLLMClient, claims: BridgeClaims, provisioningEnabled: boolean, provisioningDefaults: ProvisioningDefaults, logger: {
-    info: (...args: unknown[]) => void;
-}, request: Partial<GenerateKeyRequest>, userIdDomain?: string): Promise<GenerateKeyResponse>;
-
-// @public
-export function bridgeListKeys(client: LiteLLMClient, claims: BridgeClaims, provisioningEnabled: boolean, provisioningDefaults: ProvisioningDefaults, logger: {
-    info: (...args: unknown[]) => void;
-}, userIdDomain?: string): Promise<VirtualKey[]>;
+export function bridgeListKeys(client: LiteLLMClient, claims: BridgeClaims, provisioningEnabled: boolean, provisioningDefaults: ProvisioningDefaults, logger: LoggerService, identity?: BridgeIdentityOptions): Promise<VirtualKey[]>;
 
 // Warning: (ae-forgotten-export) The symbol "RouterOptions" needs to be exported by the entry point index.d.ts
 //
@@ -129,7 +141,11 @@ export interface CreateTeamRequest {
     // (undocumented)
     models?: string[];
     // (undocumented)
-    object_permission?: TeamObjectPermission;
+    object_permission?: {
+        vector_stores?: string[];
+        mcp_servers?: string[];
+        mcp_access_groups?: string[];
+    };
     // (undocumented)
     rpm_limit?: number;
     // (undocumented)
@@ -138,13 +154,7 @@ export interface CreateTeamRequest {
     tpm_limit?: number;
 }
 
-// @public (undocumented)
-export interface CreateTeamResponse {
-    // (undocumented)
-    team_alias?: string;
-    // (undocumented)
-    team_id: string;
-}
+export { CreateTeamResponse }
 
 // @public (undocumented)
 export interface CreateUserRequest {
@@ -194,55 +204,15 @@ export interface DeleteKeyRequest {
     keys: string[];
 }
 
-// @public (undocumented)
-export interface GenerateKeyRequest {
-    // (undocumented)
-    alias?: string;
-    // (undocumented)
-    duration?: string;
-    // (undocumented)
-    key_type?: string;
-    // (undocumented)
-    max_budget?: number;
-    // (undocumented)
-    metadata?: Record<string, string>;
-    // (undocumented)
-    models?: string[];
-    // (undocumented)
-    rpm_limit?: number;
-    // (undocumented)
-    team_id?: string;
-    // (undocumented)
-    tpm_limit?: number;
-    // (undocumented)
-    user_id?: string;
-}
+export { GenerateKeyRequest }
 
-// @public (undocumented)
-export interface GenerateKeyResponse {
-    // (undocumented)
-    expires_at?: string;
-    // (undocumented)
-    key: string;
-    // (undocumented)
-    key_alias?: string;
-    // (undocumented)
-    max_budget?: number;
-    // (undocumented)
-    models?: string[];
-    // (undocumented)
-    rpm_limit?: number;
-    // (undocumented)
-    tpm_limit?: number;
-}
+export { GenerateKeyResponse }
 
 // @public
-export function getOrProvisionUser(client: LiteLLMClient, tokenEntityRef: string | undefined, userId: string | undefined, provisioningEnabled: boolean, provisioningDefaults: ProvisioningDefaults, roleConfigs: RoleConfig[], catalogClient: CatalogClient, auth: AuthService, logger: any): Promise<UserInfo>;
+export function getOrProvisionUser(client: LiteLLMClient, tokenEntityRef: string | undefined, userId: string | undefined, provisioningEnabled: boolean, provisioningDefaults: ProvisioningDefaults, roleConfigs: RoleConfig[], catalogClient: CatalogClient, auth: AuthService, logger: LoggerService): Promise<UserInfo>;
 
 // @public
-export function getOrProvisionUserFromClaims(client: LiteLLMClient, claims: BridgeClaims, provisioningEnabled: boolean, provisioningDefaults: ProvisioningDefaults, logger: {
-    info: (...args: unknown[]) => void;
-}, userIdDomain?: string): Promise<UserInfo>;
+export function getOrProvisionUserFromClaims(client: LiteLLMClient, claims: BridgeClaims, provisioningEnabled: boolean, provisioningDefaults: ProvisioningDefaults, logger: LoggerService, identity?: BridgeIdentityOptions): Promise<UserInfo>;
 
 // @public
 export function isTeamManagementEnabled(config: Config): boolean;
@@ -262,16 +232,13 @@ export interface KeycloakJWTVerifierOptions {
     issuer: string;
 }
 
-// @public (undocumented)
-export const litellmAuditReadPermission: BasicPermission;
+export { litellmAuditReadPermission }
 
 // @public (undocumented)
 export class LiteLLMClient {
     constructor(config: LiteLLMConfig, timeout?: number);
     // (undocumented)
     blockKey(key: string): Promise<unknown>;
-    // (undocumented)
-    blockTeam(teamId: string): Promise<unknown>;
     // (undocumented)
     createTeam(payload: CreateTeamRequest): Promise<CreateTeamResponse>;
     // (undocumented)
@@ -285,12 +252,12 @@ export class LiteLLMClient {
     generateKey(request: GenerateKeyRequest): Promise<GenerateKeyResponse>;
     // (undocumented)
     getAuditLogs(params: AuditLogsParams): Promise<PaginatedAuditLogs>;
-    getSpendLogs(params: SpendLogsParams): Promise<SpendLogEntry[]>;
     getTeamInfo(teamId: string): Promise<TeamInfo>;
     // (undocumented)
     getTeamUsage(teamId: string, startDate: string, endDate: string): Promise<UsageMetrics>;
     // (undocumented)
-    getUsage(startDate: string, endDate: string, userId?: string): Promise<UsageMetrics>;
+    getUsage(startDate: string, endDate: string, userId: string): Promise<UsageMetrics>;
+    getUserByEmail(email: string): Promise<UserInfo | null>;
     getUserInfo(userId?: string): Promise<UserInfo | null>;
     listKeys(userId?: string): Promise<VirtualKey[]>;
     listMcpServers(): Promise<Array<{
@@ -304,6 +271,7 @@ export class LiteLLMClient {
         id: string;
         name?: string;
     }>>;
+    regenerateKey(keyHash: string): Promise<GenerateKeyResponse>;
     // (undocumented)
     resetKeySpend(key: string): Promise<unknown>;
     teamMemberAdd(payload: {
@@ -318,8 +286,6 @@ export class LiteLLMClient {
     }): Promise<unknown>;
     // (undocumented)
     unblockKey(key: string): Promise<unknown>;
-    // (undocumented)
-    unblockTeam(teamId: string): Promise<unknown>;
     // (undocumented)
     updateKey(request: UpdateKeyRequest): Promise<VirtualKey>;
     // (undocumented)
@@ -337,40 +303,34 @@ export interface LiteLLMConfig {
     masterKey: string;
 }
 
-// @public (undocumented)
-export const litellmKeyCreatePermission: BasicPermission;
+export { litellmKeyCreatePermission }
 
-// @public (undocumented)
-export const litellmKeyManagePermission: BasicPermission;
+export { litellmKeyManagePermission }
 
-// @public (undocumented)
-export const litellmKeyRevokePermission: BasicPermission;
+export { litellmKeyResetSpendPermission }
 
-// @public (undocumented)
-export const litellmPermissions: BasicPermission[];
+export { litellmKeyRevokePermission }
+
+export { litellmKeyUnblockPermission }
+
+export { litellmPermissions }
 
 // @public (undocumented)
 const litellmPlugin: BackendFeature;
 export default litellmPlugin;
 export { litellmPlugin }
 
-// @public (undocumented)
-export const litellmTeamCreatePermission: BasicPermission;
+export { litellmTeamCreatePermission }
 
-// @public (undocumented)
-export const litellmTeamDeletePermission: BasicPermission;
+export { litellmTeamDeletePermission }
 
-// @public (undocumented)
-export const litellmTeamKnowledgebaseManagePermission: BasicPermission;
+export { litellmTeamKnowledgebaseManagePermission }
 
-// @public (undocumented)
-export const litellmTeamManagePermission: BasicPermission;
+export { litellmTeamManagePermission }
 
-// @public (undocumented)
-export const litellmTeamMcpManagePermission: BasicPermission;
+export { litellmTeamMcpManagePermission }
 
-// @public (undocumented)
-export const litellmTeamMembersManagePermission: BasicPermission;
+export { litellmTeamMembersManagePermission }
 
 // @public
 export interface LiteLLMUserKey {
@@ -388,6 +348,7 @@ export interface LiteLLMUserKey {
     key_name?: string;
     // (undocumented)
     max_budget?: number | null;
+    metadata?: Record<string, unknown> | null;
     // (undocumented)
     models?: string[];
     // (undocumented)
@@ -404,46 +365,12 @@ export interface LiteLLMUserKey {
     user_id?: string | null;
 }
 
-// @public (undocumented)
-export interface ModelInfo {
-    access_groups?: string[];
-    // (undocumented)
-    input_cost_per_token?: number;
-    // (undocumented)
-    max_input_tokens?: number;
-    // (undocumented)
-    max_output_tokens?: number;
-    // (undocumented)
-    mode: string;
-    // (undocumented)
-    model_name: string;
-    // (undocumented)
-    output_cost_per_token?: number;
-    // (undocumented)
-    supports_function_calling?: boolean;
-    // (undocumented)
-    supports_vision?: boolean;
-}
+export { ModelInfo }
 
 // @public
 export function newDefaultVerifier(cfg: BridgeConfig): TokenVerifier;
 
-// @public
-export function normalizeRequestTags(tags: SpendLogEntry['request_tags']): string[];
-
-// @public (undocumented)
-export interface PaginatedAuditLogs {
-    // (undocumented)
-    audit_logs: AuditLogEntry[];
-    // (undocumented)
-    page: number;
-    // (undocumented)
-    page_size: number;
-    // (undocumented)
-    total: number;
-    // (undocumented)
-    total_pages: number;
-}
+export { PaginatedAuditLogs }
 
 // @public (undocumented)
 export interface ProvisioningDefaults {
@@ -478,12 +405,12 @@ export class ProvisioningError extends Error {
 }
 
 // @public
-export function provisionUser(client: LiteLLMClient, userId: string, defaults: ProvisioningDefaults, profile: BackstageUserProfile, backstageEntity: string | undefined, logger: any): Promise<UserInfo | null>;
+export function provisionUser(client: LiteLLMClient, userId: string, defaults: ProvisioningDefaults, profile: BackstageUserProfile, backstageEntity: string | undefined, logger: LoggerService): Promise<UserInfo | null>;
 
 // @public (undocumented)
 export function readBridgeConfig(config: Config): BridgeConfig;
 
-// @public (undocumented)
+// @public
 export function readProvisioningDefaults(config: Config): {
     enabled: boolean;
     defaults: ProvisioningDefaults;
@@ -505,16 +432,16 @@ export function redactTeamBudget(team: TeamInfo): TeamInfo;
 export function redactTeamUsage(usage: UsageMetrics): UsageMetrics;
 
 // @public
-export function resolveBridgeUserId(claims: BridgeClaims, userIdDomain?: string): string;
+export function resolveBridgeUserId(claims: BridgeClaims, identity?: BridgeIdentityOptions): string;
 
 // @public
 export function resolveUserId(req: Request_2, auth: AuthService): Promise<string | undefined>;
 
 // @public
-export function resolveUserProfile(userEntityRef: string, catalogClient: CatalogClient, auth: AuthService, logger: any): Promise<BackstageUserProfile>;
+export function resolveUserProfile(userEntityRef: string, catalogClient: CatalogClient, auth: AuthService, logger: LoggerService): Promise<BackstageUserProfile>;
 
 // @public
-export function resolveUserRole(userEntityRef: string, roleConfigs: RoleConfig[], catalogClient: CatalogClient, auth: AuthService, logger: any): Promise<RoleConfig | undefined>;
+export function resolveUserRole(userEntityRef: string, roleConfigs: RoleConfig[], catalogClient: CatalogClient, auth: AuthService, logger: LoggerService): Promise<RoleConfig | undefined>;
 
 // @public (undocumented)
 export interface RoleConfig {
@@ -539,44 +466,6 @@ export interface RoleConfig {
 }
 
 // @public
-export interface SpendLogEntry {
-    api_key?: string;
-    // (undocumented)
-    completion_tokens?: number;
-    // (undocumented)
-    endTime?: string;
-    metadata?: Record<string, unknown> | string | null;
-    // (undocumented)
-    model?: string;
-    // (undocumented)
-    prompt_tokens?: number;
-    // (undocumented)
-    request_id?: string;
-    request_tags?: string[] | Record<string, string>;
-    // (undocumented)
-    spend?: number;
-    startTime?: string;
-    // (undocumented)
-    team_id?: string;
-    // (undocumented)
-    total_tokens?: number;
-    // (undocumented)
-    user?: string;
-}
-
-// @public (undocumented)
-export interface SpendLogsParams {
-    api_key?: string;
-    end_date: string;
-    page_size?: number;
-    start_date: string;
-    // (undocumented)
-    team_id?: string;
-    // (undocumented)
-    user_id?: string;
-}
-
-// @public
 export type TeamAdminCheck = {
     ok: true;
     userEntityRef: string;
@@ -595,12 +484,15 @@ export interface TeamAdminConfig {
     allowedVectorStores: string[];
     allowTeamDelete: boolean;
     allowUnlimitedBudget: boolean;
+    createGroups: string[];
     group?: string;
     maxBudgetCeiling: number;
+    memberManagerRoles: string[];
+    readOnly: boolean;
 }
 
 // @public
-export type TeamBudgetStatus = 'ok' | 'near' | 'over';
+export type TeamBudgetStatus = BudgetStatus;
 
 // @public (undocumented)
 export function teamBudgetStatusFor(spend: number, budget: number): TeamBudgetStatus;
@@ -613,50 +505,11 @@ export interface TeamBudgetVisibility {
     hideTeamBudgetForMembers: boolean;
 }
 
-// @public (undocumented)
-export interface TeamInfo {
-    blocked?: boolean;
-    budget_duration?: string;
-    budget_hidden?: boolean;
-    budget_pct?: number;
-    budget_status?: 'ok' | 'near' | 'over';
-    // (undocumented)
-    max_budget?: number;
-    // (undocumented)
-    members_with_roles?: TeamMember[];
-    metadata?: Record<string, unknown>;
-    // (undocumented)
-    models?: string[];
-    object_permission?: TeamObjectPermission;
-    // (undocumented)
-    rpm_limit?: number;
-    // (undocumented)
-    spend: number;
-    // (undocumented)
-    team_alias?: string;
-    // (undocumented)
-    team_id: string;
-    team_member_budget?: number;
-    // (undocumented)
-    tpm_limit?: number;
-}
+export { TeamInfo }
 
-// @public (undocumented)
-export interface TeamMember {
-    // (undocumented)
-    role: 'admin' | 'user';
-    // (undocumented)
-    user_email?: string;
-    // (undocumented)
-    user_id: string;
-}
+export { TeamMember }
 
-// @public (undocumented)
-export interface TeamObjectPermission {
-    mcp_access_groups?: string[];
-    mcp_servers?: string[];
-    vector_stores?: string[];
-}
+export { TeamObjectPermission }
 
 // @public (undocumented)
 export type TeamPatchValidation = {
@@ -708,25 +561,7 @@ export interface TokenVerifier {
 // @public
 export function toLiteLLMUserId(userEntityRef: string, userIdDomain?: string): string;
 
-// @public (undocumented)
-export interface UpdateKeyRequest {
-    // (undocumented)
-    duration?: string;
-    // (undocumented)
-    key: string;
-    // (undocumented)
-    key_alias?: string;
-    // (undocumented)
-    max_budget?: number;
-    // (undocumented)
-    models?: string[];
-    // (undocumented)
-    rpm_limit?: number;
-    // (undocumented)
-    team_id?: string;
-    // (undocumented)
-    tpm_limit?: number;
-}
+export { UpdateKeyRequest }
 
 // @public (undocumented)
 export interface UpdateTeamRequest extends Partial<CreateTeamRequest> {
@@ -736,141 +571,17 @@ export interface UpdateTeamRequest extends Partial<CreateTeamRequest> {
     team_id: string;
 }
 
-// @public (undocumented)
-export interface UsageDailyModelPoint {
-    // (undocumented)
-    api_requests: number;
-    // (undocumented)
-    completion_tokens: number;
-    // (undocumented)
-    date: string;
-    // (undocumented)
-    failed_requests: number;
-    // (undocumented)
-    model: string;
-    // (undocumented)
-    prompt_tokens: number;
-    // (undocumented)
-    spend: number;
-    // (undocumented)
-    successful_requests: number;
-    // (undocumented)
-    total_tokens: number;
-}
+export { UsageDailyModelPoint }
 
-// @public (undocumented)
-export interface UsageDailyPoint {
-    // (undocumented)
-    api_requests: number;
-    // (undocumented)
-    completion_tokens: number;
-    // (undocumented)
-    date: string;
-    // (undocumented)
-    failed_requests: number;
-    // (undocumented)
-    prompt_tokens: number;
-    // (undocumented)
-    spend: number;
-    // (undocumented)
-    successful_requests: number;
-    // (undocumented)
-    total_tokens: number;
-}
+export { UsageDailyPoint }
 
-// @public (undocumented)
-export interface UsageKeyBreakdown {
-    // (undocumented)
-    api_requests: number;
-    // (undocumented)
-    completion_tokens: number;
-    // (undocumented)
-    failed_requests: number;
-    // (undocumented)
-    key_alias?: string;
-    // (undocumented)
-    models: string[];
-    // (undocumented)
-    prompt_tokens: number;
-    // (undocumented)
-    successful_requests: number;
-    // (undocumented)
-    team_id?: string | null;
-    // (undocumented)
-    total_spend: number;
-    // (undocumented)
-    total_tokens: number;
-}
+export { UsageKeyBreakdown }
 
-// @public (undocumented)
-export interface UsageMetrics {
-    // (undocumented)
-    api_requests: number;
-    // (undocumented)
-    completion_tokens: number;
-    // (undocumented)
-    daily_by_model: UsageDailyModelPoint[];
-    // (undocumented)
-    daily_usage: UsageDailyPoint[];
-    // (undocumented)
-    failed_requests: number;
-    // (undocumented)
-    prompt_tokens: number;
-    // (undocumented)
-    successful_requests: number;
-    // (undocumented)
-    total_spend: number;
-    // (undocumented)
-    total_tokens: number;
-    // (undocumented)
-    usage_by_key: Record<string, UsageKeyBreakdown>;
-    // (undocumented)
-    usage_by_model: Record<string, UsageModelBreakdown>;
-}
+export { UsageMetrics }
 
-// @public (undocumented)
-export interface UsageModelBreakdown {
-    // (undocumented)
-    api_requests: number;
-    // (undocumented)
-    completion_tokens: number;
-    // (undocumented)
-    failed_requests: number;
-    // (undocumented)
-    prompt_tokens: number;
-    // (undocumented)
-    successful_requests: number;
-    // (undocumented)
-    total_spend: number;
-    // (undocumented)
-    total_tokens: number;
-}
+export { UsageModelBreakdown }
 
-// @public (undocumented)
-export interface UserInfo {
-    budget_duration?: string;
-    can_view_audit?: boolean;
-    // (undocumented)
-    current_spend?: number;
-    // (undocumented)
-    email?: string;
-    // (undocumented)
-    hard_limit?: number;
-    // (undocumented)
-    max_budget?: number;
-    // (undocumented)
-    models?: string[];
-    // (undocumented)
-    soft_limit?: number;
-    // (undocumented)
-    spend?: number;
-    // (undocumented)
-    teams?: string[];
-    // (undocumented)
-    user_email?: string;
-    // (undocumented)
-    user_id: string;
-}
+export { UserInfo }
 
 // @public (undocumented)
 export function validateTeamPatchInput(input: TeamWriteInput & {
@@ -880,36 +591,7 @@ export function validateTeamPatchInput(input: TeamWriteInput & {
 // @public (undocumented)
 export function validateTeamWriteInput(input: TeamWriteInput, cfg: TeamAdminConfig): TeamWriteValidation;
 
-// @public (undocumented)
-export interface VirtualKey {
-    // (undocumented)
-    blocked?: boolean;
-    // (undocumented)
-    budget_duration?: string;
-    // (undocumented)
-    created_at: string;
-    // (undocumented)
-    expires_at?: string;
-    // (undocumented)
-    key: string;
-    // (undocumented)
-    key_alias?: string;
-    // (undocumented)
-    max_budget?: number;
-    // (undocumented)
-    models?: string[];
-    // (undocumented)
-    rpm_limit?: number;
-    // (undocumented)
-    spend: number;
-    team_id?: string;
-    // (undocumented)
-    token: string;
-    // (undocumented)
-    tpm_limit?: number;
-    // (undocumented)
-    user_id?: string;
-}
+export { VirtualKey }
 
 // (No @packageDocumentation comment for this package)
 

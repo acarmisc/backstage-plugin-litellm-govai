@@ -8,11 +8,10 @@ import {
   litellmTeamDeletePermission,
 } from '@acarmisc/backstage-plugin-litellm-common';
 import { assertTeamAdmin, validateTeamWriteInput, validateTeamPatchInput } from '../teamAdmin';
-import { redactTeamBudget } from '../teamBudgetVisibility';
 import { sendError } from '../errors';
 import type { RouterContext } from './context';
 import { createRequireUser, getProvisionedUser } from './middleware/withUser';
-import { respondTeamList } from '../http/respondTeam';
+import { respondTeam, respondTeamList } from '../http/respondTeam';
 
 import { withTeamFetchRetry, teamCreateInFlight } from '../http/teamFetch';
 
@@ -28,7 +27,6 @@ export function registerTeamsRoutes(router: Router, ctx: RouterContext): void {
     provisioningDefaults,
     roleConfigs,
     teamAdminCfg,
-    teamBudgetVisibility,
     requireTeamMgmt,
     sendTeamError,
     authorizeTeamSubresource,
@@ -122,7 +120,7 @@ export function registerTeamsRoutes(router: Router, ctx: RouterContext): void {
       logger.info(`Team creation already in flight for ${key} — joining`);
       try {
         const result = await pending;
-        res.json(result);
+        respondTeam(res, result as TeamInfo, ctx, 'manager');
       } catch (err: unknown) {
         sendTeamError(err, res);
       }
@@ -157,12 +155,7 @@ export function registerTeamsRoutes(router: Router, ctx: RouterContext): void {
     teamCreateInFlight.set(key, createPromise);
     try {
       const result = await createPromise;
-      // Manager surface: redact dollars when hidden even from managers.
-      res.json(
-        teamBudgetVisibility.hideTeamBudgetForManagers
-          ? redactTeamBudget(result as TeamInfo)
-          : result,
-      );
+      respondTeam(res, result as TeamInfo, ctx, 'manager');
     } catch (err: unknown) {
       sendTeamError(err, res);
     } finally {
@@ -220,11 +213,7 @@ export function registerTeamsRoutes(router: Router, ctx: RouterContext): void {
         teamId,
         owningGroup,
       });
-      res.json(
-        teamBudgetVisibility.hideTeamBudgetForManagers
-          ? redactTeamBudget(r as TeamInfo)
-          : r,
-      );
+      respondTeam(res, r as TeamInfo, ctx, 'manager');
     } catch (err: unknown) {
       sendTeamError(err, res);
     }
@@ -308,12 +297,7 @@ export function registerTeamsRoutes(router: Router, ctx: RouterContext): void {
           typeof t.metadata?.owning_group === 'string' &&
           t.metadata.owning_group === teamAdminCfg.group,
       );
-      // Manager surface: strip dollar amounts when hidden even from managers.
-      res.json(
-        teamBudgetVisibility.hideTeamBudgetForManagers
-          ? owned.map(redactTeamBudget)
-          : owned,
-      );
+      respondTeamList(res, owned, ctx, 'manager');
     } catch (err) {
       sendTeamError(err, res);
     }
@@ -440,11 +424,7 @@ export function registerTeamsRoutes(router: Router, ctx: RouterContext): void {
           via,
         });
         const updated = await withTeamFetchRetry(() => client.getTeamInfo(teamId));
-        res.json(
-          teamBudgetVisibility.hideTeamBudgetForManagers
-            ? redactTeamBudget(updated as TeamInfo)
-            : updated,
-        );
+        respondTeam(res, updated as TeamInfo, ctx, 'manager');
       } catch (err: unknown) {
         sendTeamError(err, res);
       }
@@ -506,11 +486,7 @@ export function registerTeamsRoutes(router: Router, ctx: RouterContext): void {
           via,
         });
         const updated = await withTeamFetchRetry(() => client.getTeamInfo(teamId));
-        res.json(
-          teamBudgetVisibility.hideTeamBudgetForManagers
-            ? redactTeamBudget(updated as TeamInfo)
-            : updated,
-        );
+        respondTeam(res, updated as TeamInfo, ctx, 'manager');
       } catch (err: unknown) {
         sendTeamError(err, res);
       }

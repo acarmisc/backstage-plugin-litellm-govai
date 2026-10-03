@@ -13,7 +13,7 @@ export function isClipboardApiAvailable(): boolean {
  * Pure helper: fallback copy via textarea and document.execCommand.
  * Returns true if successful, false otherwise.
  */
-export function fallbackCopyToClipboard(text: string): boolean {
+function fallbackCopyToClipboard(text: string): boolean {
   const textarea = document.createElement('textarea');
   textarea.value = text;
   textarea.style.position = 'fixed';
