@@ -1,18 +1,29 @@
 # Backstage LiteLLM Governance Plugin
 
-Backstage plugin for LiteLLM governance — enables developers to manage virtual API keys and monitor AI model usage directly from Backstage.
+Self-service access to your [LiteLLM](https://github.com/BerriAI/litellm) AI
+gateway from Backstage, with the governance rules enforced on the server.
 
-## Overview
+Developers create and manage their own LiteLLM virtual keys, see their spend
+and budgets, and browse the models they may use — without anyone handing out
+the LiteLLM master key. Platform teams decide budgets, models, key lifetimes
+and who may manage teams, using Backstage identity, catalog groups and the
+permission framework they already run.
 
-This is a Backstage 1.50+ plugin providing a governance interface for LiteLLM proxy. It includes:
+- [Packages](#packages) · [Screenshots](#screenshots) · [Quick start](#quick-start) · [Adopting it in your organization](#adopting-it-in-your-organization)
+- [Configuration](#configuration) · [Frontend components](#frontend-components) · [Permissions](#permissions) · [Team management](#team-management-litellm-team-admins)
+- [Security model](#security-model) · [CLI bridge](#cli-bridge) · [Architecture](#architecture) · [API endpoints](#api-endpoints) · [Troubleshooting](#troubleshooting) · [Development](#development)
 
-- **Frontend**: React components built with the New Frontend System (`@backstage/frontend-plugin-api`)
-- **Backend**: Express router using the New Backend System (`@backstage/backend-plugin-api`)
+## Packages
 
-### Packages
+| Package | npm | Role |
+|---|---|---|
+| `packages/plugin-litellm` | [`@acarmisc/backstage-plugin-litellm`](https://www.npmjs.com/package/@acarmisc/backstage-plugin-litellm) | Frontend plugin ([New Frontend System](https://backstage.io/docs/frontend-system/)): the `/litellm` page and homepage widgets |
+| `packages/plugin-litellm-backend` | [`@acarmisc/backstage-plugin-litellm-backend`](https://www.npmjs.com/package/@acarmisc/backstage-plugin-litellm-backend) | Backend plugin ([New Backend System](https://backstage.io/docs/backend-system/)): talks to LiteLLM with the master key and enforces every rule |
+| `packages/plugin-litellm-common` | [`@acarmisc/backstage-plugin-litellm-common`](https://www.npmjs.com/package/@acarmisc/backstage-plugin-litellm-common) | Shared permissions, request schemas and types (installed automatically as a dependency) |
 
-- `packages/plugin-litellm` - Frontend (`@acarmisc/backstage-plugin-litellm`)
-- `packages/plugin-litellm-backend` - Backend (`@acarmisc/backstage-plugin-litellm-backend`)
+Requirements: a Backstage app on the New Frontend System and New Backend
+System (Backstage 1.50 or later), a reachable LiteLLM proxy with a database
+(users, teams and keys live there) and its master key.
 
 ## Screenshots
 
@@ -50,34 +61,135 @@ Browse every model the proxy exposes, with per-model input/output cost and max i
 
 ![Models tab](docs/screenshots/models-tab.png)
 
-### Generate Key button
-
-Every "create a key" call-to-action in the plugin — the page header, the empty state, the keys table and the homepage budget card — is the same shared `GenerateKeyButton`, so the copy, icon and styling stay identical. It is exported for your own layouts: pass `onClick` to run your own handler, or `to` to deep-link (for example `/litellm?generate=1`, which opens the generate-key dialog).
-
-> The screenshots in this section predate the latest UI polish and are being refreshed; the behaviour described in the text is current.
-
 ### Budget Policy card
 
-`LiteLLMBudgetWidget` in its `compact collapsible` form, as it appears beside the usage charts on the `/litellm` Overview tab. The two-line header carries the card title and a summary pill — here `15 limits · closest: team 92%` — that names the enforcement level of the limit nearest its cap. Directly below sits a one-line reminder of the order caps are checked in (`key → personal → team → global`; the first cap you reach blocks the request; a team-bound key uses the team's cap, not your personal one). Then a live spend-vs-cap meter for every limit the signed-in user actually has, grouped by level (`KEY`, `USER`, `TEAM`), each showing spend, percent of budget, and its reset window (`never resets` vs. `resets every 30 days`). Key budgets are ranked by proximity to the cap and capped at three; `+9 more budgeted keys further from the cap →` links through to the Keys tab.
+`LiteLLMBudgetWidget` in its `compact collapsible` form, as it appears beside the usage charts on the `/litellm` Overview tab: one spend-vs-cap meter for every limit the signed-in user has, grouped by level (`KEY`, `USER`, `TEAM`), with the order in which caps are enforced.
 
 ![Budget Policy card](docs/screenshots/budget-policy-widget.png)
 
-## Installation
+> Some screenshots predate the latest UI polish; the behaviour described in the text is current.
 
-This plugin is designed to be used **within a Backstage monorepo**. It uses workspace dependencies and requires the Backstage CLI to build.
+## Quick start
 
-### Option 1: Link from File
+Run these from the root of your Backstage app.
 
-From your Backstage monorepo root:
+**1. Install the packages**
 
 ```bash
-yarn add file:../backstage-govai/packages/plugin-litellm
-yarn add file:../backstage-govai/packages/plugin-litellm-backend
+yarn --cwd packages/backend add @acarmisc/backstage-plugin-litellm-backend
+yarn --cwd packages/app add @acarmisc/backstage-plugin-litellm
 ```
 
-### Option 2: Copy into Plugins Directory
+**2. Register the backend plugin** in `packages/backend/src/index.ts`:
 
-Copy the packages directly into your Backstage `plugins/` directory and add them to your workspace.
+```ts
+backend.add(import('@acarmisc/backstage-plugin-litellm-backend'));
+```
+
+**3. Register the frontend plugin.** If your app discovers features from its
+dependencies (`app.packages: all` in `app-config.yaml`), there is nothing to do.
+Otherwise add it to `createApp` in `packages/app/src/App.tsx`:
+
+```tsx
+import litellmPlugin from '@acarmisc/backstage-plugin-litellm';
+// or: import { litellmPlugin } from '@acarmisc/backstage-plugin-litellm';
+
+const app = createApp({
+  features: [litellmPlugin /* , ...your other features */],
+});
+```
+
+The plugin adds a page at `/litellm` and the
+`liteLlmApiRef` API.
+
+**4. Configure** `app-config.yaml` (the master key should come from a secret):
+
+```yaml
+litellm:
+  baseUrl: http://litellm-proxy:4000          # internal URL the backend uses
+  publicBaseUrl: https://llm.example.com      # URL developers use in snippets
+  masterKey: ${LITELLM_MASTER_KEY}
+  userIdDomain: example.com                   # user:default/jane.doe → jane.doe@example.com
+  provisioning:
+    enabled: true                             # create LiteLLM users on first visit
+    defaults:
+      maxBudget: 10
+      budgetDuration: 30d
+```
+
+**5. Check it.** `GET /api/litellm/health` returns
+`{ "status": "ok", "provisioning": true }`; then open `/litellm` while signed in.
+
+## Adopting it in your organization
+
+The plugin is safe to switch on with the defaults: users only ever act on
+their own LiteLLM identity and keys, every limit is checked on the server, and
+team management stays off until you enable it. The decisions below are what
+you tailor to your organization.
+
+### 1. Decide how Backstage users map to LiteLLM users
+
+The LiteLLM `user_id` is the Backstage user entity name, plus `@<userIdDomain>`
+when `litellm.userIdDomain` is set:
+
+| Backstage entity | `userIdDomain` | LiteLLM `user_id` |
+|---|---|---|
+| `user:default/jane.doe` | `example.com` | `jane.doe@example.com` |
+| `user:default/jane.doe` | — | `jane.doe` |
+| `user:default/jane.doe@example.com` | (ignored) | `jane.doe@example.com` |
+
+If LiteLLM already has users, pick the setting that reproduces their ids, or
+existing keys and spend will not show up. The catalog `User` entity must exist
+(it provides email, display name and group memberships).
+
+### 2. Choose how users get into LiteLLM
+
+- **Automatic provisioning** (`litellm.provisioning.enabled: true`): a LiteLLM
+  user is created on the first visit, with `provisioning.defaults` (budget,
+  reset window, models, teams, role). Use `provisioning.roles` to give catalog
+  groups different defaults — for example a larger budget for an AI platform
+  group. See [Autoprovisioning](#autoprovisioning).
+- **Pre-created users** (the default): users must already exist in LiteLLM;
+  others see a "not set up" message with `litellm.supportContact`.
+
+### 3. Set the guard rails for self-service keys
+
+| Setting | Default | What it controls |
+|---|---|---|
+| `litellm.keys.maxBudget` / `maxTpm` / `maxRpm` | `100` / `100000` / `1000` | Ceilings a user may request per key |
+| `litellm.keys.allowedDurations` | `1d, 7d, 30d, 90d` | Key lifetimes on offer (keys never default to non-expiring) |
+| `litellm.keyGeneration.teamRequired` | `true` | Every key must be bound to one of the user's teams |
+| `litellm.keyGeneration.allowUnlimitedBudget` | `false` | Whether a key may have no budget |
+| `litellm.keys.allowOwnerResetSpend` | `false` | Whether owners may reset their key's spend |
+
+LiteLLM also enforces user and team budgets; the first cap a request reaches
+blocks it.
+
+### 4. Decide who may do what
+
+Without a permission policy every `litellm.*` permission is allowed, which is
+fine for "every employee may manage their own keys". Install a policy (for
+example [`@backstage-community/plugin-rbac`](https://github.com/backstage/community-plugins/tree/main/workspaces/rbac))
+when you need to restrict actions per role — see [Permissions](#permissions).
+Two capabilities are group-gated in addition:
+
+- **Audit log tab**: members of `litellm.audit.group`.
+- **Team management**: members of `litellm.teamAdmin.group`, and only with
+  `permission.enabled: true` — see [Team management](#team-management-litellm-team-admins).
+
+### 5. Roll out
+
+1. Deploy with provisioning on and conservative defaults to a pilot group.
+2. Ask the LiteLLM admins to create the teams users should bind keys to (or
+   enable [team management](#team-management-litellm-team-admins)), and list
+   their ids in `provisioning.defaults.teams` / `provisioning.roles[].teams`.
+3. Add the [homepage widgets](#frontend-components) so people find the page.
+4. Optionally enable the [CLI bridge](#cli-bridge) for command-line clients.
+5. Restrict access to the LiteLLM admin UI: it can change anything this plugin
+   relies on (for example a team's `owning_group`).
+
+The [interactive architecture diagram](docs/architecture/architecture.html)
+walks through the main flows step by step.
 
 ## Configuration
 
@@ -207,7 +319,7 @@ litellm:
     maxBudgetCeiling: 500                         # default: unset (no budget settable)
     allowUnlimitedBudget: false                   # default: false
 
-    # Allow DELETE /teams/:id (otherwise the route 403s — block a team instead).
+    # Allow DELETE /teams/:id (otherwise the route 403s — block the team in LiteLLM instead).
     allowTeamDelete: false                        # default: false
 
     # Refuse every team write, admins included (teams synced from an IdP).
@@ -260,6 +372,11 @@ litellm:
 | `litellm.keys.allowedDurations` | string[] | no | `['1d','7d','30d','90d']` | Durations a key may be generated with (an empty list allows any `<n><s/m/h/d/w/y>`) |
 | `litellm.keys.allowOwnerResetSpend` | boolean | no | `false` | Let key owners reset their own key's spend (still needs the `litellm.key.resetSpend` permission). Fails closed even under an allow-all policy |
 | `litellm.cache.userInfoTtlSeconds` | number | no | `10` | TTL of the per-user LiteLLM profile cache (`0` disables) |
+| `litellm.audit.group` | string | no | — | Backstage group whose members see the Audit Log tab and may call `/audit` and `/provisioning/preview` |
+| `litellm.bridge.enabled` | boolean | no | `false` | Mount the [CLI bridge](#cli-bridge) routes |
+| `litellm.bridge.issuer` | string | when bridge enabled | — | Keycloak realm issuer URL |
+| `litellm.bridge.clientId` | string | no | `abby-cli` | OIDC client the CLI tokens must be issued for (`azp` / `aud`) |
+| `litellm.bridge.allowedEmailDomains` | string[] | no | `[userIdDomain]` | Verified email domains allowed to use the bridge |
 | `litellm.supportContact` | string | no | — | Who users should contact when their account isn't set up (shown in the UI) |
 | `litellm.opencode.enabled` | boolean | no | `false` | Mount `/opencode/connect` (see [Security model](#security-model)) |
 | `litellm.opencode.keyDuration` / `maxBudget` / `requireTeam` / `metadata` | — | no | `30d` / `50` / `false` / `{}` | Defaults for keys created through the OpenCode connect flow |
@@ -282,26 +399,53 @@ litellm:
 *required when the `roles` array is present
 †required to enable team management
 
-### Backend Registration
+## Autoprovisioning
 
-In `packages/backend/src/index.ts`:
+When `litellm.provisioning.enabled` is `true`, the backend automatically creates a LiteLLM user the first time a Backstage user hits any plugin endpoint (user info, keys, teams, or usage). The flow is:
 
-```typescript
-backend.add(import('@acarmisc/backstage-plugin-litellm-backend'));
+1. The backend resolves the caller's Backstage identity from the request token (`user:default/<name>`).
+2. It checks whether that identity already exists in LiteLLM via `/user/info`.
+3. If not found, it looks up the user's Backstage catalog entity to fetch their profile (email, display name) and group memberships.
+4. It applies any matching `provisioning.roles` override (first match wins), then calls `/user/new` on LiteLLM with the effective defaults.
+5. A concurrent single-flight lock prevents duplicate `/user/new` calls when several endpoints fire in parallel on the same page load.
+
+**Backstage catalog prerequisites:**
+
+- The user **must exist as a `User` entity in the Backstage catalog**. The catalog is the source of truth for email, display name, and group memberships.
+- Group memberships (used for role matching) are resolved from the `memberOf` relations on the user entity. These are typically populated by a catalog provider such as the LDAP, GitHub, or Microsoft Graph org provider.
+- If `userIdDomain` is set, the entity name (e.g. `john.doe` from `user:default/john.doe`) is combined with the domain to produce the LiteLLM `user_id` (e.g. `john.doe@example.com`). Make sure LiteLLM users were created with matching IDs if you are migrating an existing deployment.
+- If a user signs in without a catalog entity (e.g. `dangerouslyAllowSignInWithoutUserInCatalog` is set), provisioning still proceeds but the LiteLLM user record will lack email, display name, and team-role resolution — they will receive the default settings.
+
+**Minimum working example with autoprovisioning enabled:**
+
+```yaml
+litellm:
+  baseUrl: ${LITELLM_BASE_URL}
+  masterKey: ${LITELLM_MASTER_KEY}
+  provisioning:
+    enabled: true
+    defaults:
+      maxBudget: 5
+      budgetDuration: 30d
 ```
 
-### Frontend Registration
+## Frontend components
 
-The plugin supports the Backstage **New Frontend System** and the **New Backend System** only (there is no legacy `createPlugin` frontend export or legacy home `createCardExtension` support; the backend's `createRouter` remains exported for tests and custom wiring). Add the plugin package as an extension in `packages/app/src/App.tsx` or equivalent:
+All components show **the signed-in user's** data: identity is resolved by the
+backend from the Backstage token, so none of them takes a user id. They all
+need the backend plugin configured and the user present (or provisioned) in
+LiteLLM.
 
-```typescript
-import { litellmPlugin, LiteLLMPage } from '@acarmisc/backstage-plugin-litellm';
+| Component | Use it for |
+|---|---|
+| `LiteLLMPage` | The full page (mounted at `/litellm` by the plugin): Overview, Keys, Teams, Models, and Audit Log for members of `litellm.audit.group`. `?tab=keys` opens a tab, `?generate=1` opens the Generate New Key dialog |
+| `LiteLLMHomeWidget` | Homepage card: spend, tokens and a daily sparkline |
+| `LiteLLMBudgetWidget` | Homepage card explaining the budget hierarchy, with a meter per limit |
+| `LiteLLMBudgetGauges` | Condensed budget card: one ring per enforcement level and a month-to-date chart |
+| `GenerateKeyButton` | The shared "Generate New Key" button, for your own layouts (`onClick`, or `to="/litellm?generate=1"`) |
+| `KeyFormDialog`, `ManageTeamDialog`, `DashboardHeader`, `KeysTable`, `UsageStats`, `TeamUsage` | Building blocks used by `LiteLLMPage`; prefer the page unless you need a custom layout |
 
-// Add the route:
-<Route path="/litellm" element={<LiteLLMPage />} />
-```
-
-You can also register it as a plugin extension using the New Frontend System.
+> **Home page extensions.** Registering the widgets as `HomePageWidgetBlueprint` extensions (for `@backstage/plugin-home`'s customizable grid) is not shipped yet: `@backstage/plugin-home-react` currently pulls a second `@backstage/frontend-plugin-api` next to the plugin's, so it needs a Backstage dependency upgrade first. Until then, render the exported components in your homepage (use `bare` inside a card you already render).
 
 ### Home Widget
 
@@ -325,8 +469,6 @@ import { LiteLLMHomeWidget } from '@acarmisc/backstage-plugin-litellm';
 | `bare` | `boolean` | `false` | Render without the card chrome and title, for hosts that already provide a titled card |
 
 The widget requires the same backend setup as the full `LiteLLMPage` (backend plugin configured and the user provisioned in LiteLLM).
-
-> **Home page extensions.** Registering the widgets as `HomePageWidgetBlueprint` extensions (for `@backstage/plugin-home`'s customizable grid) is not shipped yet: `@backstage/plugin-home-react` currently pulls a second `@backstage/frontend-plugin-api` next to the plugin's, so it needs a Backstage dependency upgrade first. Until then, embed the exported components (use `bare` inside a card you already render).
 
 ### Budget Policy Widget
 
@@ -418,11 +560,12 @@ Passing `ctas={[]}` hides the bar; `action` still renders on its own. `expanded`
 | Prop | Type | Default | Description |
 |------|------|---------|-------------|
 | `title` | `string` | `'Budget'` | Card title override |
+| `bare` | `boolean` | `false` | Render without the card chrome and title, for hosts that already provide a titled card |
 | `size` | `number` | `56` | Ring diameter in px (rings shrink further below the `sm` breakpoint) |
 | `keysHref` | `string` | `` `${moduleHref}?tab=keys` `` | Where the `+N more` key link points |
 | `moduleHref` | `string` | `'/litellm'` | Where the `module` CTA and `new-key` deep-link point |
 | `onCreateKey` | `() => void` | — | Handle the `new-key` CTA yourself instead of deep-linking |
-| `ctas` | `BudgetCta[]` | `['new-key', 'module', 'all-limits']` | Action-bar buttons, in order |
+| `ctas` | `BudgetCta[]` | `['module', 'all-limits']` (`new-key` is prepended for users with no keys) | Action-bar buttons, in order |
 | `maxExpandedKeys` | `number` | `8` | Max key limits listed in the expanded view |
 | `expanded` | `boolean` | — | Controlled expanded state for the all-limits view |
 | `defaultExpanded` | `boolean` | `false` | Initial expanded state when uncontrolled |
@@ -430,36 +573,6 @@ Passing `ctas={[]}` hides the bar; `action` still renders on its own. `expanded`
 | `action` | `ReactNode` | — | Fully custom node pinned below the CTAs, below a divider |
 
 Like the other widgets it needs the backend plugin configured and the user provisioned in LiteLLM.
-
-### Autoprovisioning
-
-When `litellm.provisioning.enabled` is `true`, the backend automatically creates a LiteLLM user the first time a Backstage user hits any plugin endpoint (user info, keys, teams, or usage). The flow is:
-
-1. The backend resolves the caller's Backstage identity from the request token (`user:default/<name>`).
-2. It checks whether that identity already exists in LiteLLM via `/user/info`.
-3. If not found, it looks up the user's Backstage catalog entity to fetch their profile (email, display name) and group memberships.
-4. It applies any matching `provisioning.roles` override (first match wins), then calls `/user/new` on LiteLLM with the effective defaults.
-5. A concurrent single-flight lock prevents duplicate `/user/new` calls when several endpoints fire in parallel on the same page load.
-
-**Backstage catalog prerequisites:**
-
-- The user **must exist as a `User` entity in the Backstage catalog**. The catalog is the source of truth for email, display name, and group memberships.
-- Group memberships (used for role matching) are resolved from the `memberOf` relations on the user entity. These are typically populated by a catalog provider such as the LDAP, GitHub, or Microsoft Graph org provider.
-- If `userIdDomain` is set, the entity name (e.g. `john.doe` from `user:default/john.doe`) is combined with the domain to produce the LiteLLM `user_id` (e.g. `john.doe@example.com`). Make sure LiteLLM users were created with matching IDs if you are migrating an existing deployment.
-- If a user signs in without a catalog entity (e.g. `dangerouslyAllowSignInWithoutUserInCatalog` is set), provisioning still proceeds but the LiteLLM user record will lack email, display name, and team-role resolution — they will receive the default settings.
-
-**Minimum working example with autoprovisioning enabled:**
-
-```yaml
-litellm:
-  baseUrl: ${LITELLM_BASE_URL}
-  masterKey: ${LITELLM_MASTER_KEY}
-  provisioning:
-    enabled: true
-    defaults:
-      maxBudget: 5
-      budgetDuration: 30d
-```
 
 ## Permissions
 
@@ -541,7 +654,7 @@ Audit events (`team.member.add` / `team.member.remove`) carry `via: group | team
 
 When teams and memberships are owned elsewhere — e.g. a reconciler that mirrors
 Keycloak groups into LiteLLM — set `readOnly: true`. Every team write
-(create, edit, block, delete, members, KB / MCP) returns `403` for everyone,
+(create, edit, delete, members, KB / MCP) returns `403` for everyone,
 admins included, and the UI shows a *Synced from identity provider* badge
 instead of the edit controls. Reads keep working, so allowlists and the rest
 of the `teamAdmin` block can stay in place.
@@ -610,7 +723,8 @@ relations, not token claims.)
   `team.knowledgebase.set` / `team.mcp.set` audit event.
 - `DELETE /teams/:id` is off by default (`allowTeamDelete`), refuses to remove
   a team referenced by `litellm.provisioning` config without `?force=true`,
-  and is best avoided — block a team instead.
+  and is best avoided — block the team in LiteLLM instead (this plugin has no
+  team block action).
 - Team / member / access changes appear in the **Audit Log** tab under the
   `Team`, `Team member`, and `Team access (KB / MCP)` table filters.
 - `metadata.owning_group` on teams is trusted by the authorization system and
@@ -634,8 +748,9 @@ Enforcement is server-side: the backend strips `max_budget`/`spend` from
 responses (manager flag), emits `budget_pct` / `budget_status` /
 `budget_hidden` instead, and zeroes spend in `GET /teams/:id/usage` for
 affected callers (otherwise `budget = spend / pct` would leak the cap).
-Which usage flag applies depends on whether the caller belongs to
-`litellm.teamAdmin.group`; catalog failures fail closed to the member rule.
+Which usage flag applies depends on whether the caller belongs to the team's
+`metadata.owning_group` (with team management enabled); catalog failures fail
+closed to the member rule.
 Unlimited teams (no budget) are never redacted — there are no dollars to
 hide.
 
@@ -711,6 +826,188 @@ admins, so guard the LiteLLM admin interface accordingly.
 **Claude Code snippet**: the generated snippet no longer embeds a key in a helper
 script; it reads the key from the OS keychain through `apiKeyHelper`.
 
+## CLI bridge
+
+The bridge lets command-line clients (for example the **Abby** CLI) list and
+mint LiteLLM virtual keys **without ever holding the LiteLLM master key**. The
+Backstage backend keeps the master key; the CLI authenticates with a Keycloak
+access token from the same realm Backstage signs users in with.
+
+Request flow for `/api/litellm/bridge/*`:
+
+1. The CLI sends `Authorization: Bearer <keycloak-access-token>`.
+2. The bridge verifies the JWT against the realm JWKS: issuer, client (`azp`,
+   falling back to `aud`, must equal `litellm.bridge.clientId`) and token type
+   (Keycloak's `typ` claim must be absent or `Bearer` — ID tokens are rejected).
+   Failure → `401`, with details logged server-side only.
+3. The caller needs a **verified email** (`email_verified: true`) in a trusted
+   domain: `litellm.bridge.allowedEmailDomains`, defaulting to
+   `litellm.userIdDomain`. With neither configured every caller gets `403`.
+4. The LiteLLM user is **the same one the UI addresses**: the Keycloak
+   `preferred_username` (the Backstage user entity name; an email-shaped
+   username in a trusted domain is reduced to its local part) with
+   `litellm.userIdDomain` applied. If no such user exists, a user with the
+   token's email is reused; otherwise the user is provisioned from the token
+   claims when `litellm.provisioning.enabled` (base defaults only — group role
+   overrides need the catalog), or the call fails with `404`.
+5. Keys go through **the same checks as the UI**: strict request schema,
+   `litellm.keys.*` ceilings, `teamRequired`, team membership and allowed
+   models. When unlimited budgets are not allowed and the CLI sends no
+   `max_budget`, `provisioning.defaults.maxBudget` is used. Minted keys carry
+   `created_via: abby-cli`, `created_by` and `created_at_iso` metadata.
+   Backstage permissions are not evaluated: there is no Backstage credential to
+   authorize.
+
+Because the user id comes from `preferred_username`, make sure users cannot
+edit their username in the Keycloak realm (the default).
+
+| Endpoint | Method | Purpose |
+|---|---|---|
+| `/bridge/health` | GET | Bridge health and configured `clientId` (no auth) |
+| `/bridge/user/info` | GET | Caller's `user_id`, team ids and team display names |
+| `/bridge/keys` | GET | List the caller's keys |
+| `/bridge/keys` | POST | Mint a key for the caller |
+| `/bridge/models` | GET | Model catalogue; with `?team_id=` only that team's models (caller must belong to the team) |
+
+Configuration:
+
+```yaml
+litellm:
+  bridge:
+    enabled: true                                   # default false
+    issuer: https://auth.example.com/realms/acme    # required when enabled
+    clientId: abby-cli                              # default abby-cli
+    allowedEmailDomains: [example.com]              # default: [litellm.userIdDomain]
+```
+
+When `enabled` is true but `issuer` is missing, the backend logs an error at
+startup and does not mount the bridge routes.
+
+## Architecture
+
+```mermaid
+flowchart LR
+  dev([Developer browser]) --> fe[Frontend plugin<br/>/litellm page + widgets]
+  fe -->|Backstage user token| be[Backend plugin<br/>/api/litellm]
+  cli([CLI client]) -->|Keycloak access token| be
+  cli -. sign-in .-> kc[(Keycloak realm)]
+  be -. JWKS .-> kc
+  be -->|authorize litellm.*| perm[Permission framework]
+  be -->|profile + memberOf| cat[(Software Catalog)]
+  be -->|master key| llm[LiteLLM proxy]
+```
+
+The backend plugin is the only component that talks to LiteLLM, and the only
+one holding the master key. It resolves the caller (a Backstage user, or a
+Keycloak token on the bridge), applies the permission policy, group
+memberships and configuration limits, and builds every LiteLLM request
+explicitly.
+
+- **Interactive diagram**: [`docs/architecture/architecture.html`](docs/architecture/architecture.html)
+  — open it in a browser and play the flows step by step (UI key generation,
+  first-visit provisioning, CLI bridge, team member management).
+- **Written walkthrough**: [`docs/architecture/architecture.md`](docs/architecture/architecture.md).
+
+## API Endpoints
+
+The backend provides the following endpoints (all prefixed with `/api/litellm`).
+A machine-readable OpenAPI 3.1 contract is served at `/api/litellm/openapi.json`
+— point any OpenAPI-compatible renderer (Stoplight, Swagger UI, Redoc) at it
+instead of maintaining this table by hand.
+
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/health` | GET | Health check |
+| `/config` | GET | Public proxy URL (`null` when `publicBaseUrl` isn't set), key-generation and team-management flags, support contact |
+| `/openapi.json` | GET | OpenAPI 3.1 contract for this backend surface |
+| `/user/info` | GET | Get current user info and quotas |
+| `/keys` | GET | List user's virtual keys |
+| `/keys/generate` | POST | Generate a new virtual key |
+| `/keys/prune-expired` | POST | Delete the caller's expired keys; returns `{ pruned, failed, failures? }` (`litellm.key.revoke`) |
+| `/keys/:keyId` | DELETE | Revoke/delete a virtual key (caller must own it) |
+| `/keys/:keyId/update` | POST | Update alias / models / budget / limits (caller must own it) |
+| `/keys/:keyId/block` | POST | Suspend a key without revoking it (caller must own it) |
+| `/keys/:keyId/unblock` | POST | Re-enable a blocked key (caller must own it) |
+| `/keys/:keyId/reset_spend` | POST | Zero out a key's spend counter (caller must own it) |
+| `/models` | GET | List available LLM models |
+| `/teams` | GET | List teams the current user belongs to |
+| `/teams/managed` | GET | List teams whose `owning_group` the caller administers (team-admin only) |
+| `/teams` | POST | Create a team (`litellm.team.create`) |
+| `/teams/:teamId` | PATCH | Update a team's alias / models / budget (`litellm.team.manage`) |
+| `/teams/:teamId` | DELETE | Delete a team (`litellm.team.delete`, needs `allowTeamDelete`) |
+| `/teams/:teamId/members` | POST / DELETE | Add / remove a team member (`litellm.team.members.manage`) |
+| `/vector-stores` | GET | Allowlisted knowledge bases (`litellm.team.knowledgebase.manage`) |
+| `/teams/:teamId/knowledge-bases` | PUT | Set a team's knowledge bases (`litellm.team.knowledgebase.manage`) |
+| `/mcp-servers` | GET | Allowlisted MCP servers (`litellm.team.mcp.manage`) |
+| `/teams/:teamId/mcp-servers` | PUT | Set a team's MCP servers (`litellm.team.mcp.manage`) |
+| `/teams/:teamId/usage` | GET | Usage metrics for a team (`start_date`, `end_date` required) |
+| `/usage` | GET | Get usage metrics and analytics for the current user |
+| `/audit` | GET | Audit logs (gated by `litellm.audit.group` membership) |
+| `/opencode/connect` | GET / POST | OpenCode SSO connect: GET shows a confirmation page (no state change); POST creates or rotates the key and redirects to the local callback (only when `litellm.opencode.enabled`) |
+| `/provisioning/preview` | GET | Resolve which role a Backstage group maps to (dry-run, audit-group-gated) |
+
+The UI endpoints above authenticate with the caller's Backstage token. The
+`/bridge/*` endpoints authenticate with a Keycloak access token instead and are
+listed under [CLI bridge](#cli-bridge).
+
+## Troubleshooting
+
+### "No team membership found in LiteLLM for this account."
+
+This message is displayed in the Teams panel when the authenticated user exists in LiteLLM but belongs to no LiteLLM teams. It is an informational UI state, not an error — the user is provisioned and can still generate keys and view usage.
+
+**Why it happens:**
+
+- The user was provisioned with `provisioning.defaults.teams: []` (the default), so no teams were assigned at creation time.
+- Alternatively the user was created manually in LiteLLM without team membership.
+
+**How to fix:**
+
+1. Add the user to a LiteLLM team via the LiteLLM admin UI or API.
+2. Or set `litellm.provisioning.defaults.teams` (or a matching role override) to include the relevant LiteLLM team IDs before the user's first sign-in. Users already provisioned will not be retroactively re-assigned — update them via LiteLLM directly.
+
+### "User not found in LiteLLM" (404 from the backend)
+
+The backend returns a 404 with `{ "error": "User not found in LiteLLM", "hint": "...", "provisioning": false }` when:
+
+- The user does not exist in LiteLLM, **and**
+- `litellm.provisioning.enabled` is `false` (the default).
+
+**Fix:** Either enable autoprovisioning (`litellm.provisioning.enabled: true`) or create the user manually in LiteLLM using an ID that matches the Backstage entity name (plus `userIdDomain` if configured).
+
+### User identity is not resolving / user_id mismatch
+
+The backend derives the LiteLLM `user_id` from the Backstage token using the formula:
+
+```
+user_id = <entity-name> [ + "@" + userIdDomain ]
+```
+
+For example, `user:default/john.doe` with `userIdDomain: example.com` produces `john.doe@example.com`. If LiteLLM has the user stored under a different ID (e.g. the full email was used as the entity name), the lookup will fail.
+
+**Fix:** Align the LiteLLM user IDs with what the plugin derives, or adjust `userIdDomain`. If the Backstage entity name is already in email form (e.g. `user:default/john.doe@example.com`), do **not** set `userIdDomain` — the plugin detects the `@` and skips the domain suffix to avoid double-appending.
+
+### Keys not visible
+
+The Keys tab lists the keys LiteLLM associates with the caller's `user_id`.
+Keys created in LiteLLM for another user id (for example before
+`userIdDomain` was set) or without a `user_id` do not show up; check the
+mapping in [Adopting it in your organization](#1-decide-how-backstage-users-map-to-litellm-users).
+
+### Models list empty
+
+Verify that `LITELLM_MASTER_KEY` has permissions to list models on the LiteLLM proxy.
+
+### `502` errors ("LiteLLM is unavailable" / "LiteLLM rejected the request")
+
+The backend could not reach LiteLLM, or LiteLLM refused the master key. The
+real error is in the Backstage backend logs. `GET /api/litellm/health` only
+confirms the plugin is mounted; it does not call LiteLLM.
+
+### Usage not updating
+
+Usage analytics refresh when the date range selector is changed. If data appears stale, change the range and change it back to trigger a reload.
+
 ## Development
 
 ### Build
@@ -770,203 +1067,25 @@ cd packages/plugin-litellm
 yarn start
 ```
 
-## API Endpoints
-
-The backend provides the following endpoints (all prefixed with `/api/litellm`).
-A machine-readable OpenAPI 3.1 contract is served at `/api/litellm/openapi.json`
-— point any OpenAPI-compatible renderer (Stoplight, Swagger UI, Redoc) at it
-instead of maintaining this table by hand.
-
-| Endpoint | Method | Purpose |
-|----------|--------|---------|
-| `/health` | GET | Health check |
-| `/config` | GET | Public proxy URL (`null` when `publicBaseUrl` isn't set), key-generation and team-management flags, support contact |
-| `/openapi.json` | GET | OpenAPI 3.1 contract for this backend surface |
-| `/user/info` | GET | Get current user info and quotas |
-| `/keys` | GET | List user's virtual keys |
-| `/keys/generate` | POST | Generate a new virtual key |
-| `/keys/prune-expired` | POST | Delete the caller's expired keys; returns `{ pruned, failed, failures? }` (`litellm.key.revoke`) |
-| `/keys/:keyId` | DELETE | Revoke/delete a virtual key (caller must own it) |
-| `/keys/:keyId/update` | POST | Update alias / models / budget / limits (caller must own it) |
-| `/keys/:keyId/block` | POST | Suspend a key without revoking it (caller must own it) |
-| `/keys/:keyId/unblock` | POST | Re-enable a blocked key (caller must own it) |
-| `/keys/:keyId/reset_spend` | POST | Zero out a key's spend counter (caller must own it) |
-| `/models` | GET | List available LLM models |
-| `/teams` | GET | List teams the current user belongs to |
-| `/teams/managed` | GET | List teams whose `owning_group` the caller administers (team-admin only) |
-| `/teams` | POST | Create a team (`litellm.team.create`) |
-| `/teams/:teamId` | PATCH | Update a team's alias / models / budget (`litellm.team.manage`) |
-| `/teams/:teamId` | DELETE | Delete a team (`litellm.team.delete`, needs `allowTeamDelete`) |
-| `/teams/:teamId/members` | POST / DELETE | Add / remove a team member (`litellm.team.members.manage`) |
-| `/vector-stores` | GET | Allowlisted knowledge bases (`litellm.team.knowledgebase.manage`) |
-| `/teams/:teamId/knowledge-bases` | PUT | Set a team's knowledge bases (`litellm.team.knowledgebase.manage`) |
-| `/mcp-servers` | GET | Allowlisted MCP servers (`litellm.team.mcp.manage`) |
-| `/teams/:teamId/mcp-servers` | PUT | Set a team's MCP servers (`litellm.team.mcp.manage`) |
-| `/teams/:teamId/usage` | GET | Usage metrics for a team (`start_date`, `end_date` required) |
-| `/usage` | GET | Get usage metrics and analytics for the current user |
-| `/audit` | GET | Audit logs (gated by `litellm.audit.group` membership) |
-| `/opencode/connect` | GET / POST | OpenCode SSO connect: GET shows a confirmation page (no state change); POST creates or rotates the key and redirects to the local callback (only when `litellm.opencode.enabled`) |
-| `/provisioning/preview` | GET | Resolve which role a Backstage group maps to (dry-run, audit-group-gated) |
-
-The UI endpoints above authenticate via the Backstage identity system. The
-**CLI bridge** endpoints below are gated behind `litellm.bridge.enabled` and
-authenticate with a raw Keycloak access token instead (see [CLI Bridge](#cli-bridge-abby)):
-
-| Endpoint | Method | Purpose |
-|----------|--------|---------|
-| `/bridge/health` | GET | Bridge health + configured `clientId` (no auth) |
-| `/bridge/keys` | GET | List the caller's virtual keys |
-| `/bridge/keys` | POST | Mint a virtual key for the caller |
-| `/bridge/models` | GET | List available LLM models |
-
-## CLI Bridge (Abby)
-
-The bridge lets CLI clients (the **Abby** CLI) list and mint LiteLLM virtual
-keys **without ever holding the LiteLLM master key**. The Backstage backend
-keeps the master key (as it already does for the UI); the CLI authenticates
-with its Keycloak access token — the same realm Backstage uses.
-
-Request flow for `/api/litellm/bridge/*`:
-
-1. CLI sends `Authorization: Bearer <keycloak-access-token>`.
-2. The bridge verifies the JWT against the realm JWKS (`createRemoteJWKSet`),
-   checking the issuer, that the token was issued for the configured
-   `clientId` (via `azp`, falling back to `aud`), and that it is an **access
-   token** (Keycloak's `typ` claim must be absent or `Bearer` — ID tokens are
-   rejected). Failure → `401`; no verifier error details are returned to the
-   caller (they are logged server-side).
-3. The caller is let in only with a **verified email** (`email_verified: true`) in
-   a trusted domain: `litellm.bridge.allowedEmailDomains`, which defaults to
-   `litellm.userIdDomain`. With neither configured every caller gets `403`, as
-   do unverified or foreign-domain emails. The LiteLLM user is then **the same one
-   the UI addresses**: the Keycloak `preferred_username` (the Backstage user
-   entity name) with `litellm.userIdDomain` applied when set — the email is only
-   the gate, never the identity, so a username that differs from the email still
-   maps to the right user. The user is then ensured to exist — provisioned from
-   the JWT claims if `litellm.provisioning.enabled` (base defaults only; group
-   role overrides need the Backstage catalog), otherwise `404` (log in to
-   Backstage once first).
-4. Keys are minted through the **same code path as the UI**: strict request
-   schema, the `litellm.keys.*` ceilings, `allowUnlimitedBudget` /
-   `teamRequired`, team-membership and allowed-model checks. Minted keys are
-   stamped with ownership metadata (`created_via: abby-cli`, `created_by`,
-   `created_at_iso`). The bridge does not evaluate Backstage permissions (it
-   has no Backstage credentials to authorize with).
-
-Unlike the UI routes, bridge routes do **not** call Backstage's
-`auth.authenticate` — they verify the raw Keycloak JWT themselves.
-
-Configuration (`app-config.yaml`):
-
-```yaml
-litellm:
-  bridge:
-    enabled: true                                   # default false
-    allowedEmailDomains: [example.com]              # verified-email gate; defaults to litellm.userIdDomain
-    issuer: https://auth.example.com/realms/solution-innovation  # required when enabled
-    clientId: abby-cli                              # default abby-cli
-```
-
-When `enabled` is true but `issuer` is missing the backend fails fast at
-startup; the bridge routes are not mounted otherwise.
-
-## Architecture
-
-### Frontend
-
-- Built with React and Material-UI
-- Uses Backstage API client for backend communication
-- Components:
-  - `LiteLLMPage` - Main plugin page
-  - `DashboardHeader` - Header with user context
-  - `KeysTable` - Display and manage virtual keys
-  - `UsageStats` - Usage analytics with date range selector
-  - `TeamUsage` - Team-specific usage breakdown
-
-### Backend
-
-- Express-based router
-- Communicates with LiteLLM proxy API
-- Handles authentication via Backstage identity system
-- Provides user context resolution and API proxying
-
-## Features
-
-- **Key Management**: Generate, view, and revoke virtual API keys
-- **Usage Analytics**: Track API usage with configurable date ranges (today, 7 days, 30 days)
-- **Team Context**: Optional team-based key generation and usage tracking
-- **Delegated Team Management**: A designated Backstage group can create teams and set their models, budget, members, knowledge bases, and MCP servers from the UI — fail-closed, allowlist-bounded, permission-gated. See [Team Management](#team-management-litellm-team-admins)
-- **User Info**: Display user quotas and current usage limits
-- **Model Selection**: Browse available LLM models configured in LiteLLM
-- **At-a-glance Dashboard**: The profile header shows the current user, team membership, a live counter of total / expired / expiring-soon keys, and a one-click "Generate New Key" shortcut
-- **Inline Generation Errors**: Key-generation failures (e.g. a duplicate alias) surface directly in the dialog, with a client-side warning when the typed alias already matches one of your keys; the backend preserves the upstream status and `param` (e.g. `400` / `key_alias`)
-
 ## Release
 
-Push a tag matching the pattern `<package>@<version>` to trigger automated npm publish + GitHub Release:
+Each package is versioned and published on its own. Pushing a tag
+`<package>@<version>` runs `.github/workflows/publish.yaml`, which checks that
+the tag matches the version in that package's `package.json`, builds, publishes
+to npm with provenance and creates a GitHub Release.
+
+| Tag prefix | Package |
+|---|---|
+| `litellm-common@` | `@acarmisc/backstage-plugin-litellm-common` |
+| `litellm-backend@` | `@acarmisc/backstage-plugin-litellm-backend` |
+| `litellm@` | `@acarmisc/backstage-plugin-litellm` |
 
 ```bash
-# Bump the version in package.json
-$EDITOR packages/plugin-litellm/package.json   # or plugin-litellm-backend
-git commit -am "release: litellm vX.Y.Z"
+# 1. Bump "version" in the package.json files and add CHANGELOG entries, then:
+git commit -am "chore: release ..."
 git push origin main
 
-# Cut and push the tag
-git tag litellm@X.Y.Z              # or litellm-backend@X.Y.Z
-git push origin litellm@X.Y.Z
+# 2. Tag. Publish common first when it changed: the other two pin it exactly.
+git tag litellm-backend@X.Y.Z && git push origin litellm-backend@X.Y.Z
+git tag litellm@X.Y.Z         && git push origin litellm@X.Y.Z
 ```
-
-The CI workflow verifies the tag version matches `package.json`, builds, publishes to npm, and auto-creates a GitHub Release with generated release notes.
-
-## Troubleshooting
-
-### "No team membership found in LiteLLM for this account."
-
-This message is displayed in the Teams panel when the authenticated user exists in LiteLLM but belongs to no LiteLLM teams. It is an informational UI state, not an error — the user is provisioned and can still generate keys and view usage.
-
-**Why it happens:**
-
-- The user was provisioned with `provisioning.defaults.teams: []` (the default), so no teams were assigned at creation time.
-- Alternatively the user was created manually in LiteLLM without team membership.
-
-**How to fix:**
-
-1. Add the user to a LiteLLM team via the LiteLLM admin UI or API.
-2. Or set `litellm.provisioning.defaults.teams` (or a matching role override) to include the relevant LiteLLM team IDs before the user's first sign-in. Users already provisioned will not be retroactively re-assigned — update them via LiteLLM directly.
-
-### "User not found in LiteLLM" (404 from the backend)
-
-The backend returns a 404 with `{ "error": "User not found in LiteLLM", "hint": "...", "provisioning": false }` when:
-
-- The user does not exist in LiteLLM, **and**
-- `litellm.provisioning.enabled` is `false` (the default).
-
-**Fix:** Either enable autoprovisioning (`litellm.provisioning.enabled: true`) or create the user manually in LiteLLM using an ID that matches the Backstage entity name (plus `userIdDomain` if configured).
-
-### User identity is not resolving / user_id mismatch
-
-The backend derives the LiteLLM `user_id` from the Backstage token using the formula:
-
-```
-user_id = <entity-name> [ + "@" + userIdDomain ]
-```
-
-For example, `user:default/john.doe` with `userIdDomain: example.com` produces `john.doe@example.com`. If LiteLLM has the user stored under a different ID (e.g. the full email was used as the entity name), the lookup will fail.
-
-**Fix:** Align the LiteLLM user IDs with what the plugin derives, or adjust `userIdDomain`. If the Backstage entity name is already in email form (e.g. `user:default/john.doe@example.com`), do **not** set `userIdDomain` — the plugin detects the `@` and skips the domain suffix to avoid double-appending.
-
-### Keys not visible
-
-Ensure proper Material-UI theme configuration in your parent Backstage app.
-
-### Models list empty
-
-Verify that `LITELLM_MASTER_KEY` has permissions to list models on the LiteLLM proxy.
-
-### API 500 errors
-
-Check LiteLLM proxy connectivity and master key validity. The backend health endpoint (`GET /api/litellm/health`) returns the provisioning status and can confirm the plugin is reachable.
-
-### Usage not updating
-
-Usage analytics refresh when the date range selector is changed. If data appears stale, change the range and change it back to trigger a reload.

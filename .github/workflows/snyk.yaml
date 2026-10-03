@@ -33,11 +33,8 @@ jobs:
       # Fork PRs don't receive secrets, so skip rather than fail.
       - name: Snyk test
         if: ${{ env.SNYK_TOKEN != '' }}
-        # Both package-lock.json and yarn.lock are committed; exclude yarn.lock
-        # so packages aren't scanned twice.
         run: >
           snyk test
           --all-projects
-          --exclude=yarn.lock
           --org=701fed0d-3b87-43f5-99f9-4399b6ad5481
           --severity-threshold=high
