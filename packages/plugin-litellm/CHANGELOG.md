@@ -10,6 +10,29 @@ commit/PR that bumps the version in `package.json`. Format follows the
 Earlier history: `git log -- packages/plugin-litellm` or the
  [GitHub tags](https://github.com/acarmisc/backstage-plugin-litellm-govai/tags).
 
+## 0.34.0
+
+Works with `@acarmisc/backstage-plugin-litellm-backend` `0.18.0` or later.
+
+### Minor Changes
+
+- feat: the plugin is also the package's **default export**, so New Frontend
+  System apps with `app.packages: all` discover it automatically.
+- **BREAKING:** removed the deprecated `GenerateKeyDialog`; use
+  `<KeyFormDialog mode="create" … />`.
+- refactor: permissions are imported straight from
+  `@acarmisc/backstage-plugin-litellm-common` (the exported names are
+  unchanged); removed internal re-exports and the unused `zod`,
+  `@backstage/theme` and `@backstage/types` dependencies; `KeysTable` no
+  longer logs prune failures to the console (the page already shows a toast).
+- fix(`KeysTable`): the key id no longer wraps over several lines in narrow
+  columns.
+- dev: `npm start` serves the plugin with realistic mock data (keys, teams,
+  usage per model, audit log, team management) at `/litellm` and the
+  homepage cards at `/home`, without a backend.
+- docs: README rewritten around installation from npm and the New Frontend
+  System, with new screenshots.
+
 ## 0.33.0
 
 Requires `@acarmisc/backstage-plugin-litellm-backend` `0.18.0`.

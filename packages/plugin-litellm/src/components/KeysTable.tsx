@@ -295,9 +295,6 @@ export const KeysTable: FC<KeysTableProps> = ({
     setPruneSubmitting(true);
     try {
       await onPruneExpiredKeys();
-    } catch (error) {
-      // eslint-disable-next-line no-console -- TODO: surface via a snackbar/alert instead of console-only
-      console.error('Failed to prune expired keys:', error);
     } finally {
       setPruneSubmitting(false);
       setPruneConfirmCount(null);
@@ -384,6 +381,7 @@ export const KeysTable: FC<KeysTableProps> = ({
                   px: 0.75,
                   py: 0.375,
                   borderRadius: '5px',
+                  whiteSpace: 'nowrap',
                 })}
               >
                 {shortKeyId(keyId)}

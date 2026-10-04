@@ -2,7 +2,7 @@ import { VirtualKey, ModelInfo, GenerateKeyRequest, UpdateKeyRequest } from '../
 import { fmtInt } from '../format';
 import { isModelAllowed } from '@acarmisc/backstage-plugin-litellm-common';
 
-export const generateDefaultAlias = (username?: string): string => {
+const generateDefaultAlias = (username?: string): string => {
   const base = (username || 'user')
     .split('@')[0]
     .toLowerCase()

@@ -32,7 +32,7 @@ import {
   litellmTeamMembersManagePermission,
   litellmTeamKnowledgebaseManagePermission,
   litellmTeamMcpManagePermission,
-} from '../permissions';
+} from '@acarmisc/backstage-plugin-litellm-common';
 import { DateRange, GenerateKeyRequest, GenerateKeyResponse, UpdateKeyRequest, UsageMetrics, CreateTeamRequest, UpdateTeamRequest, TeamInfo, VirtualKey } from '../types';
 import { toastFor } from '../feedback';
 import { isTeamMemberManager } from '../teamMemberManager';

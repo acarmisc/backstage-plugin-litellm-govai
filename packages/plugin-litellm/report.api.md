@@ -7,59 +7,47 @@
 import { AnyApiFactory } from '@backstage/frontend-plugin-api';
 import { AnyRouteRefParams } from '@backstage/frontend-plugin-api';
 import { ApiFactory } from '@backstage/frontend-plugin-api';
-import { ApiRef } from '@backstage/core-plugin-api';
-import { BasicPermission } from '@backstage/plugin-permission-common';
+import { ApiRef } from '@backstage/frontend-plugin-api';
+import { AuditLogEntry } from '@acarmisc/backstage-plugin-litellm-common';
+import { AuditLogsParams } from '@acarmisc/backstage-plugin-litellm-common';
 import { ConfigurableExtensionDataRef } from '@backstage/frontend-plugin-api';
+import { CreateTeamResponse } from '@acarmisc/backstage-plugin-litellm-common';
+import { DiscoveryApi } from '@backstage/frontend-plugin-api';
 import { ExtensionBlueprintParams } from '@backstage/frontend-plugin-api';
 import { ExtensionDataRef } from '@backstage/frontend-plugin-api';
 import { ExtensionInput } from '@backstage/frontend-plugin-api';
 import { FC } from 'react';
-import { FetchApi } from '@backstage/core-plugin-api';
+import { FetchApi } from '@backstage/frontend-plugin-api';
+import { GenerateKeyRequest } from '@acarmisc/backstage-plugin-litellm-common';
+import { GenerateKeyResponse } from '@acarmisc/backstage-plugin-litellm-common';
 import { IconElement } from '@backstage/frontend-plugin-api';
+import { JSX as JSX_2 } from 'react';
+import { litellmTeamCreatePermission } from '@acarmisc/backstage-plugin-litellm-common';
+import { litellmTeamKnowledgebaseManagePermission } from '@acarmisc/backstage-plugin-litellm-common';
+import { litellmTeamManagePermission } from '@acarmisc/backstage-plugin-litellm-common';
+import { litellmTeamMcpManagePermission } from '@acarmisc/backstage-plugin-litellm-common';
+import { litellmTeamMembersManagePermission } from '@acarmisc/backstage-plugin-litellm-common';
+import { ModelInfo } from '@acarmisc/backstage-plugin-litellm-common';
 import { OverridableExtensionDefinition } from '@backstage/frontend-plugin-api';
 import { OverridableFrontendPlugin } from '@backstage/frontend-plugin-api';
-import { default as React_2 } from 'react';
+import { PaginatedAuditLogs } from '@acarmisc/backstage-plugin-litellm-common';
+import { ReactNode } from 'react';
 import { RouteRef } from '@backstage/frontend-plugin-api';
+import { TeamInfo } from '@acarmisc/backstage-plugin-litellm-common';
+import { TeamMember } from '@acarmisc/backstage-plugin-litellm-common';
+import { TeamObjectPermission } from '@acarmisc/backstage-plugin-litellm-common';
+import { UpdateKeyRequest } from '@acarmisc/backstage-plugin-litellm-common';
+import { UsageDailyModelPoint } from '@acarmisc/backstage-plugin-litellm-common';
+import { UsageDailyPoint } from '@acarmisc/backstage-plugin-litellm-common';
+import { UsageKeyBreakdown } from '@acarmisc/backstage-plugin-litellm-common';
+import { UsageMetrics } from '@acarmisc/backstage-plugin-litellm-common';
+import { UsageModelBreakdown } from '@acarmisc/backstage-plugin-litellm-common';
+import { UserInfo } from '@acarmisc/backstage-plugin-litellm-common';
+import { VirtualKey } from '@acarmisc/backstage-plugin-litellm-common';
 
-// @public (undocumented)
-export interface AuditLogEntry {
-    // (undocumented)
-    action?: string;
-    // (undocumented)
-    before_value?: Record<string, unknown> | null;
-    // (undocumented)
-    changed_by?: string;
-    // (undocumented)
-    changed_by_api_key?: string;
-    // (undocumented)
-    id: string;
-    // (undocumented)
-    object_id?: string;
-    // (undocumented)
-    table_name?: string;
-    // (undocumented)
-    updated_at: string;
-    // (undocumented)
-    updated_values?: Record<string, unknown> | null;
-}
+export { AuditLogEntry }
 
-// @public (undocumented)
-export interface AuditLogsParams {
-    // (undocumented)
-    action?: string;
-    // (undocumented)
-    changed_by?: string;
-    // (undocumented)
-    end_date?: string;
-    // (undocumented)
-    page?: number;
-    // (undocumented)
-    page_size?: number;
-    // (undocumented)
-    start_date?: string;
-    // (undocumented)
-    table_name?: string;
-}
+export { AuditLogsParams }
 
 // @public
 export type BudgetCta = BudgetCtaKind | BudgetCtaSpec;
@@ -78,6 +66,7 @@ export interface BudgetCtaSpec {
 export interface CreateTeamRequest {
     // (undocumented)
     budget_duration?: string;
+    expectedUpdatedAtIso?: string;
     // (undocumented)
     max_budget?: number | null;
     // (undocumented)
@@ -90,18 +79,12 @@ export interface CreateTeamRequest {
     tpm_limit?: number;
 }
 
-// @public (undocumented)
-export interface CreateTeamResponse {
-    // (undocumented)
-    team_alias?: string;
-    // (undocumented)
-    team_id: string;
-}
+export { CreateTeamResponse }
 
 // Warning: (ae-forgotten-export) The symbol "DashboardHeaderProps" needs to be exported by the entry point index.d.ts
 //
 // @public (undocumented)
-export const DashboardHeader: React_2.FC<DashboardHeaderProps>;
+export const DashboardHeader: FC<DashboardHeaderProps>;
 
 // @public (undocumented)
 export interface DateRange {
@@ -112,7 +95,7 @@ export interface DateRange {
 }
 
 // @public (undocumented)
-export const GenerateKeyButton: React_2.FC<GenerateKeyButtonProps>;
+export const GenerateKeyButton: FC<GenerateKeyButtonProps>;
 
 // @public
 export interface GenerateKeyButtonProps {
@@ -124,57 +107,14 @@ export interface GenerateKeyButtonProps {
     to?: string;
 }
 
-// @public @deprecated (undocumented)
-export const GenerateKeyDialog: React_2.FC<{
-    open: boolean;
-    onClose: () => void;
-    keys: VirtualKey[];
-    models: ModelInfo[];
-    teams: TeamInfo[];
-    username?: string;
-    keyGenerationSettings?: {
-        allowUnlimitedBudget: boolean;
-        teamRequired: boolean;
-    };
-    onGenerateKey: (request: GenerateKeyRequest) => Promise<GenerateKeyResponse>;
-    onGetConfig: () => Promise<LiteLlmConfig>;
-}>;
+export { GenerateKeyRequest }
+
+export { GenerateKeyResponse }
 
 // @public (undocumented)
-export interface GenerateKeyRequest {
-    // (undocumented)
-    alias?: string;
-    // (undocumented)
-    duration?: string;
-    // (undocumented)
-    key_type?: string;
-    max_budget?: number | null;
-    // (undocumented)
-    models?: string[];
-    // (undocumented)
-    rpm_limit?: number;
-    // (undocumented)
-    team_id?: string;
-    // (undocumented)
-    tpm_limit?: number;
-}
+export const KeyFormDialog: FC<KeyFormDialogProps>;
 
 // @public (undocumented)
-export interface GenerateKeyResponse {
-    // (undocumented)
-    expires_at?: string;
-    // (undocumented)
-    key: string;
-    // (undocumented)
-    key_alias?: string;
-    // (undocumented)
-    max_budget?: number;
-}
-
-// @public (undocumented)
-export const KeyFormDialog: React_2.FC<KeyFormDialogProps>;
-
-// @public
 export type KeyFormDialogMode = 'create' | 'edit';
 
 // @public (undocumented)
@@ -190,6 +130,8 @@ export interface KeyFormDialogProps {
     // (undocumented)
     models: ModelInfo[];
     // (undocumented)
+    modelsError?: Error;
+    // (undocumented)
     onClose: () => void;
     // (undocumented)
     onCreateKey: (request: GenerateKeyRequest) => Promise<GenerateKeyResponse>;
@@ -197,6 +139,8 @@ export interface KeyFormDialogProps {
     onGetConfig: () => Promise<LiteLlmConfig>;
     // (undocumented)
     onResetKeySpend?: (keyId: string) => Promise<void>;
+    // (undocumented)
+    onRetryModels?: () => void;
     // (undocumented)
     onUpdateKey: (keyId: string, request: UpdateKeyRequest) => Promise<void>;
     // (undocumented)
@@ -209,11 +153,11 @@ export interface KeyFormDialogProps {
 // Warning: (ae-forgotten-export) The symbol "KeysTableProps" needs to be exported by the entry point index.d.ts
 //
 // @public (undocumented)
-export const KeysTable: React_2.FC<KeysTableProps>;
+export const KeysTable: FC<KeysTableProps>;
 
 // @public (undocumented)
 export class LiteLlmApi implements LiteLlmApiInterface {
-    constructor(fetchApi: FetchApi, basePath?: string);
+    constructor(fetchApi: FetchApi, base?: string | DiscoveryApi);
     // (undocumented)
     addTeamMember(teamId: string, body: {
         userEntityRef: string;
@@ -254,6 +198,11 @@ export class LiteLlmApi implements LiteLlmApiInterface {
     // (undocumented)
     pruneExpiredKeys(): Promise<{
         pruned: number;
+        failed: number;
+        failures?: {
+            keyId: string;
+            error: string;
+        }[];
     }>;
     // (undocumented)
     removeTeamMember(teamId: string, userEntityRef: string): Promise<TeamInfo>;
@@ -313,6 +262,11 @@ export interface LiteLlmApiInterface {
     // (undocumented)
     pruneExpiredKeys(): Promise<{
         pruned: number;
+        failed: number;
+        failures?: {
+            keyId: string;
+            error: string;
+        }[];
     }>;
     // (undocumented)
     removeTeamMember(teamId: string, userEntityRef: string): Promise<TeamInfo>;
@@ -331,72 +285,94 @@ export interface LiteLlmApiInterface {
 }
 
 // @public (undocumented)
-export const liteLlmApiRef: ApiRef<LiteLlmApiInterface>;
+export const liteLlmApiRef: ApiRef<LiteLlmApiInterface> & {
+    readonly $$type: "@backstage/ApiRef";
+};
 
 // @public (undocumented)
-export const LiteLLMBudgetGauges: React_2.FC<LiteLLMBudgetGaugesProps>;
+export const LiteLLMBudgetGauges: FC<LiteLLMBudgetGaugesProps>;
 
 // @public (undocumented)
 export interface LiteLLMBudgetGaugesProps {
-    action?: React_2.ReactNode;
+    action?: ReactNode;
+    bare?: boolean;
     ctas?: BudgetCta[];
     defaultExpanded?: boolean;
     expanded?: boolean;
+    // (undocumented)
+    keys?: VirtualKey[];
     keysHref?: string;
     maxExpandedKeys?: number;
     moduleHref?: string;
     onCreateKey?: () => void;
     onExpandedChange?: (expanded: boolean) => void;
     size?: number;
+    // (undocumented)
+    teams?: TeamInfo[];
     title?: string;
+    userInfo?: UserInfo | null;
 }
 
 // @public (undocumented)
-export const LiteLLMBudgetWidget: React_2.FC<LiteLLMBudgetWidgetProps>;
+export const LiteLLMBudgetWidget: FC<LiteLLMBudgetWidgetProps>;
 
 // @public (undocumented)
 export interface LiteLLMBudgetWidgetProps {
-    action?: React_2.ReactNode;
+    action?: ReactNode;
     collapsible?: boolean;
     compact?: boolean;
     defaultExpanded?: boolean;
+    // (undocumented)
+    keys?: VirtualKey[];
     maxKeys?: number;
+    // (undocumented)
+    teams?: TeamInfo[];
     title?: string;
+    userInfo?: UserInfo | null;
 }
 
 // @public (undocumented)
 export interface LiteLlmConfig {
-    baseUrl: string;
+    baseUrl: string | null;
     display?: {
         hideTeamBudgetForMembers?: boolean;
         hideTeamBudgetForManagers?: boolean;
+    };
+    keyActions?: {
+        allowOwnerResetSpend?: boolean;
     };
     keyGeneration?: {
         allowUnlimitedBudget: boolean;
         teamRequired: boolean;
     };
+    supportContact?: string;
     teamManagement?: {
         enabled: boolean;
         maxBudgetCeiling: number;
         allowUnlimitedBudget: boolean;
         objectPermissionsEnabled?: boolean;
+        readOnly?: boolean;
+        memberManagerRoles?: string[];
     };
 }
 
 // @public (undocumented)
-export const LiteLLMHomeWidget: React_2.FC<LiteLLMHomeWidgetProps>;
+export const LiteLLMHomeWidget: FC<LiteLLMHomeWidgetProps>;
 
 // @public (undocumented)
 export interface LiteLLMHomeWidgetProps {
+    bare?: boolean;
     defaultPeriod?: 'today' | '7d' | '30d';
     title?: string;
 }
 
 // @public (undocumented)
-export const LiteLLMPage: React_2.FC;
+export const LiteLLMPage: FC;
 
 // @public (undocumented)
-export const litellmPlugin: OverridableFrontendPlugin<    {}, {}, {
+const litellmPlugin: OverridableFrontendPlugin<    {
+root: RouteRef<undefined>;
+}, {}, {
 "api:litellm": OverridableExtensionDefinition<    {
 kind: "api";
 name: undefined;
@@ -419,13 +395,13 @@ title?: string | undefined;
 };
 output: ExtensionDataRef<string, "core.routing.path", {}> | ExtensionDataRef<RouteRef<AnyRouteRefParams>, "core.routing.ref", {
 optional: true;
-}> | ExtensionDataRef<React_2.JSX.Element, "core.reactElement", {}> | ExtensionDataRef<string, "core.title", {
+}> | ExtensionDataRef<JSX_2.Element, "core.reactElement", {}> | ExtensionDataRef<string, "core.title", {
 optional: true;
 }> | ExtensionDataRef<IconElement, "core.icon", {
 optional: true;
 }>;
 inputs: {
-pages: ExtensionInput<ConfigurableExtensionDataRef<React_2.JSX.Element, "core.reactElement", {}> | ConfigurableExtensionDataRef<string, "core.routing.path", {}> | ConfigurableExtensionDataRef<RouteRef<AnyRouteRefParams>, "core.routing.ref", {
+pages: ExtensionInput<ConfigurableExtensionDataRef<JSX_2.Element, "core.reactElement", {}> | ConfigurableExtensionDataRef<string, "core.routing.path", {}> | ConfigurableExtensionDataRef<RouteRef<AnyRouteRefParams>, "core.routing.ref", {
 optional: true;
 }> | ConfigurableExtensionDataRef<string, "core.title", {
 optional: true;
@@ -441,27 +417,24 @@ params: {
 path: string;
 title?: string;
 icon?: IconElement;
-loader?: () => Promise<React_2.JSX.Element>;
+loader?: () => Promise<JSX_2.Element>;
 routeRef?: RouteRef;
 noHeader?: boolean;
 };
 }>;
 }>;
+export default litellmPlugin;
+export { litellmPlugin }
 
-// @public (undocumented)
-export const litellmTeamCreatePermission: BasicPermission;
+export { litellmTeamCreatePermission }
 
-// @public (undocumented)
-export const litellmTeamKnowledgebaseManagePermission: BasicPermission;
+export { litellmTeamKnowledgebaseManagePermission }
 
-// @public (undocumented)
-export const litellmTeamManagePermission: BasicPermission;
+export { litellmTeamManagePermission }
 
-// @public (undocumented)
-export const litellmTeamMcpManagePermission: BasicPermission;
+export { litellmTeamMcpManagePermission }
 
-// @public (undocumented)
-export const litellmTeamMembersManagePermission: BasicPermission;
+export { litellmTeamMembersManagePermission }
 
 // Warning: (ae-forgotten-export) The symbol "ManageTeamDialogProps" needs to be exported by the entry point index.d.ts
 //
@@ -478,111 +451,22 @@ export interface McpServerInfo {
     url?: string;
 }
 
-// @public (undocumented)
-export interface ModelInfo {
-    access_groups?: string[];
-    // (undocumented)
-    input_cost_per_token?: number;
-    // (undocumented)
-    max_input_tokens?: number;
-    // (undocumented)
-    max_output_tokens?: number;
-    // (undocumented)
-    mode: string;
-    // (undocumented)
-    model_name: string;
-    // (undocumented)
-    output_cost_per_token?: number;
-    // (undocumented)
-    supports_function_calling?: boolean;
-    // (undocumented)
-    supports_vision?: boolean;
-}
+export { ModelInfo }
 
-// @public (undocumented)
-export interface PaginatedAuditLogs {
-    // (undocumented)
-    audit_logs: AuditLogEntry[];
-    // (undocumented)
-    page: number;
-    // (undocumented)
-    page_size: number;
-    // (undocumented)
-    total: number;
-    // (undocumented)
-    total_pages: number;
-}
+export { PaginatedAuditLogs }
 
-// @public (undocumented)
-export interface TeamInfo {
-    // (undocumented)
-    budget_duration?: string;
-    budget_hidden?: boolean;
-    budget_pct?: number;
-    budget_status?: 'ok' | 'near' | 'over';
-    // (undocumented)
-    max_budget?: number;
-    // (undocumented)
-    members_with_roles?: TeamMember[];
-    // (undocumented)
-    metadata?: Record<string, unknown>;
-    // (undocumented)
-    models?: string[];
-    // (undocumented)
-    object_permission?: TeamObjectPermission;
-    // (undocumented)
-    rpm_limit?: number;
-    // (undocumented)
-    spend: number;
-    // (undocumented)
-    team_alias?: string;
-    // (undocumented)
-    team_id: string;
-    // (undocumented)
-    tpm_limit?: number;
-}
+export { TeamInfo }
 
-// @public (undocumented)
-export interface TeamMember {
-    // (undocumented)
-    role: 'admin' | 'user';
-    // (undocumented)
-    user_email?: string;
-    // (undocumented)
-    user_id: string;
-}
+export { TeamMember }
 
-// @public (undocumented)
-export interface TeamObjectPermission {
-    // (undocumented)
-    mcp_access_groups?: string[];
-    // (undocumented)
-    mcp_servers?: string[];
-    // (undocumented)
-    vector_stores?: string[];
-}
+export { TeamObjectPermission }
 
 // Warning: (ae-forgotten-export) The symbol "TeamUsageProps" needs to be exported by the entry point index.d.ts
 //
 // @public (undocumented)
-export const TeamUsage: React_2.FC<TeamUsageProps>;
+export const TeamUsage: FC<TeamUsageProps>;
 
-// @public (undocumented)
-export interface UpdateKeyRequest {
-    // (undocumented)
-    duration?: string;
-    // (undocumented)
-    key_alias?: string;
-    max_budget?: number | null;
-    // (undocumented)
-    models?: string[];
-    // (undocumented)
-    rpm_limit?: number;
-    // (undocumented)
-    team_id?: string;
-    // (undocumented)
-    tpm_limit?: number;
-}
+export { UpdateKeyRequest }
 
 // @public (undocumented)
 export interface UpdateTeamRequest {
@@ -602,146 +486,22 @@ export interface UpdateTeamRequest {
     tpm_limit?: number;
 }
 
-// @public (undocumented)
-export interface UsageDailyModelPoint {
-    // (undocumented)
-    api_requests: number;
-    // (undocumented)
-    completion_tokens: number;
-    // (undocumented)
-    date: string;
-    // (undocumented)
-    failed_requests: number;
-    // (undocumented)
-    model: string;
-    // (undocumented)
-    prompt_tokens: number;
-    // (undocumented)
-    spend: number;
-    // (undocumented)
-    successful_requests: number;
-    // (undocumented)
-    total_tokens: number;
-}
+export { UsageDailyModelPoint }
 
-// @public (undocumented)
-export interface UsageDailyPoint {
-    // (undocumented)
-    api_requests: number;
-    // (undocumented)
-    completion_tokens: number;
-    // (undocumented)
-    date: string;
-    // (undocumented)
-    failed_requests: number;
-    // (undocumented)
-    prompt_tokens: number;
-    // (undocumented)
-    spend: number;
-    // (undocumented)
-    successful_requests: number;
-    // (undocumented)
-    total_tokens: number;
-}
+export { UsageDailyPoint }
 
-// @public (undocumented)
-export interface UsageKeyBreakdown {
-    // (undocumented)
-    api_requests: number;
-    // (undocumented)
-    completion_tokens: number;
-    // (undocumented)
-    failed_requests: number;
-    // (undocumented)
-    key_alias?: string;
-    // (undocumented)
-    models: string[];
-    // (undocumented)
-    prompt_tokens: number;
-    // (undocumented)
-    successful_requests: number;
-    // (undocumented)
-    team_id?: string | null;
-    // (undocumented)
-    total_spend: number;
-    // (undocumented)
-    total_tokens: number;
-}
+export { UsageKeyBreakdown }
 
-// @public (undocumented)
-export interface UsageMetrics {
-    // (undocumented)
-    api_requests: number;
-    // (undocumented)
-    completion_tokens: number;
-    // (undocumented)
-    daily_by_model: UsageDailyModelPoint[];
-    // (undocumented)
-    daily_usage: UsageDailyPoint[];
-    // (undocumented)
-    failed_requests: number;
-    // (undocumented)
-    prompt_tokens: number;
-    // (undocumented)
-    successful_requests: number;
-    // (undocumented)
-    total_spend: number;
-    // (undocumented)
-    total_tokens: number;
-    // (undocumented)
-    usage_by_key: Record<string, UsageKeyBreakdown>;
-    // (undocumented)
-    usage_by_model: Record<string, UsageModelBreakdown>;
-}
+export { UsageMetrics }
 
-// @public (undocumented)
-export interface UsageModelBreakdown {
-    // (undocumented)
-    api_requests: number;
-    // (undocumented)
-    completion_tokens: number;
-    // (undocumented)
-    failed_requests: number;
-    // (undocumented)
-    prompt_tokens: number;
-    // (undocumented)
-    successful_requests: number;
-    // (undocumented)
-    total_spend: number;
-    // (undocumented)
-    total_tokens: number;
-}
+export { UsageModelBreakdown }
 
 // Warning: (ae-forgotten-export) The symbol "UsageStatsProps" needs to be exported by the entry point index.d.ts
 //
 // @public (undocumented)
-export const UsageStats: React_2.FC<UsageStatsProps>;
+export const UsageStats: FC<UsageStatsProps>;
 
-// @public (undocumented)
-export interface UserInfo {
-    budget_duration?: string;
-    can_view_audit?: boolean;
-    // (undocumented)
-    current_spend?: number;
-    // (undocumented)
-    email?: string;
-    // (undocumented)
-    hard_limit?: number;
-    // (undocumented)
-    max_budget?: number;
-    // (undocumented)
-    models?: string[];
-    // (undocumented)
-    soft_limit?: number;
-    // (undocumented)
-    spend?: number;
-    // (undocumented)
-    teams?: string[];
-    // (undocumented)
-    user_email?: string;
-    // (undocumented)
-    user_id: string;
-}
+export { UserInfo }
 
 // @public (undocumented)
 export interface VectorStoreInfo {
@@ -751,36 +511,7 @@ export interface VectorStoreInfo {
     name?: string;
 }
 
-// @public (undocumented)
-export interface VirtualKey {
-    // (undocumented)
-    blocked?: boolean;
-    // (undocumented)
-    budget_duration?: string;
-    // (undocumented)
-    created_at: string;
-    // (undocumented)
-    expires_at?: string;
-    // (undocumented)
-    key: string;
-    // (undocumented)
-    key_alias?: string;
-    // (undocumented)
-    max_budget?: number;
-    // (undocumented)
-    models?: string[];
-    // (undocumented)
-    rpm_limit?: number;
-    // (undocumented)
-    spend: number;
-    team_id?: string;
-    // (undocumented)
-    token?: string;
-    // (undocumented)
-    tpm_limit?: number;
-    // (undocumented)
-    user_id?: string;
-}
+export { VirtualKey }
 
 // (No @packageDocumentation comment for this package)
 

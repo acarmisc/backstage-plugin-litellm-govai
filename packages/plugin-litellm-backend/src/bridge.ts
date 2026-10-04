@@ -18,8 +18,6 @@ import { Config } from '@backstage/config';
 import { LoggerService } from '@backstage/backend-plugin-api';
 import { LiteLLMClient } from './client';
 import {
-  GenerateKeyRequest,
-  GenerateKeyResponse,
   ProvisioningDefaults,
   UserInfo,
   VirtualKey,
@@ -177,20 +175,17 @@ export interface BridgeIdentityOptions {
   trustedEmailDomains?: string[];
 }
 
-/** A bare string is the legacy form: `userIdDomain`, also the only trusted domain. */
 function normalizeIdentityOptions(
-  opts?: string | BridgeIdentityOptions,
+  opts: BridgeIdentityOptions,
 ): { userIdDomain?: string; trusted: string[] } {
-  const o: BridgeIdentityOptions =
-    typeof opts === 'string' ? { userIdDomain: opts } : opts ?? {};
   let domains: string[] = [];
-  if (o.trustedEmailDomains?.length) {
-    domains = o.trustedEmailDomains;
-  } else if (o.userIdDomain) {
-    domains = [o.userIdDomain];
+  if (opts.trustedEmailDomains?.length) {
+    domains = opts.trustedEmailDomains;
+  } else if (opts.userIdDomain) {
+    domains = [opts.userIdDomain];
   }
   const trusted = domains.map(d => d.toLowerCase());
-  return { userIdDomain: o.userIdDomain, trusted };
+  return { userIdDomain: opts.userIdDomain, trusted };
 }
 
 /**
@@ -217,9 +212,9 @@ function normalizeIdentityOptions(
  */
 export function resolveBridgeUserId(
   claims: BridgeClaims,
-  identity?: string | BridgeIdentityOptions,
+  identity?: BridgeIdentityOptions,
 ): string {
-  const { userIdDomain, trusted } = normalizeIdentityOptions(identity);
+  const { userIdDomain, trusted } = normalizeIdentityOptions(identity ?? {});
   if (trusted.length === 0) {
     throw new BridgeIdentityError(
       'set litellm.bridge.allowedEmailDomains (or litellm.userIdDomain) to use the CLI bridge',
@@ -276,9 +271,9 @@ export async function getOrProvisionUserFromClaims(
   provisioningEnabled: boolean,
   provisioningDefaults: ProvisioningDefaults,
   logger: LoggerService,
-  userIdDomain?: string | BridgeIdentityOptions,
+  identity?: BridgeIdentityOptions,
 ): Promise<UserInfo> {
-  const userId = resolveBridgeUserId(claims, userIdDomain);
+  const userId = resolveBridgeUserId(claims, identity);
   const existing = await client.getUserInfo(userId);
   if (existing) return existing;
 
@@ -333,7 +328,7 @@ export async function bridgeListKeys(
   provisioningEnabled: boolean,
   provisioningDefaults: ProvisioningDefaults,
   logger: LoggerService,
-  userIdDomain?: string | BridgeIdentityOptions,
+  identity?: BridgeIdentityOptions,
 ): Promise<VirtualKey[]> {
   const user = await getOrProvisionUserFromClaims(
     client,
@@ -341,38 +336,8 @@ export async function bridgeListKeys(
     provisioningEnabled,
     provisioningDefaults,
     logger,
-    userIdDomain,
+    identity,
   );
   return client.listKeys(user.user_id);
 }
 
-/** Mints a new virtual key for the caller (provisioning the user first if needed). */
-export async function bridgeGenerateKey(
-  client: LiteLLMClient,
-  claims: BridgeClaims,
-  provisioningEnabled: boolean,
-  provisioningDefaults: ProvisioningDefaults,
-  logger: LoggerService,
-  request: Partial<GenerateKeyRequest>,
-  userIdDomain?: string | BridgeIdentityOptions,
-): Promise<GenerateKeyResponse> {
-  const user = await getOrProvisionUserFromClaims(
-    client,
-    claims,
-    provisioningEnabled,
-    provisioningDefaults,
-    logger,
-    userIdDomain,
-  );
-  const enriched: GenerateKeyRequest = {
-    ...request,
-    user_id: user.user_id,
-    metadata: {
-      ...(request.metadata ?? {}),
-      created_via: 'abby-cli',
-      created_by: user.user_id,
-      created_at_iso: new Date().toISOString(),
-    },
-  };
-  return client.generateKey(enriched);
-}

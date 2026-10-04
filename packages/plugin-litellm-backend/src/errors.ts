@@ -47,17 +47,20 @@ export function errorMessage(error: unknown): string {
 
 /**
  * Sanitizes a message by:
+ * - Redacting Bearer tokens and sk- keys
  * - Stripping HTML tags
  * - Collapsing consecutive whitespace
  * - Truncating to 500 characters
  *
- * @param msg The raw message (may contain HTML, newlines, etc.)
+ * @param msg The raw message (may contain HTML, newlines, secrets, etc.)
  * @returns A safe, printable message
  */
 export function sanitizeUpstreamMessage(msg: string): string {
   if (!msg || typeof msg !== 'string') return '';
 
   return msg
+    .replace(/Bearer\s+[A-Za-z0-9._\-+/=]+/g, 'Bearer [redacted]') // Redact Bearer tokens
+    .replace(/sk-[A-Za-z0-9_\-]{8,}/g, 'sk-[redacted]') // Redact sk-* keys
     .replace(HTML_TAG_PATTERN, '') // Strip HTML tags and entities
     .replace(/\s+/g, ' ') // Collapse whitespace
     .trim()

@@ -1,11 +1,11 @@
 import { Router, Request, Response } from 'express';
 import { UsageMetrics } from '../types';
-import { getOrProvisionUser, isUserMemberOfGroup, ProvisioningError } from '../provisioning';
+import { isUserMemberOfGroup, ProvisioningError } from '../provisioning';
 import { redactTeamUsage } from '../teamBudgetVisibility';
 import { sendError } from '../errors';
 import { withTeamFetchRetry } from '../http/teamFetch';
 import type { RouterContext } from './context';
-import { createRequireUser } from './middleware/withUser';
+import { createRequireUser, getProvisionedUser } from './middleware/withUser';
 
 export function registerTeamUsageRoutes(router: Router, ctx: RouterContext): void {
   const {
@@ -13,9 +13,6 @@ export function registerTeamUsageRoutes(router: Router, ctx: RouterContext): voi
     catalogClient,
     auth,
     logger,
-    provisioningEnabled,
-    provisioningDefaults,
-    roleConfigs,
     teamBudgetVisibility,
   } = ctx;
   const requireUser = createRequireUser(ctx);
@@ -31,19 +28,8 @@ export function registerTeamUsageRoutes(router: Router, ctx: RouterContext): voi
 
       // Authorize: member of the team OR a team manager
       const tokenEntityRef = res.locals.tokenEntityRef as string;
-      const userId = res.locals.userId as string;
 
-      const userInfo = await getOrProvisionUser(
-        client,
-        tokenEntityRef,
-        userId,
-        provisioningEnabled,
-        provisioningDefaults,
-        roleConfigs,
-        catalogClient,
-        auth,
-        logger,
-      );
+      const userInfo = await getProvisionedUser(ctx, res);
 
       // Check membership: user must be in the team OR be a team manager
       const isMember = userInfo?.teams?.includes(teamId) ?? false;

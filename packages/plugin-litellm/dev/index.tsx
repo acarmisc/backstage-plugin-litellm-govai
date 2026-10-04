@@ -1,4 +1,5 @@
 import ReactDOM from 'react-dom/client';
+import CssBaseline from '@mui/material/CssBaseline';
 import { TrendingUp as TrendingUpIcon } from '@mui/icons-material';
 import { createApp } from '@backstage/frontend-defaults';
 import { createFrontendPlugin, ApiBlueprint, PageBlueprint } from '@backstage/frontend-plugin-api';
@@ -94,13 +95,51 @@ const budgetWidgetsPage = PageBlueprint.make({
   },
 });
 
+// The homepage cards side by side, as an adopter would place them.
+const homePage = PageBlueprint.make({
+  name: 'home',
+  params: {
+    path: '/home',
+    title: 'Home',
+    icon: <TrendingUpIcon />,
+    loader: async () => {
+      const { default: Box } = await import('@mui/material/Box');
+      const { LiteLLMHomeWidget } = await import('../src/components/LiteLLMHomeWidget');
+      const { LiteLLMBudgetGauges } = await import('../src/components/LiteLLMBudgetGauges');
+      const { LiteLLMBudgetWidget } = await import('../src/components/LiteLLMBudgetWidget');
+      return (
+        <Box
+          sx={{
+            p: 3,
+            display: 'grid',
+            gap: 3,
+            gridTemplateColumns: { xs: '1fr', md: 'repeat(3, minmax(0, 1fr))' },
+            alignItems: 'start',
+          }}
+        >
+          {/* Wrappers keep each card at its natural height inside the grid row. */}
+          <Box data-testid="home-usage"><LiteLLMHomeWidget defaultPeriod="30d" /></Box>
+          <Box data-testid="home-gauges"><LiteLLMBudgetGauges /></Box>
+          <Box data-testid="home-policy"><LiteLLMBudgetWidget compact /></Box>
+        </Box>
+      );
+    },
+  },
+});
+
 const devLitellmPlugin = createFrontendPlugin({
   pluginId: 'litellm',
-  extensions: [mockLiteLlmApi, mockCatalogApi, liteLlmPage, budgetWidgetsPage],
+  extensions: [mockLiteLlmApi, mockCatalogApi, liteLlmPage, homePage, budgetWidgetsPage],
 });
 
 const app = createApp({
   features: [devLitellmPlugin],
 });
 
-ReactDOM.createRoot(document.getElementById('root')!).render(app.createRoot());
+// A Backstage app ships a CSS baseline; without it charts fall back to a serif font.
+ReactDOM.createRoot(document.getElementById('root')!).render(
+  <>
+    <CssBaseline />
+    {app.createRoot()}
+  </>,
+);

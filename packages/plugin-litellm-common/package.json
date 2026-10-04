@@ -29,8 +29,7 @@
   "scripts": {
     "build": "node build.js && tsc -p tsconfig.json",
     "test": "tsc -p tsconfig.test.json && node --test \"dist-test/**/*.test.js\"",
-    "prepack": "npm run build",
-    "postpack": ""
+    "prepack": "npm run build"
   },
   "dependencies": {
     "@backstage/plugin-permission-common": "^0.9.10",

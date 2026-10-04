@@ -2,8 +2,8 @@ import { Router, Request, Response } from 'express';
 import { TeamInfo } from '../types';
 import { litellmTeamKnowledgebaseManagePermission, litellmTeamMcpManagePermission } from '@acarmisc/backstage-plugin-litellm-common';
 import { assertTeamAdmin } from '../teamAdmin';
-import { redactTeamBudget } from '../teamBudgetVisibility';
 import type { RouterContext } from './context';
+import { respondTeam } from '../http/respondTeam';
 
 export function registerObjectPermissionsRoutes(router: Router, ctx: RouterContext): void {
   const {
@@ -13,7 +13,6 @@ export function registerObjectPermissionsRoutes(router: Router, ctx: RouterConte
     permissions,
     logger,
     teamAdminCfg,
-    teamBudgetVisibility,
     requireObjectPerms,
     sendTeamError,
     authorizeTeamSubresource,
@@ -114,11 +113,7 @@ export function registerObjectPermissionsRoutes(router: Router, ctx: RouterConte
           owningGroup,
           vector_stores: requested,
         });
-        res.json(
-          teamBudgetVisibility.hideTeamBudgetForManagers
-            ? redactTeamBudget(updated as TeamInfo)
-            : updated,
-        );
+        respondTeam(res, updated as TeamInfo, ctx, 'manager');
       } catch (err: unknown) {
         sendTeamError(err, res);
       }
@@ -221,11 +216,7 @@ export function registerObjectPermissionsRoutes(router: Router, ctx: RouterConte
           before,
           after: requested,
         });
-        res.json(
-          teamBudgetVisibility.hideTeamBudgetForManagers
-            ? redactTeamBudget(updated as TeamInfo)
-            : updated,
-        );
+        respondTeam(res, updated as TeamInfo, ctx, 'manager');
       } catch (err: unknown) {
         sendTeamError(err, res);
       }

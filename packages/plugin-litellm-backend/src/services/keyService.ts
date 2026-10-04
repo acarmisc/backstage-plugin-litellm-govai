@@ -1,9 +1,9 @@
 /**
- * Key generation service — unified by PR-6.
+ * Key generation service.
  *
  * Extracts the common logic for creating API keys from both the UI (POST /keys/generate)
- * and the bridge (POST /bridge/keys). Handles validation, provisioning, team/model checks,
- * and explicit upstream request construction.
+ * and the bridge (POST /bridge/keys). Handles validation, team/model checks,
+ * and explicit upstream request construction. Callers resolve the user beforehand.
  */
 
 import { AuthService, LoggerService } from '@backstage/backend-plugin-api';
@@ -12,26 +12,26 @@ import { LiteLLMClient } from '../client';
 import {
   GenerateKeyRequest,
   GenerateKeyResponse,
-  ProvisioningDefaults,
-  RoleConfig,
+  UserInfo,
 } from '../types';
 import {
   resolveUserProfile,
-  getOrProvisionUser,
 } from '../provisioning';
 import {
   type KeyValidationConfig,
   type GenerateKeyInput,
 } from '@acarmisc/backstage-plugin-litellm-common';
 
-/** Unified identity for key creation — resolved from either Backstage or JWT claims. */
 import { findDisallowedModels } from './modelAccess';
 
+/** User identity for key creation — already resolved by the caller. */
 export interface KeyCreateUser {
   /** Backstage user entity ref, e.g. "user:default/alice" (may be empty for bridge). */
   tokenEntityRef?: string;
-  /** Resolved LiteLLM user_id. Required. */
-  userId: string;
+  /** Resolved user info from LiteLLM. Required. */
+  userInfo: UserInfo;
+  /** How the key was created (for metadata stamping). Defaults to 'backstage'. */
+  createdVia?: string;
 }
 
 /** Context needed to create a key — configuration, clients, and services. */
@@ -45,10 +45,6 @@ export interface KeyCreateContext {
   auth?: AuthService;
   logger: LoggerService;
   keyValidationConfig: KeyValidationConfig;
-  provisioningEnabled: boolean;
-  provisioningDefaults: ProvisioningDefaults;
-  roleConfigs: RoleConfig[];
-  userIdDomain?: string;
 }
 
 /** Error thrown during key creation — maps to HTTP responses. */
@@ -68,18 +64,16 @@ export class KeyServiceError extends Error {
  * Performs:
  * - Schema validation of the input
  * - Config flag enforcement (allowUnlimitedBudget, teamRequired)
- * - User provisioning (single-flight, role configs)
  * - Team membership validation
  * - Model subset validation
  * - Metadata stamping
  * - Explicit upstream request construction and call
  *
- * @param user Verified identity: tokenEntityRef (optional) + userId (required)
+ * @param user Resolved identity: tokenEntityRef (optional) + userInfo (required, pre-provisioned)
  * @param input Parsed GenerateKeyInput from the schema
  * @param ctx Configuration and service clients
  * @returns The new key response from LiteLLM
  * @throws KeyServiceError with status and body for HTTP response
- * @throws ProvisioningError for provisioning failures
  * @throws LiteLLMUpstreamError for upstream LiteLLM errors
  */
 export async function createKeyForUser(
@@ -93,61 +87,9 @@ export async function createKeyForUser(
     catalogClient,
     auth,
     logger,
-    provisioningEnabled,
-    provisioningDefaults,
-    roleConfigs,
   } = ctx;
 
-  // ── Ensure user is provisioned ──────────────────────────────────────
-  // For bridge (no catalogClient/auth), use direct provisioning from JWT;
-  // for UI (with catalogClient/auth), use full provisioning with group roles.
-  let userInfo: any;
-  if (catalogClient !== undefined && catalogClient !== null && auth !== undefined && auth !== null) {
-    userInfo = await getOrProvisionUser(
-      client,
-      user.tokenEntityRef || '',
-      user.userId,
-      provisioningEnabled,
-      provisioningDefaults,
-      roleConfigs,
-      catalogClient,
-      auth,
-      logger,
-    );
-  } else {
-    // Bridge path: just check if user exists, or provision with minimal info
-    userInfo = await client.getUserInfo(user.userId);
-    if (!userInfo) {
-      if (!provisioningEnabled) {
-        throw new KeyServiceError(
-          404,
-          {
-            error: 'User not found in LiteLLM',
-            detail: 'No LiteLLM user for this identity. Log in to Backstage once to be provisioned, or enable litellm.provisioning.enabled.',
-          },
-        );
-      }
-      // Provision with minimal info (just user_id, will use defaults)
-      const created = await client.createUser({
-        user_id: user.userId,
-        user_email: user.userId,
-        max_budget: provisioningDefaults.maxBudget,
-        budget_duration: provisioningDefaults.budgetDuration,
-        models: provisioningDefaults.models,
-        teams: provisioningDefaults.teams?.length ? [provisioningDefaults.teams[0]] : [],
-      });
-      if (!created) {
-        throw new KeyServiceError(
-          500,
-          {
-            error: 'User provisioning failed',
-            detail: 'Failed to create user in LiteLLM',
-          },
-        );
-      }
-      userInfo = await client.getUserInfo(user.userId);
-    }
-  }
+  const userInfo = user.userInfo;
 
   // ── Enforce config flags ────────────────────────────────────────────
   if (!config.allowUnlimitedBudget && (input.max_budget === null || input.max_budget === undefined)) {
@@ -214,17 +156,19 @@ export async function createKeyForUser(
     ? await resolveUserProfile(user.tokenEntityRef, catalogClient, auth, logger)
     : {};
   const clientMetadata = input.metadata ?? {};
-  const serverMetadata = {
-    created_by_backstage_user: user.tokenEntityRef ?? 'unknown',
+  const createdVia = user.createdVia ?? 'backstage';
+  const serverMetadata: Record<string, string> = {
+    ...(user.tokenEntityRef && { created_by_backstage_user: user.tokenEntityRef }),
+    ...(!user.tokenEntityRef && { created_by: userInfo.user_id }),
     ...(profile.email && { created_by_email: profile.email }),
     ...(profile.displayName && {
       created_by_display_name: profile.displayName,
     }),
-    created_via: 'backstage',
+    created_via: createdVia,
     created_at_iso: new Date().toISOString(),
   };
   // Server-owned keys override client values
-  const enrichedMetadata = {
+  const enrichedMetadata: Record<string, string> = {
     ...clientMetadata,
     ...serverMetadata,
   };
@@ -233,7 +177,7 @@ export async function createKeyForUser(
   // Never spread the raw body; only include fields we've explicitly validated.
   const upstreamRequest: GenerateKeyRequest = {
     alias: input.alias,
-    user_id: user.userId,
+    user_id: userInfo.user_id,
   };
 
   if (input.models !== undefined) {
@@ -265,6 +209,6 @@ export async function createKeyForUser(
 
   // ── Call upstream LiteLLM ───────────────────────────────────────────
   const result: GenerateKeyResponse = await client.generateKey(upstreamRequest);
-  logger.info('key.generate', { userId: user.userId, keyAlias: input.alias });
+  logger.info('key.generate', { userId: userInfo.user_id, keyAlias: input.alias });
   return result;
 }
