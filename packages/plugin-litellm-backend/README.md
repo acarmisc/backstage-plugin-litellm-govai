@@ -7,8 +7,11 @@ enforces budgets, key limits, team membership, model access and permissions
 before calling LiteLLM.
 
 Pair it with the frontend, [`@acarmisc/backstage-plugin-litellm`](https://www.npmjs.com/package/@acarmisc/backstage-plugin-litellm).
+
+![How the backend handles a key request](https://raw.githubusercontent.com/acarmisc/backstage-plugin-litellm-govai/main/docs/images/architecture.png)
+
 Full documentation — adoption guide, configuration reference, permissions,
-security model and architecture — is in the
+security model and architecture — starts at the
 [project README](https://github.com/acarmisc/backstage-plugin-litellm-govai#readme).
 
 ## Installation
@@ -36,7 +39,7 @@ litellm:
 ```
 
 The configuration schema ships with the package (`config.d.ts`); see the
-[configuration reference](https://github.com/acarmisc/backstage-plugin-litellm-govai#configuration)
+[configuration reference](https://github.com/acarmisc/backstage-plugin-litellm-govai/blob/main/docs/configuration.md)
 for every key (key ceilings, team management, budget hiding, CLI bridge,
 OpenCode connect).
 
@@ -44,11 +47,11 @@ OpenCode connect).
 
 Routes are mounted under `/api/litellm`. A machine-readable OpenAPI 3.1
 description is served at `/api/litellm/openapi.json`; the
-[endpoint table](https://github.com/acarmisc/backstage-plugin-litellm-govai#api-endpoints)
+[endpoint table](https://github.com/acarmisc/backstage-plugin-litellm-govai/blob/main/docs/api.md)
 summarises them.
 
 The plugin registers the `litellm.*` permissions with the permission
-framework (see [Permissions](https://github.com/acarmisc/backstage-plugin-litellm-govai#permissions)).
+framework (see [Permissions](https://github.com/acarmisc/backstage-plugin-litellm-govai/blob/main/docs/permissions.md)).
 
 ## License
 

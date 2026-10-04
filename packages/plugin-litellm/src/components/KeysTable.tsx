@@ -381,6 +381,7 @@ export const KeysTable: FC<KeysTableProps> = ({
                   px: 0.75,
                   py: 0.375,
                   borderRadius: '5px',
+                  whiteSpace: 'nowrap',
                 })}
               >
                 {shortKeyId(keyId)}

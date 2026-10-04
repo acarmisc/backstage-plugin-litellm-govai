@@ -25,8 +25,13 @@ Works with `@acarmisc/backstage-plugin-litellm-backend` `0.18.0` or later.
   unchanged); removed internal re-exports and the unused `zod`,
   `@backstage/theme` and `@backstage/types` dependencies; `KeysTable` no
   longer logs prune failures to the console (the page already shows a toast).
+- fix(`KeysTable`): the key id no longer wraps over several lines in narrow
+  columns.
+- dev: `npm start` serves the plugin with realistic mock data (keys, teams,
+  usage per model, audit log, team management) at `/litellm` and the
+  homepage cards at `/home`, without a backend.
 - docs: README rewritten around installation from npm and the New Frontend
-  System.
+  System, with new screenshots.
 
 ## 0.33.0
 

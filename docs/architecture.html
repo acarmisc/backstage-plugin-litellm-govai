@@ -958,11 +958,19 @@ duration "30d" ∈ allowedDurations   ✓`,
       { from:"be", to:"litellm", color:"--c-compute", title:"Mint the key", route:"POST /key/generate",
         desc:"The upstream body is built field by field from the parsed input — never by spreading the request. Ownership metadata is stamped server-side and overrides anything the client sent.",
         payload:
-`{ "key_alias": "ci-pipeline", "user_id": "jane.doe@example.com",
-  "team_id": "platform", "models": ["gpt-4o"],
-  "max_budget": 20, "duration": "30d",
-  "metadata": { "created_by_backstage_user": "user:default/jane.doe",
-                "created_via": "backstage", "created_at_iso": "…" } }`,
+`{
+  "key_alias": "ci-pipeline",
+  "user_id": "jane.doe@example.com",
+  "team_id": "platform",
+  "models": ["gpt-4o"],
+  "max_budget": 20,
+  "duration": "30d",
+  "metadata": {
+    "created_by_backstage_user":
+      "user:default/jane.doe",
+    "created_via": "backstage"
+  }
+}`,
         chips:["explicit payload"] },
       { from:"be", to:"fe", color:"--c-orch", title:"Key shown once with ready-made snippets", route:"200 OK",
         desc:"The plaintext key is shown once, with curl / OpenAI SDK / OpenCode / Claude Code snippets built from <code>litellm.publicBaseUrl</code>. The internal <code>baseUrl</code> is never sent to the browser.",
@@ -998,14 +1006,28 @@ memberOf: [ "group:default/ai-power-users", … ]
       { from:"be", to:"litellm", color:"--c-compute", title:"Create the LiteLLM user", route:"POST /user/new",
         desc:"Created with the effective defaults (budget, reset window, models, teams, role) and provenance metadata. No default key is created.",
         payload:
-`{ "user_id": "jane.doe@example.com", "user_email": "jane.doe@example.com",
-  "max_budget": 100, "budget_duration": "30d", "models": ["gpt-4o", "claude-…"],
-  "teams": [], "user_role": "internal_user", "auto_create_key": false,
-  "metadata": { "provisioned_by": "backstage", "backstage_entity": "user:default/jane.doe" } }`,
+`{
+  "user_id": "jane.doe@example.com",
+  "user_email": "jane.doe@example.com",
+  "max_budget": 100,
+  "budget_duration": "30d",
+  "models": ["gpt-4o", "claude-…"],
+  "user_role": "internal_user",
+  "auto_create_key": false,
+  "metadata": {
+    "provisioned_by": "backstage",
+    "backstage_entity": "user:default/jane.doe"
+  }
+}`,
         chips:["auto_create_key: false"] },
       { from:"be", to:"fe", color:"--c-orch", title:"Profile returned", route:"200 OK",
         desc:"The UI now shows budgets, teams and the empty key list. Users added later to a team in LiteLLM see it on the next load.",
-        payload:`{ "user_id": "jane.doe@example.com", "teams": [], "max_budget": 100, "can_view_audit": false }`,
+        payload:`{
+  "user_id": "jane.doe@example.com",
+  "teams": [],
+  "max_budget": 100,
+  "can_view_audit": false
+}`,
         chips:["ready"] }
     ]
   },
@@ -1020,8 +1042,14 @@ memberOf: [ "group:default/ai-power-users", … ]
         chips:["public client"] },
       { from:"idp", to:"cli", color:"--c-seed", title:"Access token issued", route:"200 token",
         desc:"An access token whose <code>azp</code> (or <code>aud</code>) is the CLI client.",
-        payload:`{ "iss": "https://auth.example.com/realms/acme", "azp": "abby-cli", "typ": "Bearer",
-  "email": "jane.doe@example.com", "email_verified": true, "preferred_username": "jane.doe" }`,
+        payload:`{
+  "iss": "https://auth.example.com/realms/acme",
+  "azp": "abby-cli",
+  "typ": "Bearer",
+  "email": "jane.doe@example.com",
+  "email_verified": true,
+  "preferred_username": "jane.doe"
+}`,
         chips:["access token"] },
       { from:"cli", to:"be", color:"--c-user", title:"Bridge call with the Keycloak token", route:"POST /bridge/keys",
         desc:"Bridge routes are exempt from Backstage auth and verify the Keycloak JWT themselves.",
@@ -1042,7 +1070,11 @@ user_id = preferred_username (+ userIdDomain)`,
         chips:["fail closed"] },
       { from:"be", to:"litellm", color:"--c-compute", title:"Same key rules as the UI", route:"POST /key/generate",
         desc:"The user is resolved (falling back to a lookup by email, then provisioning from the token claims), and the key goes through the same schema, ceilings, team and model checks as the UI. Backstage permissions are not evaluated: there is no Backstage credential on this path.",
-        payload:`metadata: { "created_via": "abby-cli", "created_by": "jane.doe@example.com", "created_at_iso": "…" }`,
+        payload:`metadata: {
+  "created_via": "abby-cli",
+  "created_by": "jane.doe@example.com",
+  "created_at_iso": "…"
+}`,
         chips:["shared keyService"] },
       { from:"be", to:"cli", color:"--c-orch", title:"Key returned to the CLI", route:"200 OK",
         desc:"The CLI stores the key locally. <code>GET /bridge/user/info</code> and <code>GET /bridge/models?team_id=</code> let it offer team and model pickers.",
@@ -1072,7 +1104,8 @@ user_id = preferred_username (+ userIdDomain)`,
         chips:["direct membership"] },
       { from:"be", to:"perm", color:"--c-embed", title:"Permission decision", route:"litellm.team.members.manage",
         desc:"With RBAC, bind the permission to the role that maps to the admin group.",
-        payload:`p, role:default/litellm-team-admin, litellm.team.members.manage, update, allow`,
+        payload:`p, role:default/litellm-team-admin,
+   litellm.team.members.manage, update, allow`,
         chips:["DENY → 403"] },
       { from:"be", to:"litellm", color:"--c-compute", title:"Object guard: who owns the team", route:"GET /team/info",
         desc:"<code>metadata.owning_group</code> (stamped when the team was created from Backstage) must be a group the caller belongs to. Teams created elsewhere have none and are read-only here.",
@@ -1084,11 +1117,22 @@ user_id = preferred_username (+ userIdDomain)`,
         chips:["role: user only"] },
       { from:"be", to:"litellm", color:"--c-compute", title:"Add the member", route:"POST /team/member_add",
         desc:"An audit log line <code>team.member.add</code> records actor, team, member and path (<code>via: group | teamRole</code>).",
-        payload:`{ "team_id": "platform", "member": { "user_id": "john.roe@example.com", "role": "user" } }`,
+        payload:`{
+  "team_id": "platform",
+  "member": {
+    "user_id": "john.roe@example.com",
+    "role": "user"
+  }
+}`,
         chips:["audited"] },
       { from:"be", to:"fe", color:"--c-orch", title:"Updated team returned", route:"200 OK",
         desc:"Budget dollars are redacted when <code>litellm.display.hideTeamBudgetForManagers</code> is set; the percentage and status stay visible.",
-        payload:`{ "team_alias": "platform", "members_with_roles": [ … ], "budget_pct": 42, "budget_status": "ok" }`,
+        payload:`{
+  "team_alias": "platform",
+  "members_with_roles": [ … ],
+  "budget_pct": 42,
+  "budget_status": "ok"
+}`,
         chips:["redaction server-side"] }
     ]
   }

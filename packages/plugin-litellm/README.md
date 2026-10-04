@@ -9,7 +9,7 @@ Built for the [New Frontend System](https://backstage.io/docs/frontend-system/)
 which talks to LiteLLM and enforces every rule.
 
 Full documentation — adoption guide, configuration, permissions, security model
-and architecture — is in the
+and architecture — starts at the
 [project README](https://github.com/acarmisc/backstage-plugin-litellm-govai#readme).
 
 ## Installation
@@ -42,7 +42,7 @@ management for admins), **Models** (the proxy's model catalogue) and **Audit
 Log** (members of `litellm.audit.group` only). `?tab=<name>` opens a tab and
 `?generate=1` opens the Generate New Key dialog.
 
-![Usage analytics](../../docs/screenshots/usage-analytics.png)
+![The /litellm page](https://raw.githubusercontent.com/acarmisc/backstage-plugin-litellm-govai/main/docs/images/overview.png)
 
 ## Homepage components
 
@@ -63,10 +63,14 @@ import {
 <LiteLLMBudgetGauges />
 ```
 
-Props for each component are documented in the
-[project README](https://github.com/acarmisc/backstage-plugin-litellm-govai#frontend-components).
+Props for each component are documented in
+[docs/frontend.md](https://github.com/acarmisc/backstage-plugin-litellm-govai/blob/main/docs/frontend.md).
 
-![Home widget](../../docs/screenshots/home-widget.png)
+![LiteLLMBudgetGauges](https://raw.githubusercontent.com/acarmisc/backstage-plugin-litellm-govai/main/docs/images/budget-gauges.png)
+
+To try it without a backend, run `npm start` in this package: it serves the
+plugin with mock data at `http://localhost:3000/litellm` (see
+[CONTRIBUTING.md](https://github.com/acarmisc/backstage-plugin-litellm-govai/blob/main/CONTRIBUTING.md#run-the-frontend-with-mock-data)).
 
 ## Other exports
 

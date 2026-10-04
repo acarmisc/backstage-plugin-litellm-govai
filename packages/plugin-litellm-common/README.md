@@ -18,7 +18,7 @@ import {
 } from '@acarmisc/backstage-plugin-litellm-common';
 ```
 
-See the [project README](https://github.com/acarmisc/backstage-plugin-litellm-govai#permissions)
+See [docs/permissions.md](https://github.com/acarmisc/backstage-plugin-litellm-govai/blob/main/docs/permissions.md)
 for what each permission guards.
 
 ## License

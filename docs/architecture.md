@@ -1,15 +1,19 @@
 # Architecture
 
-An interactive version of this page is in [`architecture.html`](architecture.html)
-(open it in a browser: pick a flow, press <kbd>Space</kbd> to play it step by
-step, press <kbd>O</kbd> to switch between "no permission policy" and "RBAC").
+![The "Generate a key from the UI" flow, step 6: the backend mints the key in LiteLLM](images/architecture.png)
+
+[`architecture.html`](architecture.html) is an interactive version of this
+page: open it in a browser, pick a flow and press <kbd>Space</kbd> to play it
+step by step. <kbd>O</kbd> switches between a deployment without a permission
+policy and one with RBAC. It was built with the
+[architecture-diagram skill](https://github.com/konraddzbik/architecture-diagram-skill).
 
 ## Components
 
 | Component | What it is | Holds secrets? |
 |---|---|---|
 | **Developer (browser)** | A user signed in to Backstage. | No |
-| **CLI client** | The Abby CLI or any script using the [CLI bridge](../../README.md#cli-bridge). | Only its own Keycloak token and the keys it mints |
+| **CLI client** | The Abby CLI or any script using the [CLI bridge](cli-bridge.md). | Only its own Keycloak token and the keys it mints |
 | **Frontend plugin** (`@acarmisc/backstage-plugin-litellm`) | The `/litellm` page and the homepage widgets. Talks only to the backend plugin. | No |
 | **Backend plugin** (`@acarmisc/backstage-plugin-litellm-backend`) | Express router mounted at `/api/litellm`. Resolves the caller, enforces every rule, then calls LiteLLM. | The LiteLLM **master key** |
 | **Permission framework** | Backstage permissions. With no policy installed every decision is `ALLOW`; with a policy (for example the RBAC plugin) you decide per role. | No |
@@ -102,9 +106,8 @@ Only with `permission.enabled: true` and `litellm.teamAdmin.group` set.
 | **No policy** | `permission.enabled` is false or no policy is installed: every `litellm.*` permission is `ALLOW`. Key rules, ownership checks and config ceilings still apply. Team management is off. |
 | **RBAC** | A permission policy decides each `litellm.*` permission per role. Team management can be turned on. |
 
-## Regenerating the diagram
+## Updating the diagram
 
-`architecture.html` was generated from the
-[architecture-diagram skill](https://github.com/konraddzbik/architecture-diagram-skill)
-template. To change it, edit the `.node` blocks and the `flows` object in the
-HTML directly, keeping this file in sync.
+Edit the `.node` blocks and the `flows` object in `architecture.html`
+directly, keep this page in sync, and refresh `images/architecture.png` with a
+screenshot of the updated diagram (flow 1, step 6).
