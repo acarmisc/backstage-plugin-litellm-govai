@@ -193,6 +193,9 @@ export async function createKeyForUser(
     // max_budget from input can be null (unlimited) or a number
     upstreamRequest.max_budget = input.max_budget ?? undefined;
   }
+  if (input.budget_duration !== undefined) {
+    upstreamRequest.budget_duration = input.budget_duration;
+  }
   if (input.tpm_limit !== undefined) {
     upstreamRequest.tpm_limit = input.tpm_limit;
   }

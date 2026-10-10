@@ -1,5 +1,10 @@
 import { Request, Response, NextFunction } from 'express';
-import { toLiteLLMUserId, resolveUserId, getOrProvisionUser } from '../../provisioning';
+import {
+  toLiteLLMUserId,
+  resolveUserId,
+  getOrProvisionUser,
+  effectiveUserId,
+} from '../../provisioning';
 import { UserInfo } from '../../types';
 import type { RouterContext } from '../context';
 
@@ -29,6 +34,7 @@ export function createRequireUser(ctx: RouterContext) {
 /**
  * Helper to fetch and provision a user from res.locals (populated by requireUser middleware).
  * Returns the user info or throws ProvisioningError (which the caller must handle and respond to).
+ * Updates `res.locals.userId` to the resolved LiteLLM user id.
  *
  * This deduplicates the repeated pattern:
  *   const userInfo = await getProvisionedUser(...);
@@ -41,7 +47,7 @@ export async function getProvisionedUser(
   const tokenEntityRef = res.locals.tokenEntityRef as string;
   const userId = res.locals.userId as string;
 
-  return getOrProvisionUser(
+  const userInfo = await getOrProvisionUser(
     ctx.client,
     tokenEntityRef,
     userId,
@@ -52,4 +58,7 @@ export async function getProvisionedUser(
     ctx.auth,
     ctx.logger,
   );
+  // The LiteLLM user may have been found by email under a different id.
+  res.locals.userId = effectiveUserId(userId);
+  return userInfo;
 }

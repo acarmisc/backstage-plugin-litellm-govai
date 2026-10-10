@@ -239,6 +239,32 @@ export class LiteLLMClient {
     }
   }
 
+  /**
+   * Lists every key bound to a team (any owner), following `/key/list`
+   * pagination. Stops after 50 pages of 100 keys.
+   */
+  async listTeamKeys(teamId: string): Promise<VirtualKey[]> {
+    const keys: VirtualKey[] = [];
+    for (let page = 1; page <= 50; page++) {
+      const params = new URLSearchParams({
+        team_id: teamId,
+        return_full_object: 'true',
+        page: String(page),
+        size: '100',
+      });
+      const response = await this.request<{
+        keys?: (LiteLLMUserKey | string)[];
+        total_pages?: number;
+      }>(`/key/list?${params.toString()}`);
+      const rawKeys = (response.keys ?? []).filter(
+        (k): k is LiteLLMUserKey => typeof k === 'object' && k !== null,
+      );
+      keys.push(...rawKeys.map(this.toVirtualKey));
+      if (rawKeys.length === 0 || page >= (response.total_pages ?? 1)) break;
+    }
+    return keys;
+  }
+
   private toVirtualKey(k: LiteLLMUserKey): VirtualKey {
     return {
       key: k.key_name ?? k.token,

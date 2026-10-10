@@ -308,7 +308,85 @@ export class ProvisioningError extends Error {
 }
 
 /**
- * Ensures the LiteLLM user exists, returning its UserInfo.
+ * Computed user id → id of an existing LiteLLM user adopted by email. Saves
+ * the catalog and `/user/list` round-trips on later requests; an entry is
+ * dropped when the adopted user disappears.
+ */
+const adoptedUserIds = new Map<string, string>();
+
+/**
+ * The LiteLLM user id to act on for a computed id: the id of the user adopted
+ * by email for it, if any, else the computed id itself. Accurate once
+ * getOrProvisionUser or findLiteLLMUser has run for that id.
+ */
+export function effectiveUserId(userId: string): string {
+  return adoptedUserIds.get(userId) ?? userId;
+}
+
+/**
+ * Looks the user up by the computed id, or by an id previously adopted for it.
+ */
+async function getUserByIdOrAdopted(
+  client: LiteLLMClient,
+  userId: string,
+): Promise<UserInfo | null> {
+  const adopted = adoptedUserIds.get(userId);
+  if (adopted) {
+    const info = await client.getUserInfo(adopted);
+    if (info) return info;
+    adoptedUserIds.delete(userId);
+  }
+  return client.getUserInfo(userId);
+}
+
+/**
+ * Finds an existing LiteLLM user with the given email and remembers it for
+ * the computed id. Users created outside Backstage (or before
+ * `userIdDomain` was set) often have the email as their id; LiteLLM then
+ * refuses a second user with the same email, so the record must be adopted
+ * rather than created. `getUserByEmail` only returns exact email matches.
+ */
+async function adoptUserByEmail(
+  client: LiteLLMClient,
+  userId: string,
+  email: string | undefined,
+  logger: LoggerService,
+): Promise<UserInfo | null> {
+  if (!email) return null;
+  const byEmail = await client.getUserByEmail(email);
+  if (!byEmail?.user_id) return null;
+  if (byEmail.user_id !== userId) {
+    logger.info(
+      `Found existing LiteLLM user ${byEmail.user_id} by email ${email}, reusing for ${userId}`,
+    );
+    adoptedUserIds.set(userId, byEmail.user_id);
+  }
+  return byEmail;
+}
+
+/**
+ * Finds the LiteLLM user for a Backstage identity without creating it: by
+ * the computed id first, then by the catalog email (see adoptUserByEmail).
+ * Returns null when neither matches.
+ */
+export async function findLiteLLMUser(
+  client: LiteLLMClient,
+  tokenEntityRef: string | undefined,
+  userId: string,
+  catalogClient: CatalogClient,
+  auth: AuthService,
+  logger: LoggerService,
+): Promise<UserInfo | null> {
+  const existing = await getUserByIdOrAdopted(client, userId);
+  if (existing) return existing;
+  if (!tokenEntityRef) return null;
+  const profile = await resolveUserProfile(tokenEntityRef, catalogClient, auth, logger);
+  return adoptUserByEmail(client, userId, profile.email, logger);
+}
+
+/**
+ * Ensures the LiteLLM user exists, returning its UserInfo. The user may have
+ * been found by email under a different id: see effectiveUserId.
  * When the user is missing and provisioning is enabled, attempts to create it.
  * When provisioning is disabled, throws a ProvisioningError with a clear message.
  */
@@ -331,23 +409,15 @@ export async function getOrProvisionUser(
     );
   }
 
-  const existing = await client.getUserInfo(userId);
+  const existing = await getUserByIdOrAdopted(client, userId);
   if (existing) {
     return existing;
   }
 
-  if (!provisioningEnabled) {
-    throw new ProvisioningError(
-      'User not found in LiteLLM',
-      'Enable litellm.provisioning.enabled in app-config.yaml or create the user manually',
-      false,
-    );
-  }
-
   // Single-flight: if another request for the same userId is already
-  // provisioning, await its result instead of starting a new /user/new.
-  // This collapses the /keys + /teams + /usage page-load thundering
-  // herd into a single LiteLLM round-trip.
+  // resolving or provisioning, await its result instead of starting a new
+  // lookup and /user/new. This collapses the /keys + /teams + /usage
+  // page-load thundering herd into a single LiteLLM round-trip.
   const pending = provisioningInFlight.get(userId);
   if (pending) {
     logger.info(
@@ -357,13 +427,30 @@ export async function getOrProvisionUser(
   }
 
   const provisionPromise = (async () => {
-    const catalogRef = tokenEntityRef ?? userId;
-    const [matchedRole, profile] = await Promise.all([
-      resolveUserRole(catalogRef, roleConfigs, catalogClient, auth, logger),
-      tokenEntityRef
-        ? resolveUserProfile(tokenEntityRef, catalogClient, auth, logger)
-        : Promise.resolve<BackstageUserProfile>({}),
-    ]);
+    const profile = tokenEntityRef
+      ? await resolveUserProfile(tokenEntityRef, catalogClient, auth, logger)
+      : {};
+
+    const byEmail = await adoptUserByEmail(client, userId, profile.email, logger);
+    if (byEmail) {
+      return byEmail;
+    }
+
+    if (!provisioningEnabled) {
+      throw new ProvisioningError(
+        'User not found in LiteLLM',
+        'Enable litellm.provisioning.enabled in app-config.yaml or create the user manually',
+        false,
+      );
+    }
+
+    const matchedRole = await resolveUserRole(
+      tokenEntityRef ?? userId,
+      roleConfigs,
+      catalogClient,
+      auth,
+      logger,
+    );
     const effectiveDefaults = matchedRole
       ? applyRoleOverrides(provisioningDefaults, matchedRole)
       : provisioningDefaults;
@@ -393,7 +480,8 @@ export async function getOrProvisionUser(
       // The single-flight cache should prevent the parallel-409 race,
       // but keep the recovery path: if /user/new still 409s (e.g.
       // multi-replica deploys where the lock is per-process), treat
-      // it as "user exists" and re-fetch.
+      // it as "user exists" and re-fetch, by id and then by email
+      // (LiteLLM also refuses a second user with the same email).
       if (
         (err instanceof LiteLLMUpstreamError && err.status === 409) ||
         (err instanceof Error && /already exists/i.test(err.message ?? ''))
@@ -401,7 +489,9 @@ export async function getOrProvisionUser(
         logger.info(
           `LiteLLM user ${userId} already exists during provisioning — re-fetching`,
         );
-        const refetched = await client.getUserInfo(userId);
+        const refetched =
+          (await client.getUserInfo(userId)) ??
+          (await adoptUserByEmail(client, userId, profile.email, logger));
         if (refetched) {
           return refetched;
         }

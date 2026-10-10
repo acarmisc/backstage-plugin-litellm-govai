@@ -3,6 +3,7 @@ import {
   VirtualKey,
   ModelInfo,
   UsageMetrics,
+  TeamMemberUsage,
   UsageDailyModelPoint,
   UsageModelBreakdown,
   UsageKeyBreakdown,
@@ -329,6 +330,36 @@ export class MockLiteLlmApi implements LiteLlmApiInterface {
   async getTeamUsage(teamId: string, startDate: string, endDate: string): Promise<UsageMetrics> {
     return usageMetrics(daysBetween(startDate, endDate), teamId === 'platform-eng' ? 4.5 : 2.6);
   }
+  async getTeamMemberUsage(teamId: string, startDate: string, endDate: string): Promise<TeamMemberUsage> {
+    const team = teams.find(t => t.team_id === teamId);
+    const total = (await this.getTeamUsage(teamId, startDate, endDate)).total_spend;
+    const roster = team?.members_with_roles ?? [];
+    // Uneven, deterministic shares: the first member spends most.
+    const weights = roster.map((_, i) => (roster.length - i) ** 2);
+    const weightSum = weights.reduce((a, b) => a + b, 0) || 1;
+    const members = roster.map((m, i) => {
+      const spend = (total * weights[i]) / weightSum;
+      const requests = Math.round(spend * 40);
+      const failed = Math.round(requests * 0.02);
+      return {
+        user_id: m.user_id,
+        user_email: m.user_email,
+        display_name: m.user_id.split('@')[0].split('.').map(s => s[0].toUpperCase() + s.slice(1)).join(' '),
+        role: m.role,
+        spend,
+        spend_share_pct: (weights[i] / weightSum) * 100,
+        prompt_tokens: Math.round(spend * 52000),
+        completion_tokens: Math.round(spend * 13000),
+        total_tokens: Math.round(spend * 65000),
+        api_requests: requests,
+        successful_requests: requests - failed,
+        failed_requests: failed,
+        success_rate: requests > 0 ? ((requests - failed) / requests) * 100 : null,
+        key_count: Math.max(0, 3 - i),
+      };
+    });
+    return { team_id: teamId, total_spend: total, members };
+  }
   async getAuditLogs(params: AuditLogsParams): Promise<PaginatedAuditLogs> {
     const rows = params.table_name
       ? auditLogs.filter(a => a.table_name === params.table_name)
@@ -349,6 +380,7 @@ export class MockLiteLlmApi implements LiteLlmApiInterface {
         readOnly: false,
         memberManagerRoles: ['admin'],
       },
+      teamUsage: { memberBreakdown: true },
     };
   }
   async createTeam(request: CreateTeamRequest): Promise<CreateTeamResponse> {

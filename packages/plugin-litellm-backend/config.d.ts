@@ -172,6 +172,16 @@ export interface Config {
       allowedDurations?: string[];
 
       /**
+       * Allowed `budget_duration` values for new keys (how often a key's
+       * spend resets, e.g. "30d" or "1mo"). Requests with a value not in this
+       * list are rejected with a 400 error. An empty array allows any value
+       * matching /^\d+(s|m|h|d|mo)$/. Omitting the field keeps today's
+       * behaviour: the key's budget never resets.
+       * @default ["1d", "7d", "30d", "1mo"]
+       */
+      allowedBudgetDurations?: string[];
+
+      /**
        * When true, key owners can reset their key's spend counter via the
        * "Reset Spend" button in the frontend, subject to the
        * litellm.key.resetSpend permission. When false (the default), reset
@@ -395,6 +405,37 @@ export interface Config {
        * @default false
        */
       hideTeamBudgetForManagers?: boolean;
+    };
+
+    /**
+     * Team usage views beyond the team totals shown to every member.
+     */
+    teamUsage?: {
+      /**
+       * Per-member usage breakdown (GET /teams/:teamId/usage/members and the
+       * "Usage by member" table on the Teams tab). Per-person spend is
+       * sensitive, so the breakdown is off by default and, when on, only
+       * reaches:
+       *   - managers of the team (members of its metadata.owning_group, with
+       *     team management enabled);
+       *   - members of the team holding one of `viewerRoles` in it;
+       *   - members of the team granted `litellm.team.usage.read` (only
+       *     consulted when permission.enabled is true).
+       */
+      memberBreakdown?: {
+        /**
+         * When false, the route returns 404 and the UI hides the table.
+         * @default false
+         */
+        enabled?: boolean;
+
+        /**
+         * LiteLLM team roles (e.g. ["admin"]) whose holders may view their
+         * own team's breakdown.
+         * @default []
+         */
+        viewerRoles?: string[];
+      };
     };
 
     bridge?: {

@@ -61,6 +61,16 @@ export const litellmTeamDeletePermission = createPermission({
   attributes: { action: 'delete' },
 });
 
+/**
+ * Read the per-member usage breakdown of a team the caller belongs to.
+ * Only consulted when `litellm.teamUsage.memberBreakdown.enabled` is true and
+ * the permission framework is enabled.
+ */
+export const litellmTeamUsageReadPermission = createPermission({
+  name: 'litellm.team.usage.read',
+  attributes: { action: 'read' },
+});
+
 export const litellmPermissions = [
   litellmKeyCreatePermission,
   litellmKeyRevokePermission,
@@ -74,4 +84,5 @@ export const litellmPermissions = [
   litellmTeamKnowledgebaseManagePermission,
   litellmTeamMcpManagePermission,
   litellmTeamDeletePermission,
+  litellmTeamUsageReadPermission,
 ];

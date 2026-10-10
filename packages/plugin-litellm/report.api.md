@@ -35,6 +35,8 @@ import { ReactNode } from 'react';
 import { RouteRef } from '@backstage/frontend-plugin-api';
 import { TeamInfo } from '@acarmisc/backstage-plugin-litellm-common';
 import { TeamMember } from '@acarmisc/backstage-plugin-litellm-common';
+import { TeamMemberUsage } from '@acarmisc/backstage-plugin-litellm-common';
+import { TeamMemberUsageRow } from '@acarmisc/backstage-plugin-litellm-common';
 import { TeamObjectPermission } from '@acarmisc/backstage-plugin-litellm-common';
 import { UpdateKeyRequest } from '@acarmisc/backstage-plugin-litellm-common';
 import { UsageDailyModelPoint } from '@acarmisc/backstage-plugin-litellm-common';
@@ -182,6 +184,8 @@ export class LiteLlmApi implements LiteLlmApiInterface {
     // (undocumented)
     getMcpServers(): Promise<McpServerInfo[]>;
     // (undocumented)
+    getTeamMemberUsage(teamId: string, startDate: string, endDate: string): Promise<TeamMemberUsage>;
+    // (undocumented)
     getTeams(): Promise<TeamInfo[]>;
     // (undocumented)
     getTeamUsage(teamId: string, startDate: string, endDate: string): Promise<UsageMetrics>;
@@ -245,6 +249,7 @@ export interface LiteLlmApiInterface {
     getManagedTeams(): Promise<TeamInfo[]>;
     // (undocumented)
     getMcpServers(): Promise<McpServerInfo[]>;
+    getTeamMemberUsage(teamId: string, startDate: string, endDate: string): Promise<TeamMemberUsage>;
     // (undocumented)
     getTeams(): Promise<TeamInfo[]>;
     // (undocumented)
@@ -354,6 +359,9 @@ export interface LiteLlmConfig {
         readOnly?: boolean;
         memberManagerRoles?: string[];
     };
+    teamUsage?: {
+        memberBreakdown?: boolean;
+    };
 }
 
 // @public (undocumented)
@@ -458,6 +466,10 @@ export { PaginatedAuditLogs }
 export { TeamInfo }
 
 export { TeamMember }
+
+export { TeamMemberUsage }
+
+export { TeamMemberUsageRow }
 
 export { TeamObjectPermission }
 

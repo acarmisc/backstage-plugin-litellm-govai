@@ -37,6 +37,8 @@ import { RootConfigService } from '@backstage/backend-plugin-api';
 import { Router } from 'express';
 import { TeamInfo } from '@acarmisc/backstage-plugin-litellm-common';
 import { TeamMember } from '@acarmisc/backstage-plugin-litellm-common';
+import { TeamMemberUsage } from '@acarmisc/backstage-plugin-litellm-common';
+import { TeamMemberUsageRow } from '@acarmisc/backstage-plugin-litellm-common';
 import { TeamObjectPermission } from '@acarmisc/backstage-plugin-litellm-common';
 import { UpdateKeyRequest } from '@acarmisc/backstage-plugin-litellm-common';
 import { UsageDailyModelPoint } from '@acarmisc/backstage-plugin-litellm-common';
@@ -266,6 +268,7 @@ export class LiteLLMClient {
         url?: string;
     }>>;
     listModels(): Promise<ModelInfo[]>;
+    listTeamKeys(teamId: string): Promise<VirtualKey[]>;
     listTeams(): Promise<TeamInfo[]>;
     listVectorStores(): Promise<Array<{
         id: string;
@@ -508,6 +511,10 @@ export interface TeamBudgetVisibility {
 export { TeamInfo }
 
 export { TeamMember }
+
+export { TeamMemberUsage }
+
+export { TeamMemberUsageRow }
 
 export { TeamObjectPermission }
 

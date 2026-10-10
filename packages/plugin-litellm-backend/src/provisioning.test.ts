@@ -7,6 +7,7 @@ import {
   readProvisioningDefaults,
   ProvisioningError,
   getOrProvisionUser,
+  effectiveUserId,
 } from './provisioning';
 
 // ---------------------------------------------------------------------------
@@ -27,11 +28,13 @@ function mockConfig(values: Record<string, any> = {}): any {
 function mockClient(
   overrides: Partial<{
     getUserInfo: (userId?: string) => Promise<any>;
+    getUserByEmail: (email: string) => Promise<any>;
     createUser: (payload: any) => Promise<any>;
   }>,
 ): any {
   return {
     getUserInfo: overrides.getUserInfo ?? (() => Promise.resolve(null)),
+    getUserByEmail: overrides.getUserByEmail ?? (() => Promise.resolve(null)),
     createUser: overrides.createUser ?? (() => Promise.resolve({})),
   };
 }
@@ -339,6 +342,113 @@ describe('getOrProvisionUser', () => {
 
     assert.deepStrictEqual(result, { user_id: 'eve', spend: 0 });
     assert.strictEqual(creationPayload.max_budget, 999);   // role override applied
+  });
+
+  describe('existing user with the same email but another id', () => {
+    const entity = (email: string) => ({ spec: { profile: { email } } });
+    const emailUser = (id: string) => ({ user_id: id, user_email: id, teams: ['t1'] });
+
+    test('adopts it instead of calling /user/new', async () => {
+      const looked: string[] = [];
+      let created = false;
+      const client = mockClient({
+        getUserInfo: async (id?: string) => (id === 'nb1@acme.it' ? emailUser(id) : null),
+        getUserByEmail: async (email: string) => {
+          looked.push(email);
+          return emailUser(email);
+        },
+        createUser: async () => {
+          created = true;
+          return {};
+        },
+      });
+      const run = () =>
+        getOrProvisionUser(
+          client, 'user:default/nb1', 'nb1', true, defaults, [],
+          mockCatalogClient(entity('nb1@acme.it')), mockAuth(), silentLogger(),
+        );
+
+      const result = await run();
+      assert.strictEqual(result.user_id, 'nb1@acme.it');
+      assert.strictEqual(created, false);
+      assert.strictEqual(effectiveUserId('nb1'), 'nb1@acme.it');
+
+      // Later requests go straight to the adopted id.
+      const again = await run();
+      assert.strictEqual(again.user_id, 'nb1@acme.it');
+      assert.deepStrictEqual(looked, ['nb1@acme.it']);
+    });
+
+    test('adopts it even when provisioning is disabled', async () => {
+      const client = mockClient({
+        getUserByEmail: async (email: string) => emailUser(email),
+      });
+      const result = await getOrProvisionUser(
+        client, 'user:default/nb2', 'nb2', false, defaults, [],
+        mockCatalogClient(entity('nb2@acme.it')), mockAuth(), silentLogger(),
+      );
+      assert.strictEqual(result.user_id, 'nb2@acme.it');
+      assert.strictEqual(effectiveUserId('nb2'), 'nb2@acme.it');
+    });
+
+    test('recovers from "User with email … already exists" on /user/new', async () => {
+      let emailLookups = 0;
+      const client = mockClient({
+        getUserInfo: async () => null,
+        // Not found before creating (e.g. created by another replica in between).
+        getUserByEmail: async (email: string) => (++emailLookups === 1 ? null : emailUser(email)),
+        createUser: async () => {
+          throw new Error(`LiteLLM 400: {'error': 'User with email nb3@acme.it already exists'}`);
+        },
+      });
+      const result = await getOrProvisionUser(
+        client, 'user:default/nb3', 'nb3', true, defaults, [],
+        mockCatalogClient(entity('nb3@acme.it')), mockAuth(), silentLogger(),
+      );
+      assert.strictEqual(result.user_id, 'nb3@acme.it');
+      assert.strictEqual(emailLookups, 2);
+    });
+
+    test('drops the adoption when the adopted user disappears', async () => {
+      let adoptedExists = true;
+      let derivedLookups = 0;
+      const client = mockClient({
+        getUserInfo: async (id?: string) => {
+          if (id === 'nb4@acme.it') return adoptedExists ? emailUser(id) : null;
+          // The derived id is missing at first, then exists (e.g. recreated by an admin).
+          derivedLookups += 1;
+          return derivedLookups === 1 ? null : { user_id: 'nb4', teams: [] };
+        },
+        getUserByEmail: async (email: string) => (adoptedExists ? emailUser(email) : null),
+      });
+      const run = () =>
+        getOrProvisionUser(
+          client, 'user:default/nb4', 'nb4', false, defaults, [],
+          mockCatalogClient(entity('nb4@acme.it')), mockAuth(), silentLogger(),
+        );
+      assert.strictEqual((await run()).user_id, 'nb4@acme.it');
+      adoptedExists = false;
+      assert.strictEqual((await run()).user_id, 'nb4');
+      assert.strictEqual(effectiveUserId('nb4'), 'nb4');
+    });
+
+    test('no catalog email means no lookup by email', async () => {
+      let looked = false;
+      const client = mockClient({
+        getUserByEmail: async () => {
+          looked = true;
+          return null;
+        },
+      });
+      await assert.rejects(
+        getOrProvisionUser(
+          client, 'user:default/nb5', 'nb5', false, defaults, [],
+          mockCatalogClient(null), mockAuth(), silentLogger(),
+        ),
+        ProvisioningError,
+      );
+      assert.strictEqual(looked, false);
+    });
   });
 
   test('does not provision when no userId is resolved', async () => {

@@ -13,6 +13,7 @@ import { TeamAdminConfig } from '../teamAdmin';
 import type { KeyValidationConfig } from '@acarmisc/backstage-plugin-litellm-common';
 import { TeamBudgetVisibility } from '../teamBudgetVisibility';
 import { OpencodeConfig } from '../opencode';
+import { MemberBreakdownConfig } from '../teamMemberUsage';
 
 /**
  * Shared runtime context for all route handlers. Holds config-derived
@@ -44,8 +45,15 @@ export interface RouterContext {
   teamAdminCfg: TeamAdminConfig;
   teamBudgetVisibility: TeamBudgetVisibility;
   opencodeCfg: OpencodeConfig;
+  memberBreakdownCfg: MemberBreakdownConfig;
 
   // Helper functions
+  /**
+   * LiteLLM user id of a Backstage user: the computed id, or the id of an
+   * existing LiteLLM user with the same catalog email.
+   */
+  resolveMemberUserId(userEntityRef: string): Promise<string>;
+
   authorizeKeyAction(
     req: Request,
     keyId: string,

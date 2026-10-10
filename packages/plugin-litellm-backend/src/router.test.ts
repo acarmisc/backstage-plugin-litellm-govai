@@ -4958,6 +4958,58 @@ describe('bridge routes: identity matches the UI', () => {
     }
   });
 
+  test('POST /bridge/keys passes budget_duration upstream and rejects a malformed one', async () => {
+    const h = await startHarness({
+      config: bridgeConfig({ 'litellm.bridge.allowedEmailDomains': ['abstract.it'] }),
+      tokenVerifier: verifier,
+      client: mockClient({ userInfo: { user_id: 'degiorgis', teams: [] } }),
+    });
+    try {
+      const ok = await req(h.baseUrl, 'POST', '/bridge/keys', {
+        ...bearer, body: { alias: 'cli', max_budget: 100, budget_duration: '1mo' },
+      });
+      assert.strictEqual(ok.status, 200);
+      const sent = h.client.calls.generateKey[h.client.calls.generateKey.length - 1];
+      assert.strictEqual(sent.budget_duration, '1mo');
+      assert.strictEqual(sent.max_budget, 100);
+
+      const plain = await req(h.baseUrl, 'POST', '/bridge/keys', { ...bearer, body: { alias: 'cli2', max_budget: 5 } });
+      assert.strictEqual(plain.status, 200);
+      const sentPlain = h.client.calls.generateKey[h.client.calls.generateKey.length - 1];
+      assert.ok(!('budget_duration' in sentPlain));
+
+      const bad = await req(h.baseUrl, 'POST', '/bridge/keys', {
+        ...bearer, body: { alias: 'cli3', max_budget: 5, budget_duration: 'banana' },
+      });
+      assert.strictEqual(bad.status, 400);
+    } finally {
+      h.server.close();
+    }
+  });
+
+  test('POST /bridge/keys enforces litellm.keys.allowedBudgetDurations', async () => {
+    const h = await startHarness({
+      config: bridgeConfig({
+        'litellm.bridge.allowedEmailDomains': ['abstract.it'],
+        'litellm.keys.allowedBudgetDurations': ['7d'],
+      }),
+      tokenVerifier: verifier,
+      client: mockClient({ userInfo: { user_id: 'degiorgis', teams: [] } }),
+    });
+    try {
+      const rejected = await req(h.baseUrl, 'POST', '/bridge/keys', {
+        ...bearer, body: { alias: 'cli', max_budget: 5, budget_duration: '1mo' },
+      });
+      assert.strictEqual(rejected.status, 400);
+      const ok = await req(h.baseUrl, 'POST', '/bridge/keys', {
+        ...bearer, body: { alias: 'cli', max_budget: 5, budget_duration: '7d' },
+      });
+      assert.strictEqual(ok.status, 200);
+    } finally {
+      h.server.close();
+    }
+  });
+
   test('GET /bridge/user/info returns the caller id and teams', async () => {
     const h = await startHarness({
       config: bridgeConfig({ 'litellm.bridge.allowedEmailDomains': ['abstract.it'] }),
@@ -5042,6 +5094,189 @@ describe('bridge routes: identity matches the UI', () => {
       assert.strictEqual(mint.status, 403);
       assert.strictEqual(h.client.calls.generateKey.length, 0);
       assert.strictEqual(h.client.calls.createUser?.length ?? 0, 0);
+    } finally {
+      h.server.close();
+    }
+  });
+});
+
+describe('users found by email under another id', () => {
+  // The LiteLLM user predates Backstage and has the email as its id.
+  const startWithEmailUser = async (userId: string, email: string) => {
+    const client = mockClient({
+      listKeys: async (uid?: string) =>
+        uid === email ? [{ token: 'k-email', key_alias: 'old', user_id: email } as any] : [],
+    });
+    client.getUserInfo = async (uid?: string) =>
+      uid === email ? { user_id: email, user_email: email, teams: [] } : null;
+    client.getUserByEmail = async (e: string) =>
+      e === email ? { user_id: email, user_email: email, teams: [] } : null;
+    const h = await startHarness({
+      config: { 'litellm.provisioning.enabled': true },
+      client,
+      catalogClient: {
+        getEntityByRef: async () => ({ kind: 'User', spec: { profile: { email } }, relations: [] }),
+      },
+    });
+    return { h, client, authRef: `user:default/${userId}` };
+  };
+
+  test('GET /keys lists the keys of the existing user', async () => {
+    const { h, client, authRef } = await startWithEmailUser('zed', 'zed@corp.it');
+    try {
+      const { status, body } = await req(h.baseUrl, 'GET', '/keys', { authRef });
+      assert.strictEqual(status, 200);
+      assert.deepStrictEqual(body.map((k: any) => k.token), ['k-email']);
+      assert.deepStrictEqual(client.calls.listKeys, ['zed@corp.it']);
+    } finally {
+      h.server.close();
+    }
+  });
+
+  test('key actions authorize against the existing user', async () => {
+    const { h, authRef } = await startWithEmailUser('yan', 'yan@corp.it');
+    try {
+      const { status } = await req(h.baseUrl, 'DELETE', '/keys/k-email', { authRef });
+      assert.strictEqual(status, 200);
+    } finally {
+      h.server.close();
+    }
+  });
+});
+
+describe('GET /teams/:teamId/usage/members', () => {
+  const path = '/teams/t1/usage/members?start_date=2026-01-01&end_date=2026-01-31';
+  const team = {
+    team_id: 't1',
+    spend: 3,
+    members_with_roles: [
+      { user_id: 'alice', role: 'admin' },
+      { user_id: 'bob', role: 'user' },
+    ],
+  };
+  const usage: any = {
+    total_spend: 3, total_tokens: 0, prompt_tokens: 0, completion_tokens: 0,
+    api_requests: 0, successful_requests: 0, failed_requests: 0,
+    usage_by_model: {}, daily_usage: [], daily_by_model: [],
+    usage_by_key: {
+      ha: { total_spend: 2, total_tokens: 20, prompt_tokens: 10, completion_tokens: 10, api_requests: 2, successful_requests: 2, failed_requests: 0, models: [], team_id: 't1' },
+      hb: { total_spend: 1, total_tokens: 10, prompt_tokens: 5, completion_tokens: 5, api_requests: 1, successful_requests: 1, failed_requests: 0, models: [], team_id: 't1' },
+    },
+  };
+  const deny = mockPermissions({
+    authorize: async (qs: any[]) => qs.map(() => ({ result: AuthorizeResult.DENY })),
+  });
+
+  const start = async (opts: {
+    config?: Record<string, any>;
+    caller?: string;
+    teams?: string[];
+    permissions?: any;
+    team?: any;
+    catalog?: any;
+  } = {}) => {
+    const caller = opts.caller ?? 'bob';
+    const client = mockClient({
+      userInfo: { user_id: caller, teams: opts.teams ?? ['t1'] },
+      getTeamInfo: async () => opts.team ?? team,
+      getTeamUsage: async () => usage,
+    });
+    client.listTeamKeys = async () => [
+      { token: 'ha', user_id: 'alice' },
+      { token: 'hb', user_id: 'bob' },
+    ];
+    const h = await startHarness({
+      config: {
+        'litellm.teamUsage.memberBreakdown.enabled': true,
+        'litellm.teamUsage.memberBreakdown.viewerRoles': ['admin'],
+        'permission.enabled': true,
+        ...opts.config,
+      },
+      client,
+      permissions: opts.permissions ?? deny,
+      catalogClient: opts.catalog ?? mockCatalog([]),
+    });
+    return { h, get: () => req(h.baseUrl, 'GET', path, { authRef: `user:default/${caller}` }) };
+  };
+  const run = async (opts: Parameters<typeof start>[0]) => {
+    const { h, get } = await start(opts);
+    try {
+      return await get();
+    } finally {
+      h.server.close();
+    }
+  };
+
+  test('404 when the feature is disabled', async () => {
+    const r = await run({ caller: 'alice', config: { 'litellm.teamUsage.memberBreakdown.enabled': false } });
+    assert.strictEqual(r.status, 404);
+  });
+
+  test('a member holding a viewer role gets the breakdown', async () => {
+    const r = await run({ caller: 'alice' });
+    assert.strictEqual(r.status, 200);
+    assert.strictEqual(r.body.team_id, 't1');
+    assert.deepStrictEqual(
+      r.body.members.map((m: any) => [m.user_id, m.spend, m.key_count]),
+      [['alice', 2, 1], ['bob', 1, 1]],
+    );
+  });
+
+  test('a plain member is refused (403)', async () => {
+    const r = await run({ caller: 'bob' });
+    assert.strictEqual(r.status, 403);
+  });
+
+  test('a plain member granted litellm.team.usage.read gets it', async () => {
+    const seen: string[] = [];
+    const r = await run({
+      caller: 'bob',
+      permissions: mockPermissions({
+        authorize: async (qs: any[]) => {
+          seen.push(...qs.map(q => q.permission.name));
+          return qs.map(() => ({ result: AuthorizeResult.ALLOW }));
+        },
+      }),
+    });
+    assert.strictEqual(r.status, 200);
+    assert.ok(seen.includes('litellm.team.usage.read'));
+  });
+
+  test('the permission alone does not open a team the caller is not in', async () => {
+    const r = await run({ caller: 'bob', teams: [], permissions: mockPermissions() });
+    assert.strictEqual(r.status, 404);
+  });
+
+  test('the permission is ignored when the permission framework is disabled', async () => {
+    const r = await run({ caller: 'bob', permissions: mockPermissions(), config: { 'permission.enabled': false } });
+    assert.strictEqual(r.status, 403);
+  });
+
+  test('a manager of the owning group gets it without being a member', async () => {
+    const r = await run({
+      caller: 'carol',
+      teams: [],
+      team: { ...team, metadata: { owning_group: 'group:default/ai' } },
+      catalog: mockCatalog(['group:default/ai']),
+      config: { 'litellm.teamAdmin.group': 'group:default/admins' },
+    });
+    assert.strictEqual(r.status, 200);
+  });
+
+  test('hides dollars when the caller is under budget hiding', async () => {
+    const r = await run({ caller: 'alice', config: { 'litellm.display.hideTeamBudgetForMembers': true } });
+    assert.strictEqual(r.status, 200);
+    assert.strictEqual(r.body.budget_hidden, true);
+    assert.strictEqual(r.body.total_spend, 0);
+    assert.ok(r.body.members.every((m: any) => m.spend === 0));
+    assert.ok(Math.abs(r.body.members[0].spend_share_pct - 66.67) < 0.01);
+  });
+
+  test('GET /config reports whether the breakdown is enabled', async () => {
+    const { h } = await start();
+    try {
+      const { body } = await req(h.baseUrl, 'GET', '/config', {});
+      assert.deepStrictEqual(body.teamUsage, { memberBreakdown: true });
     } finally {
       h.server.close();
     }

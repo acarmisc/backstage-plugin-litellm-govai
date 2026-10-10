@@ -73,9 +73,8 @@ export function registerKeysRoutes(router: Router, ctx: RouterContext): void {
 
   router.get('/keys', async (_req: Request, res: Response) => {
     try {
-      const userId = res.locals.userId as string;
-
       await getProvisionedUser(ctx, res);
+      const userId = res.locals.userId as string;
 
       const keys: VirtualKey[] = await client.listKeys(userId);
       res.json(keys);
@@ -96,10 +95,9 @@ export function registerKeysRoutes(router: Router, ctx: RouterContext): void {
         return;
       }
 
-      const userId = res.locals.userId as string;
-
       // Ensure the user is provisioned
       await getProvisionedUser(ctx, res);
+      const userId = res.locals.userId as string;
 
       // Load the caller's keys
       const keys: VirtualKey[] = await client.listKeys(userId);

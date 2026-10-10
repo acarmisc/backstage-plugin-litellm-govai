@@ -24,6 +24,12 @@ export interface KeyValidationConfig {
   maxTpm: number;
   maxRpm: number;
   allowedDurations: string[];
+  /**
+   * Allowed `budget_duration` values (how often a key's spend resets). An
+   * empty list allows any value matching `<n><s|m|h|d|mo>`. Omitted means
+   * {@link DEFAULT_KEY_BUDGET_DURATIONS}.
+   */
+  allowedBudgetDurations?: string[];
 }
 
 /**
@@ -47,6 +53,18 @@ export function createGenerateKeyInputSchema(config: KeyValidationConfig) {
         message: 'duration must match format <number><unit> (e.g. "30d", "1h")',
       });
 
+  const budgetDurations = config.allowedBudgetDurations ?? DEFAULT_KEY_BUDGET_DURATIONS;
+  const budgetDurationSchema = budgetDurations.length > 0
+    ? z.string().refine(
+        (val) => budgetDurations.includes(val),
+        {
+          message: `budget_duration must be one of: ${budgetDurations.join(', ')}`,
+        },
+      )
+    : z.string().regex(/^\d+(s|m|h|d|mo)$/, {
+        message: 'budget_duration must match format <number><unit> (e.g. "30d", "1mo")',
+      });
+
   return z
     .object({
       alias: z
@@ -65,6 +83,7 @@ export function createGenerateKeyInputSchema(config: KeyValidationConfig) {
         .max(config.maxBudget, `max_budget must not exceed ${config.maxBudget}`)
         .nullable()
         .optional(),
+      budget_duration: budgetDurationSchema.optional(),
       tpm_limit: z
         .number()
         .int('tpm_limit must be an integer')
@@ -146,3 +165,8 @@ export type UpdateKeyInput = z.infer<
  * Default key duration presets. Used as server-side defaults and UI options.
  */
 export const DEFAULT_KEY_DURATIONS = ['1d', '7d', '30d', '90d'];
+
+/**
+ * Default `budget_duration` values a key may be generated with.
+ */
+export const DEFAULT_KEY_BUDGET_DURATIONS = ['1d', '7d', '30d', '1mo'];

@@ -1,6 +1,12 @@
 import { Router, Request, Response } from 'express';
 import { TeamInfo } from '../types';
-import { toLiteLLMUserId, getOrProvisionUser, ProvisioningError, isUserMemberOfGroup } from '../provisioning';
+import {
+  toLiteLLMUserId,
+  getOrProvisionUser,
+  effectiveUserId,
+  ProvisioningError,
+  isUserMemberOfGroup,
+} from '../provisioning';
 import {
   litellmTeamCreatePermission,
   litellmTeamManagePermission,
@@ -386,12 +392,12 @@ export function registerTeamsRoutes(router: Router, ctx: RouterContext): void {
       }
 
       // (b) the member must exist in LiteLLM — provision on the spot if enabled
-      const litellmUserId = toLiteLLMUserId(userEntityRef, userIdDomain);
+      const computedUserId = toLiteLLMUserId(userEntityRef, userIdDomain);
       try {
         await getOrProvisionUser(
           client,
           userEntityRef,
-          litellmUserId,
+          computedUserId,
           provisioningEnabled,
           provisioningDefaults,
           roleConfigs,
@@ -407,6 +413,8 @@ export function registerTeamsRoutes(router: Router, ctx: RouterContext): void {
         throw err;
       }
 
+      // The member may exist under a different id, found by email.
+      const litellmUserId = effectiveUserId(computedUserId);
       try {
         await client.teamMemberAdd({
           team_id: teamId,
@@ -454,11 +462,11 @@ export function registerTeamsRoutes(router: Router, ctx: RouterContext): void {
         return;
       }
 
-      const litellmUserId = toLiteLLMUserId(userEntityRef, userIdDomain);
+      const litellmUserId = await ctx.resolveMemberUserId(userEntityRef);
       // Team-role managers change membership only: they cannot remove
       // themselves nor a peer holding a manager role.
       if (via === 'teamRole') {
-        if (litellmUserId === toLiteLLMUserId(actor, userIdDomain)) {
+        if (litellmUserId === (await ctx.resolveMemberUserId(actor))) {
           res.status(400).json({ error: 'You cannot remove yourself from the team' });
           return;
         }

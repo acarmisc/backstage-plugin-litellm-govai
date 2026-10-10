@@ -25,7 +25,9 @@ Request flow for `/api/litellm/bridge/*`:
 5. Keys go through **the same checks as the UI**: strict request schema,
    `litellm.keys.*` ceilings, `teamRequired`, team membership and allowed
    models. When unlimited budgets are not allowed and the CLI sends no
-   `max_budget`, `provisioning.defaults.maxBudget` is used. Minted keys carry
+   `max_budget`, `provisioning.defaults.maxBudget` is used. An optional
+   `budget_duration` (e.g. `1mo`) makes the budget reset periodically; it must
+   be one of `litellm.keys.allowedBudgetDurations`. Minted keys carry
    `created_via: abby-cli`, `created_by` and `created_at_iso` metadata.
    Backstage permissions are not evaluated: there is no Backstage credential to
    authorize.

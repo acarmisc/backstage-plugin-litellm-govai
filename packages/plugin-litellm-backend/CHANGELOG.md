@@ -9,6 +9,43 @@ commit/PR that bumps the version in `package.json`. Format follows the
 Earlier history: `git log -- packages/plugin-litellm-backend` or the
 [GitHub tags](https://github.com/acarmisc/backstage-plugin-litellm-govai/tags).
 
+## 0.20.0
+
+Requires `@acarmisc/backstage-plugin-litellm-common` `0.2.0`.
+
+### Minor Changes
+
+- **feat(keys): `budget_duration` on key generation (#88).** `POST
+  /keys/generate` and `POST /bridge/keys` accept an optional
+  `budget_duration` (e.g. `"1mo"`) so a key's `max_budget` resets
+  periodically. Allowed values come from the new
+  `litellm.keys.allowedBudgetDurations` (default `1d`, `7d`, `30d`, `1mo`);
+  anything else is a `400`. Requests without the field behave as before.
+- **feat(teams): per-member usage breakdown (#86).** New
+  `GET /teams/:teamId/usage/members` returns spend, share of team spend,
+  tokens, requests, success rate and key count per member, attributing
+  each key's activity to its owner (`/key/list?team_id=`) so the rows add
+  up to the team total. Off by default
+  (`litellm.teamUsage.memberBreakdown.enabled`, `404` when off) and
+  fail-closed: allowed for team managers (`owning_group`), members holding
+  one of `memberBreakdown.viewerRoles`, and members granted the new
+  `litellm.team.usage.read` permission (only with `permission.enabled`).
+  The `litellm.display` budget-hiding flags apply. Reads are logged as
+  `team.usage.members.read`. `GET /config` reports
+  `teamUsage.memberBreakdown`. New client method
+  `LiteLLMClient.listTeamKeys`.
+
+### Patch Changes
+
+- **fix(provisioning): reuse an existing LiteLLM user found by email
+  (#89).** When no user has the derived id (e.g. `nicola.bruno`) but one
+  exists with the catalog email under another id (e.g.
+  `nicola.bruno@example.com`), the backend now uses that user instead of
+  calling `/user/new`, which LiteLLM rejected with "User with email …
+  already exists" and left the user stuck. The lookup also runs after an
+  "already exists" error, and the adopted id is used for key listing and
+  actions, usage, OpenCode connect and team member add/remove.
+
 ## 0.19.0
 
 ### Minor Changes
