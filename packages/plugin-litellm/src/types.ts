@@ -11,6 +11,8 @@ export {
   type UsageDailyPoint,
   type UsageDailyModelPoint,
   type UsageMetrics,
+  type TeamMemberUsage,
+  type TeamMemberUsageRow,
   type GenerateKeyRequest,
   type UpdateKeyRequest,
   type GenerateKeyResponse,
@@ -62,6 +64,11 @@ export interface LiteLlmConfig {
     readOnly?: boolean;
     /** LiteLLM team roles (e.g. ["admin"]) whose holders may add/remove members of their own team via POST/DELETE /teams/:id/members endpoints. */
     memberManagerRoles?: string[];
+  };
+  /** Team usage views, set via litellm.teamUsage in app-config.yaml. */
+  teamUsage?: {
+    /** Whether the per-member breakdown is enabled (each caller is still authorized server-side). */
+    memberBreakdown?: boolean;
   };
   /** Team-budget hiding switches, set via litellm.display in app-config.yaml. */
   display?: {

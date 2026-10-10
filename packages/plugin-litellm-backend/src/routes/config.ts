@@ -30,6 +30,9 @@ export function registerConfigRoutes(router: Router, ctx: RouterContext): void {
         readOnly: ctx.teamAdminCfg.readOnly,
         memberManagerRoles: ctx.teamAdminCfg.memberManagerRoles,
       },
+      teamUsage: {
+        memberBreakdown: ctx.memberBreakdownCfg.enabled,
+      },
       display: {
         hideTeamBudgetForMembers:
           ctx.teamBudgetVisibility.hideTeamBudgetForMembers,

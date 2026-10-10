@@ -156,6 +156,42 @@ export interface UsageMetrics {
   daily_by_model: UsageDailyModelPoint[];
 }
 
+/** One member's share of a team's usage over a period. */
+export interface TeamMemberUsageRow {
+  /** LiteLLM user id; null groups activity no current key owner accounts for (deleted or ownerless keys). */
+  user_id: string | null;
+  user_email?: string;
+  /** From the Backstage catalog when a User entity has the member's email. */
+  display_name?: string;
+  /** LiteLLM team role, when the user is a team member. */
+  role?: string;
+  /** USD; 0 when `budget_hidden` is set on the response. */
+  spend: number;
+  /** Share of the team's spend in the period, 0–100. */
+  spend_share_pct: number;
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
+  api_requests: number;
+  successful_requests: number;
+  failed_requests: number;
+  /** successful / (successful + failed) as 0–100; null without requests. */
+  success_rate: number | null;
+  /** Team keys the user owns. */
+  key_count: number;
+}
+
+/** Response of `GET /teams/:teamId/usage/members`. */
+export interface TeamMemberUsage {
+  team_id: string;
+  /** USD; 0 when `budget_hidden` is set. */
+  total_spend: number;
+  /** Dollars are hidden for the caller: compare members by `spend_share_pct`. */
+  budget_hidden?: boolean;
+  /** Sorted by spend, highest first. */
+  members: TeamMemberUsageRow[];
+}
+
 export interface GenerateKeyRequest {
   alias?: string;
   models?: string[];

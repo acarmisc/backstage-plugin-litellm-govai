@@ -221,6 +221,28 @@ export const openApiSpec: OpenApiSpec = {
         responses: { '200': { description: 'Team usage' }, '400': { description: 'Missing date range' } },
       },
     },
+    '/teams/{teamId}/usage/members': {
+      get: {
+        tags: ['Teams'],
+        summary: 'Per-member usage breakdown for a team',
+        description:
+          'Needs litellm.teamUsage.memberBreakdown.enabled. Allowed for team ' +
+          'managers, members holding one of memberBreakdown.viewerRoles, and ' +
+          'members granted litellm.team.usage.read. Spend is zeroed (with ' +
+          'budget_hidden: true) under team budget hiding; spend_share_pct remains.',
+        parameters: [
+          { name: 'teamId', in: 'path', required: true, schema: { type: 'string' } },
+          { name: 'start_date', in: 'query', required: true, schema: { type: 'string' } },
+          { name: 'end_date', in: 'query', required: true, schema: { type: 'string' } },
+        ],
+        responses: {
+          '200': { description: 'One row per member, sorted by spend' },
+          '400': { description: 'Missing date range' },
+          '403': { description: 'Caller may see the team but not its member breakdown' },
+          '404': { description: 'Feature disabled, or team not found / not visible to the caller' },
+        },
+      },
+    },
     '/usage': {
       get: {
         tags: ['Usage'],

@@ -407,6 +407,37 @@ export interface Config {
       hideTeamBudgetForManagers?: boolean;
     };
 
+    /**
+     * Team usage views beyond the team totals shown to every member.
+     */
+    teamUsage?: {
+      /**
+       * Per-member usage breakdown (GET /teams/:teamId/usage/members and the
+       * "Usage by member" table on the Teams tab). Per-person spend is
+       * sensitive, so the breakdown is off by default and, when on, only
+       * reaches:
+       *   - managers of the team (members of its metadata.owning_group, with
+       *     team management enabled);
+       *   - members of the team holding one of `viewerRoles` in it;
+       *   - members of the team granted `litellm.team.usage.read` (only
+       *     consulted when permission.enabled is true).
+       */
+      memberBreakdown?: {
+        /**
+         * When false, the route returns 404 and the UI hides the table.
+         * @default false
+         */
+        enabled?: boolean;
+
+        /**
+         * LiteLLM team roles (e.g. ["admin"]) whose holders may view their
+         * own team's breakdown.
+         * @default []
+         */
+        viewerRoles?: string[];
+      };
+    };
+
     bridge?: {
       /**
        * When true, mount the /bridge/keys, /bridge/keys (POST), /bridge/models

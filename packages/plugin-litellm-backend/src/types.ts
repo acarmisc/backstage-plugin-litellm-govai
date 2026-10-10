@@ -12,6 +12,8 @@ export {
   type UsageDailyPoint,
   type UsageDailyModelPoint,
   type UsageMetrics,
+  type TeamMemberUsage,
+  type TeamMemberUsageRow,
   type GenerateKeyRequest,
   type UpdateKeyRequest,
   type GenerateKeyResponse,

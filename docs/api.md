@@ -31,6 +31,7 @@ instead of maintaining this table by hand.
 | `/mcp-servers` | GET | Allowlisted MCP servers (`litellm.team.mcp.manage`) |
 | `/teams/:teamId/mcp-servers` | PUT | Set a team's MCP servers (`litellm.team.mcp.manage`) |
 | `/teams/:teamId/usage` | GET | Usage metrics for a team (`start_date`, `end_date` required) |
+| `/teams/:teamId/usage/members` | GET | Per-member usage breakdown for a team (opt-in, see [Permissions](permissions.md#per-member-team-usage)) |
 | `/usage` | GET | Get usage metrics and analytics for the current user |
 | `/audit` | GET | Audit logs (gated by `litellm.audit.group` membership) |
 | `/opencode/connect` | GET / POST | OpenCode SSO connect: GET shows a confirmation page (no state change); POST creates or rotates the key and redirects to the local callback (only when `litellm.opencode.enabled`) |

@@ -4,6 +4,7 @@ import {
   VirtualKey,
   ModelInfo,
   UsageMetrics,
+  TeamMemberUsage,
   TeamInfo,
   GenerateKeyRequest,
   GenerateKeyResponse,
@@ -53,6 +54,8 @@ export interface LiteLlmApiInterface {
   setTeamMcpServers(teamId: string, mcpServers: string[]): Promise<TeamInfo>;
   getUsage(startDate: string, endDate: string): Promise<UsageMetrics>;
   getTeamUsage(teamId: string, startDate: string, endDate: string): Promise<UsageMetrics>;
+  /** Per-member breakdown; rejects (403/404) when the caller may not see it. */
+  getTeamMemberUsage(teamId: string, startDate: string, endDate: string): Promise<TeamMemberUsage>;
   getAuditLogs(params: AuditLogsParams): Promise<PaginatedAuditLogs>;
   getConfig(): Promise<LiteLlmConfig>;
   createTeam(request: CreateTeamRequest): Promise<CreateTeamResponse>;
@@ -296,6 +299,13 @@ export class LiteLlmApi implements LiteLlmApiInterface {
 
   async getTeamUsage(teamId: string, startDate: string, endDate: string): Promise<UsageMetrics> {
     return this.get<UsageMetrics>(`/teams/${encodeURIComponent(teamId)}/usage`, {
+      start_date: startDate,
+      end_date: endDate,
+    });
+  }
+
+  async getTeamMemberUsage(teamId: string, startDate: string, endDate: string): Promise<TeamMemberUsage> {
+    return this.get<TeamMemberUsage>(`/teams/${encodeURIComponent(teamId)}/usage/members`, {
       start_date: startDate,
       end_date: endDate,
     });

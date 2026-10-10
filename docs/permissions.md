@@ -26,6 +26,7 @@ wiring these up only restricts behavior once you opt in.
 | `litellm.team.knowledgebase.manage` | `GET /vector-stores`, `PUT /teams/:id/knowledge-bases` | Needs `litellm.teamAdmin.objectPermissions.enabled` |
 | `litellm.team.mcp.manage` | `GET /mcp-servers`, `PUT /teams/:id/mcp-servers` | Needs `litellm.teamAdmin.objectPermissions.enabled` |
 | `litellm.team.delete` | `DELETE /teams/:id` | Needs `litellm.teamAdmin.allowTeamDelete` |
+| `litellm.team.usage.read` | `GET /teams/:id/usage/members` | Needs `litellm.teamUsage.memberBreakdown.enabled` and `permission.enabled`; the caller must also be a member of the team — see [Per-member team usage](#per-member-team-usage) |
 
 All key-mutation routes still enforce the existing ownership guard (a caller
 can only ever act on keys they own) regardless of permission policy. The
@@ -158,6 +159,47 @@ relations, not token claims.)
   `Team`, `Team member`, and `Team access (KB / MCP)` table filters.
 - `metadata.owning_group` on teams is trusted by the authorization system and
   is editable by LiteLLM admins; guard access to the LiteLLM admin interface accordingly.
+
+## Per-member team usage
+
+Every team member sees the team's totals (by model and by key). Seeing **who**
+spends is opt-in, because per-person spend is sensitive in many organizations:
+
+```yaml
+litellm:
+  teamUsage:
+    memberBreakdown:
+      enabled: true          # default false: the route 404s, the UI hides the table
+      viewerRoles: [admin]   # optional: LiteLLM team roles that may see it
+```
+
+With the breakdown enabled, expanding a team card on the **Teams** tab shows a
+"Usage by member" table for the selected period: spend, share of the team's
+spend, tokens, requests, success rate and number of keys per member.
+
+`GET /teams/:teamId/usage/members` allows, and refuses everyone else:
+
+1. **Team managers**: members of the team's `metadata.owning_group` (team
+   management enabled), as for the other manager surfaces.
+2. **Members holding a viewer role**: the caller is in the team with one of
+   `viewerRoles` (e.g. teams synced from an identity provider, where no team has
+   an `owning_group`).
+3. **Members granted `litellm.team.usage.read`**: only when
+   `permission.enabled: true`. The permission never opens a team the caller is
+   not a member of. Without a policy, Backstage allows every permission, so with
+   the framework enabled but no policy installed **every member** would qualify:
+   install a policy (e.g. `plugin-rbac`) that grants it only to team leads or
+   FinOps roles.
+
+Spend is attributed through each key's owner (`/key/list?team_id=`), so the rows
+add up to the team total. Activity of deleted or ownerless keys is grouped in an
+"Unattributed" row. Display names come from catalog User entities whose
+`spec.profile.email` matches the member.
+
+The `litellm.display` flags apply: when dollars are hidden for the caller
+(member or manager rule), spend is zeroed, `budget_hidden: true` is set, and
+members are compared by `spend_share_pct`. Each successful read is logged as
+`team.usage.members.read` with the caller, the team and the access path.
 
 ## Hiding team budgets (`litellm.display`)
 

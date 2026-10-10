@@ -26,7 +26,7 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from 'recharts';
-import { TeamInfo, UsageMetrics } from '../types';
+import { TeamInfo, TeamMemberUsage, UsageMetrics } from '../types';
 import {
   ChartTooltip,
   EmptyState,
@@ -37,6 +37,7 @@ import {
   TagChip,
   Tone,
   dataTableSx,
+  fmtCompact,
   fmtDateShort,
   fmtUsdCompact,
   useChartTheme,
@@ -62,10 +63,80 @@ function budgetStatValue(hidden: boolean, budget: number): string {
   return 'Unlimited';
 }
 
+const monoSx = { fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 11 };
+
+/**
+ * Per-member usage for the period, sorted by spend. Dollars are replaced by
+ * the share of team spend when the backend hides them.
+ */
+export const MemberUsageTable: FC<{ usage: TeamMemberUsage }> = ({ usage }) => {
+  const hidden = usage.budget_hidden === true;
+  if (!usage.members.length) {
+    return <Typography variant="body2" color="text.secondary">No members or activity in this period.</Typography>;
+  }
+  return (
+    <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 1.5 }}>
+      <Table size="small" sx={dataTableSx} aria-label="Usage by member">
+        <TableHead>
+          <TableRow>
+            <TableCell>Member</TableCell>
+            {!hidden && <TableCell align="right">Spend</TableCell>}
+            <TableCell align="right">Share</TableCell>
+            <TableCell align="right">Tokens</TableCell>
+            <TableCell align="right">Requests</TableCell>
+            <TableCell align="right">Success</TableCell>
+            <TableCell align="right">Keys</TableCell>
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          {usage.members.map(m => {
+            const name = m.display_name ?? m.user_email ?? m.user_id;
+            // Second line: whichever identifier the first line does not show.
+            let sub: string | null = null;
+            if (m.display_name) sub = m.user_email ?? m.user_id;
+            else if (m.user_email && m.user_id !== m.user_email) sub = m.user_id;
+            return (
+              <TableRow key={m.user_id ?? '__unattributed'}>
+                <TableCell>
+                  {m.user_id === null ? (
+                    <MuiTooltip title="Activity of keys that were deleted or have no owner">
+                      <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>
+                        Unattributed
+                      </Typography>
+                    </MuiTooltip>
+                  ) : (
+                    <>
+                      <Typography variant="body2">{name}</Typography>
+                      {sub && (
+                        <Typography variant="caption" color="text.secondary" sx={monoSx}>
+                          {sub}
+                        </Typography>
+                      )}
+                    </>
+                  )}
+                </TableCell>
+                {!hidden && <TableCell align="right">{fmtUsd2(m.spend)}</TableCell>}
+                <TableCell align="right">{`${m.spend_share_pct.toFixed(m.spend_share_pct > 0 && m.spend_share_pct < 1 ? 1 : 0)}%`}</TableCell>
+                <TableCell align="right">{fmtCompact(m.total_tokens)}</TableCell>
+                <TableCell align="right">{m.api_requests.toLocaleString()}</TableCell>
+                <TableCell align="right">{m.success_rate === null ? '—' : `${m.success_rate.toFixed(0)}%`}</TableCell>
+                <TableCell align="right">{m.user_id === null ? '—' : m.key_count}</TableCell>
+              </TableRow>
+            );
+          })}
+        </TableBody>
+      </Table>
+    </TableContainer>
+  );
+};
+
 interface TeamCardProps {
   team: TeamInfo;
   usage: UsageMetrics | null;
   usageLoading: boolean;
+  /** Per-member breakdown; null when unavailable to the caller (the section is hidden). */
+  memberUsage?: TeamMemberUsage | null;
+  memberUsageLoading?: boolean;
   canManage?: boolean;
   onEditTeam?: (team: TeamInfo) => void;
   /** Members-only management (team-role path); hidden when `canManage`. */
@@ -74,7 +145,7 @@ interface TeamCardProps {
   onExpand?: (team: TeamInfo) => void;
 }
 
-const TeamCard: FC<TeamCardProps> = ({ team, usage, usageLoading, canManage, onEditTeam, canManageMembers, onManageMembers, onExpand }) => {
+const TeamCard: FC<TeamCardProps> = ({ team, usage, usageLoading, memberUsage, memberUsageLoading, canManage, onEditTeam, canManageMembers, onManageMembers, onExpand }) => {
   const [expanded, setExpanded] = useState(false);
   const chart = useChartTheme();
 
@@ -300,6 +371,19 @@ const TeamCard: FC<TeamCardProps> = ({ team, usage, usageLoading, canManage, onE
 
         {renderDailySpendSection()}
 
+        {(memberUsageLoading || memberUsage) && (
+          <Box mb={2.5}>
+            {sectionLabel('Usage by member')}
+            {memberUsage ? (
+              <MemberUsageTable usage={memberUsage} />
+            ) : (
+              <Box display="flex" justifyContent="center" py={2}>
+                <CircularProgress size={22} />
+              </Box>
+            )}
+          </Box>
+        )}
+
         <Box>
           {sectionLabel('Members')}
           {team.members_with_roles?.length ? (
@@ -365,6 +449,9 @@ interface TeamUsageProps {
   loading: boolean;
   getTeamUsage: (teamId: string) => UsageMetrics | null;
   getTeamUsageLoading: (teamId: string) => boolean;
+  /** Per-member breakdown for a team; null hides the section. */
+  getTeamMemberUsage?: (teamId: string) => TeamMemberUsage | null;
+  getTeamMemberUsageLoading?: (teamId: string) => boolean;
   canManage?: boolean;
   onEditTeam?: (team: TeamInfo) => void;
   /** When true (with `onCreateTeam`), a "Create Team" action renders in the section header. */
@@ -384,6 +471,8 @@ export const TeamUsage: FC<TeamUsageProps> = ({
   loading,
   getTeamUsage,
   getTeamUsageLoading,
+  getTeamMemberUsage,
+  getTeamMemberUsageLoading,
   canManage,
   onEditTeam,
   canCreate,
@@ -451,6 +540,8 @@ export const TeamUsage: FC<TeamUsageProps> = ({
             team={team}
             usage={getTeamUsage(team.team_id)}
             usageLoading={getTeamUsageLoading(team.team_id)}
+            memberUsage={getTeamMemberUsage?.(team.team_id) ?? null}
+            memberUsageLoading={getTeamMemberUsageLoading?.(team.team_id) ?? false}
             canManage={canManage}
             onEditTeam={onEditTeam}
             canManageMembers={canManageMembers?.(team)}

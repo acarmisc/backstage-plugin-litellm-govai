@@ -194,6 +194,8 @@ litellm:
 | `litellm.opencode.enabled` | boolean | no | `false` | Mount `/opencode/connect` (see [Security model](../SECURITY.md#security-model)) |
 | `litellm.opencode.keyDuration` / `maxBudget` / `requireTeam` / `metadata` | — | no | `30d` / `50` / `false` / `{}` | Defaults for keys created through the OpenCode connect flow |
 | `litellm.display.hideTeamBudgetForMembers` | boolean | no | `false` | Hide team budget dollars from members (percent + status still shown, enforced server-side) |
+| `litellm.teamUsage.memberBreakdown.enabled` | boolean | no | `false` | Per-member usage breakdown of a team (see [Permissions](permissions.md#per-member-team-usage)) |
+| `litellm.teamUsage.memberBreakdown.viewerRoles` | string[] | no | `[]` | LiteLLM team roles whose holders may see their own team's breakdown |
 | `litellm.display.hideTeamBudgetForManagers` | boolean | no | `false` | Hide team budget dollars even from managers (budget field becomes write-only) |
 | `litellm.teamAdmin.group` | string | no† | — | Backstage group whose members may manage teams. Setting this + `permission.enabled` enables the feature |
 | `litellm.teamAdmin.allowedModels` | string[] | no | `[]` | Models a team admin may assign to a team |

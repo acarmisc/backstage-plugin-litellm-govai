@@ -361,3 +361,26 @@ describe('LiteLLMClient team CRUD methods', () => {
     assert.deepStrictEqual(result, { key: newKey });
   });
 });
+
+describe('LiteLLMClient.listTeamKeys', () => {
+  test('follows /key/list pagination for the team', async () => {
+    const pages: Record<string, any> = {
+      '1': { keys: [{ token: 'h1', user_id: 'alice', created_at: '' }], total_pages: 2 },
+      '2': { keys: [{ token: 'h2', user_id: 'bob', created_at: '' }, 'bare-hash'], total_pages: 2 },
+    };
+    globalThis.fetch = async url => {
+      fetchCalls.push({ url: String(url), init: {} });
+      const page = new URL(String(url)).searchParams.get('page')!;
+      return { ok: true, status: 200, json: async () => pages[page], text: async () => '' } as any;
+    };
+
+    const keys = await new LiteLLMClient(mockConfig).listTeamKeys('team 1');
+
+    assert.deepStrictEqual(keys.map(k => [k.token, k.user_id]), [['h1', 'alice'], ['h2', 'bob']]);
+    assert.strictEqual(fetchCalls.length, 2);
+    const params = new URL(fetchCalls[0].url).searchParams;
+    assert.ok(fetchCalls[0].url.includes('/key/list?'));
+    assert.strictEqual(params.get('team_id'), 'team 1');
+    assert.strictEqual(params.get('return_full_object'), 'true');
+  });
+});
