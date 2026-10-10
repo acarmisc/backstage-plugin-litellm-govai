@@ -182,6 +182,7 @@ litellm:
 | `litellm.keys.maxTpm` | number | no | `100000` | Server-side ceiling for a key's tokens-per-minute limit |
 | `litellm.keys.maxRpm` | number | no | `1000` | Server-side ceiling for a key's requests-per-minute limit |
 | `litellm.keys.allowedDurations` | string[] | no | `['1d','7d','30d','90d']` | Durations a key may be generated with (an empty list allows any `<n><s/m/h/d/w/y>`) |
+| `litellm.keys.allowedBudgetDurations` | string[] | no | `['1d','7d','30d','1mo']` | `budget_duration` values (budget reset period) a key may be generated with (an empty list allows any `<n><s/m/h/d/mo>`). Keys sent without one never reset |
 | `litellm.keys.allowOwnerResetSpend` | boolean | no | `false` | Let key owners reset their own key's spend (still needs the `litellm.key.resetSpend` permission). Fails closed even under an allow-all policy |
 | `litellm.cache.userInfoTtlSeconds` | number | no | `10` | TTL of the per-user LiteLLM profile cache (`0` disables) |
 | `litellm.audit.group` | string | no | — | Backstage group whose members see the Audit Log tab and may call `/audit` and `/provisioning/preview` |

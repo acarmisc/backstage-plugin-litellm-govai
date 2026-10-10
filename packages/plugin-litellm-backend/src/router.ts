@@ -15,7 +15,11 @@ import {
   ProvisioningError,
 } from './provisioning';
 import { TokenVerifier } from './bridge';
-import { type KeyValidationConfig, DEFAULT_KEY_DURATIONS } from '@acarmisc/backstage-plugin-litellm-common';
+import {
+  type KeyValidationConfig,
+  DEFAULT_KEY_BUDGET_DURATIONS,
+  DEFAULT_KEY_DURATIONS,
+} from '@acarmisc/backstage-plugin-litellm-common';
 import {
   isTeamManagementEnabled,
   isObjectPermissionsEnabled,
@@ -90,6 +94,9 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
     maxTpm: keyMaxTpm,
     maxRpm: keyMaxRpm,
     allowedDurations: keyAllowedDurations,
+    allowedBudgetDurations:
+      config.getOptionalStringArray('litellm.keys.allowedBudgetDurations') ??
+      DEFAULT_KEY_BUDGET_DURATIONS,
   };
   const teamMgmtEnabled = isTeamManagementEnabled(config);
   const objectPermsEnabled = isObjectPermissionsEnabled(config);

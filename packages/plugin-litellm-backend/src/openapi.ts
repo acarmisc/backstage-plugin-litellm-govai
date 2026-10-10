@@ -119,6 +119,7 @@ export const openApiSpec: OpenApiSpec = {
             team_id: { type: 'string' },
             duration: { type: 'string' },
             max_budget: { type: 'number', nullable: true, description: 'Positive number caps spend; null = unlimited' },
+            budget_duration: { type: 'string', description: 'How often max_budget resets (e.g. "30d", "1mo"); one of litellm.keys.allowedBudgetDurations' },
             tpm_limit: { type: 'number' },
             rpm_limit: { type: 'number' },
           } } } },

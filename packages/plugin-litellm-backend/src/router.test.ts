@@ -4958,6 +4958,58 @@ describe('bridge routes: identity matches the UI', () => {
     }
   });
 
+  test('POST /bridge/keys passes budget_duration upstream and rejects a malformed one', async () => {
+    const h = await startHarness({
+      config: bridgeConfig({ 'litellm.bridge.allowedEmailDomains': ['abstract.it'] }),
+      tokenVerifier: verifier,
+      client: mockClient({ userInfo: { user_id: 'degiorgis', teams: [] } }),
+    });
+    try {
+      const ok = await req(h.baseUrl, 'POST', '/bridge/keys', {
+        ...bearer, body: { alias: 'cli', max_budget: 100, budget_duration: '1mo' },
+      });
+      assert.strictEqual(ok.status, 200);
+      const sent = h.client.calls.generateKey[h.client.calls.generateKey.length - 1];
+      assert.strictEqual(sent.budget_duration, '1mo');
+      assert.strictEqual(sent.max_budget, 100);
+
+      const plain = await req(h.baseUrl, 'POST', '/bridge/keys', { ...bearer, body: { alias: 'cli2', max_budget: 5 } });
+      assert.strictEqual(plain.status, 200);
+      const sentPlain = h.client.calls.generateKey[h.client.calls.generateKey.length - 1];
+      assert.ok(!('budget_duration' in sentPlain));
+
+      const bad = await req(h.baseUrl, 'POST', '/bridge/keys', {
+        ...bearer, body: { alias: 'cli3', max_budget: 5, budget_duration: 'banana' },
+      });
+      assert.strictEqual(bad.status, 400);
+    } finally {
+      h.server.close();
+    }
+  });
+
+  test('POST /bridge/keys enforces litellm.keys.allowedBudgetDurations', async () => {
+    const h = await startHarness({
+      config: bridgeConfig({
+        'litellm.bridge.allowedEmailDomains': ['abstract.it'],
+        'litellm.keys.allowedBudgetDurations': ['7d'],
+      }),
+      tokenVerifier: verifier,
+      client: mockClient({ userInfo: { user_id: 'degiorgis', teams: [] } }),
+    });
+    try {
+      const rejected = await req(h.baseUrl, 'POST', '/bridge/keys', {
+        ...bearer, body: { alias: 'cli', max_budget: 5, budget_duration: '1mo' },
+      });
+      assert.strictEqual(rejected.status, 400);
+      const ok = await req(h.baseUrl, 'POST', '/bridge/keys', {
+        ...bearer, body: { alias: 'cli', max_budget: 5, budget_duration: '7d' },
+      });
+      assert.strictEqual(ok.status, 200);
+    } finally {
+      h.server.close();
+    }
+  });
+
   test('GET /bridge/user/info returns the caller id and teams', async () => {
     const h = await startHarness({
       config: bridgeConfig({ 'litellm.bridge.allowedEmailDomains': ['abstract.it'] }),

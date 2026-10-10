@@ -172,6 +172,16 @@ export interface Config {
       allowedDurations?: string[];
 
       /**
+       * Allowed `budget_duration` values for new keys (how often a key's
+       * spend resets, e.g. "30d" or "1mo"). Requests with a value not in this
+       * list are rejected with a 400 error. An empty array allows any value
+       * matching /^\d+(s|m|h|d|mo)$/. Omitting the field keeps today's
+       * behaviour: the key's budget never resets.
+       * @default ["1d", "7d", "30d", "1mo"]
+       */
+      allowedBudgetDurations?: string[];
+
+      /**
        * When true, key owners can reset their key's spend counter via the
        * "Reset Spend" button in the frontend, subject to the
        * litellm.key.resetSpend permission. When false (the default), reset

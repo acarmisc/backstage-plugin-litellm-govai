@@ -163,6 +163,8 @@ export interface GenerateKeyRequest {
   duration?: string;
   /** Positive number caps spend; null/undefined means unlimited. */
   max_budget?: number | null;
+  /** How often the key's spend resets, e.g. "30d" or "1mo". */
+  budget_duration?: string;
   tpm_limit?: number;
   rpm_limit?: number;
   key_type?: string;
