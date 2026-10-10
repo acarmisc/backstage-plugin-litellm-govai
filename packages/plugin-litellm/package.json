@@ -1,6 +1,6 @@
 {
   "name": "@acarmisc/backstage-plugin-litellm",
-  "version": "0.34.0",
+  "version": "0.35.0",
   "backstage": {
     "role": "frontend-plugin",
     "pluginId": "litellm",
@@ -41,7 +41,7 @@
     "prepack": "npm run build"
   },
   "dependencies": {
-    "@acarmisc/backstage-plugin-litellm-common": "0.1.0",
+    "@acarmisc/backstage-plugin-litellm-common": "0.2.0",
     "@backstage/catalog-model": "^1.9.0",
     "@backstage/core-components": "^0.18.10",
     "@backstage/core-plugin-api": "^1.12.6",

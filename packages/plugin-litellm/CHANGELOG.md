@@ -10,6 +10,22 @@ commit/PR that bumps the version in `package.json`. Format follows the
 Earlier history: `git log -- packages/plugin-litellm` or the
  [GitHub tags](https://github.com/acarmisc/backstage-plugin-litellm-govai/tags).
 
+## 0.35.0
+
+Works with `@acarmisc/backstage-plugin-litellm-backend` `0.20.0` or later
+(older backends: the member breakdown is never shown).
+
+### Minor Changes
+
+- **feat(teams): "Usage by member" table (#86).** When the backend enables
+  `litellm.teamUsage.memberBreakdown`, an expanded team card shows each
+  member's spend, share of team spend, tokens, requests, success rate and
+  keys for the selected period. The table is hidden for callers the
+  backend refuses, and shows shares only when team budgets are hidden.
+- **BREAKING (custom API implementations):** `LiteLlmApiInterface` gains
+  `getTeamMemberUsage(teamId, startDate, endDate)`; `LiteLlmConfig` gains
+  `teamUsage.memberBreakdown`.
+
 ## 0.34.0
 
 Works with `@acarmisc/backstage-plugin-litellm-backend` `0.18.0` or later.
