@@ -34,7 +34,11 @@ The backend derives the LiteLLM `user_id` from the Backstage token using the for
 user_id = <entity-name> [ + "@" + userIdDomain ]
 ```
 
-For example, `user:default/john.doe` with `userIdDomain: example.com` produces `john.doe@example.com`. If LiteLLM has the user stored under a different ID (e.g. the full email was used as the entity name), the lookup will fail.
+For example, `user:default/john.doe` with `userIdDomain: example.com` produces `john.doe@example.com`.
+
+When no user has that ID, the backend looks for an existing LiteLLM user whose email exactly matches the catalog profile email (`spec.profile.email`) and uses it, whatever its ID — e.g. a user created in the LiteLLM admin UI with the email as its ID. That user's keys, usage and teams are then shown, and no duplicate is provisioned (LiteLLM refuses a second user with the same email). The log line reads `Found existing LiteLLM user <id> by email <email>, reusing for <derived id>`.
+
+If the user has no catalog email, or LiteLLM stores a different one, the lookup fails.
 
 **Fix:** Align the LiteLLM user IDs with what the plugin derives, or adjust `userIdDomain`. If the Backstage entity name is already in email form (e.g. `user:default/john.doe@example.com`), do **not** set `userIdDomain` — the plugin detects the `@` and skips the domain suffix to avoid double-appending.
 

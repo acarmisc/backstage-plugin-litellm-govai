@@ -5099,3 +5099,47 @@ describe('bridge routes: identity matches the UI', () => {
     }
   });
 });
+
+describe('users found by email under another id', () => {
+  // The LiteLLM user predates Backstage and has the email as its id.
+  const startWithEmailUser = async (userId: string, email: string) => {
+    const client = mockClient({
+      listKeys: async (uid?: string) =>
+        uid === email ? [{ token: 'k-email', key_alias: 'old', user_id: email } as any] : [],
+    });
+    client.getUserInfo = async (uid?: string) =>
+      uid === email ? { user_id: email, user_email: email, teams: [] } : null;
+    client.getUserByEmail = async (e: string) =>
+      e === email ? { user_id: email, user_email: email, teams: [] } : null;
+    const h = await startHarness({
+      config: { 'litellm.provisioning.enabled': true },
+      client,
+      catalogClient: {
+        getEntityByRef: async () => ({ kind: 'User', spec: { profile: { email } }, relations: [] }),
+      },
+    });
+    return { h, client, authRef: `user:default/${userId}` };
+  };
+
+  test('GET /keys lists the keys of the existing user', async () => {
+    const { h, client, authRef } = await startWithEmailUser('zed', 'zed@corp.it');
+    try {
+      const { status, body } = await req(h.baseUrl, 'GET', '/keys', { authRef });
+      assert.strictEqual(status, 200);
+      assert.deepStrictEqual(body.map((k: any) => k.token), ['k-email']);
+      assert.deepStrictEqual(client.calls.listKeys, ['zed@corp.it']);
+    } finally {
+      h.server.close();
+    }
+  });
+
+  test('key actions authorize against the existing user', async () => {
+    const { h, authRef } = await startWithEmailUser('yan', 'yan@corp.it');
+    try {
+      const { status } = await req(h.baseUrl, 'DELETE', '/keys/k-email', { authRef });
+      assert.strictEqual(status, 200);
+    } finally {
+      h.server.close();
+    }
+  });
+});

@@ -46,6 +46,12 @@ export interface RouterContext {
   opencodeCfg: OpencodeConfig;
 
   // Helper functions
+  /**
+   * LiteLLM user id of a Backstage user: the computed id, or the id of an
+   * existing LiteLLM user with the same catalog email.
+   */
+  resolveMemberUserId(userEntityRef: string): Promise<string>;
+
   authorizeKeyAction(
     req: Request,
     keyId: string,

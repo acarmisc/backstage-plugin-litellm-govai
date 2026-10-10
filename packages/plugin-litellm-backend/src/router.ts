@@ -13,6 +13,8 @@ import {
   readRoleConfigs,
   isUserMemberOfGroup,
   ProvisioningError,
+  findLiteLLMUser,
+  effectiveUserId,
 } from './provisioning';
 import { TokenVerifier } from './bridge';
 import {
@@ -132,8 +134,17 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
     );
   }
 
+  // LiteLLM user id of a Backstage user: the computed id, or the id of an
+  // existing user with the same catalog email.
+  const resolveMemberUserId = async (userEntityRef: string): Promise<string> => {
+    const computed = toLiteLLMUserId(userEntityRef, userIdDomain);
+    await findLiteLLMUser(client, userEntityRef, computed, catalogClient, auth, logger);
+    return effectiveUserId(computed);
+  };
+
   // Build shared RouterContext with config and helpers
   const ctx: RouterContext = {
+    resolveMemberUserId,
     client,
     catalogClient,
     auth,
@@ -164,7 +175,8 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
         throw new NotAllowedError('User identity not found in request');
       }
       const tokenEntityRef = req.res.locals.tokenEntityRef as string;
-      const userId = req.res.locals.userId as string;
+      // The LiteLLM user may exist under a different id, found by email.
+      const userId = await resolveMemberUserId(tokenEntityRef);
       const ownKeys = await client.listKeys(userId);
       const key = ownKeys.find(k => (k.token ?? k.key) === keyId);
       if (!key) {
@@ -321,7 +333,9 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
       // The permission framework still has the final say.
       if (teamRoleEligible) {
         const actor = await resolveUserId(req, auth);
-        const litellmUserId = actor && toLiteLLMUserId(actor, userIdDomain);
+        const litellmUserId =
+          actor &&
+          (await resolveMemberUserId(actor));
         const role = existing.members_with_roles?.find(
           m => m.user_id === litellmUserId,
         )?.role;

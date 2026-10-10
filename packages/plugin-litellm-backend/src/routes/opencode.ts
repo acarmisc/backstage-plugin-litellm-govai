@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { VirtualKey, GenerateKeyRequest } from '../types';
 import {
   toLiteLLMUserId,
+  effectiveUserId,
   resolveUserId,
   resolveUserProfile,
   getOrProvisionUser,
@@ -100,11 +101,11 @@ export function registerOpencodeRoutes(router: Router, ctx: RouterContext): void
         return null;
       }
 
-      const userId = toLiteLLMUserId(tokenEntityRef, userIdDomain);
+      const computedUserId = toLiteLLMUserId(tokenEntityRef, userIdDomain);
       const userInfo = await getOrProvisionUser(
         client,
         tokenEntityRef,
-        userId,
+        computedUserId,
         provisioningEnabled,
         provisioningDefaults,
         roleConfigs,
@@ -129,7 +130,7 @@ export function registerOpencodeRoutes(router: Router, ctx: RouterContext): void
         return null;
       }
 
-      return { tokenEntityRef, userId, userInfo, teamId, redirectUri };
+      return { tokenEntityRef, userId: effectiveUserId(computedUserId), userInfo, teamId, redirectUri };
     };
 
     router.get('/opencode/connect', async (req: Request, res: Response) => {
