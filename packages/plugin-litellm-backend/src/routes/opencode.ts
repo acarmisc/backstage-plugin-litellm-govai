@@ -263,14 +263,18 @@ export function registerOpencodeRoutes(router: Router, ctx: RouterContext): void
           return;
         }
 
+        logger.info('opencode.connect', { userId, team: teamId ?? null, rotated });
+        // The Backstage connect page calls this with fetchApi (JSON + Bearer) and does the
+        // loopback redirect itself, so it can collect one key per team in a single trip.
+        if (req.is('application/json')) {
+          res.set('Cache-Control', 'no-store');
+          res.json({ key, team: teamId ?? null });
+          return;
+        }
+
         const url = new URL(redirectUri);
         url.searchParams.set('key', key);
         if (teamId) url.searchParams.set('team', teamId);
-        logger.info('opencode.connect', {
-          userId,
-          team: teamId ?? null,
-          rotated,
-        });
         res.redirect(302, url.href);
       } catch (error: unknown) {
         if (error instanceof ProvisioningError) {

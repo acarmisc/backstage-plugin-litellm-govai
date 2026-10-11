@@ -31,10 +31,22 @@ const liteLlmPage = PageBlueprint.make({
   },
 });
 
+// No title/icon: reached only from local clients' connect links, not from the sidebar.
+const liteLlmConnectPage = PageBlueprint.make({
+  name: 'connect',
+  params: {
+    path: '/litellm/connect',
+    loader: async () => {
+      const { ConnectPage } = await import('./components/ConnectPage');
+      return <ConnectPage />;
+    },
+  },
+});
+
 export const litellmPlugin = createFrontendPlugin({
   pluginId: 'litellm',
   routes: {
     root: rootRouteRef,
   },
-  extensions: [liteLlmApi, liteLlmPage],
+  extensions: [liteLlmApi, liteLlmPage, liteLlmConnectPage],
 });

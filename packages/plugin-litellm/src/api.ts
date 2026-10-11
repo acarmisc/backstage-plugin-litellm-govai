@@ -42,6 +42,7 @@ export interface LiteLlmApiInterface {
   pruneExpiredKeys(): Promise<{ pruned: number; failed: number; failures?: { keyId: string; error: string }[] }>;
   listModels(): Promise<ModelInfo[]>;
   getTeams(): Promise<TeamInfo[]>;
+  connectLocalClient(redirectUri: string, team?: string): Promise<{ key: string; team: string | null }>;
   getManagedTeams(): Promise<TeamInfo[]>;
   addTeamMember(
     teamId: string,
@@ -230,6 +231,11 @@ export class LiteLlmApi implements LiteLlmApiInterface {
 
   async listModels(): Promise<ModelInfo[]> {
     return this.get<ModelInfo[]>('/models');
+  }
+
+  /** Mints (or rotates) the caller's connect-flow key, optionally bound to one of their teams. */
+  async connectLocalClient(redirectUri: string, team?: string): Promise<{ key: string; team: string | null }> {
+    return this.post('/opencode/connect', { redirect_uri: redirectUri, team });
   }
 
   async getTeams(): Promise<TeamInfo[]> {
