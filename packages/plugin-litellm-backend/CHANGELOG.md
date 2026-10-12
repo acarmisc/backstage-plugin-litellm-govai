@@ -9,6 +9,22 @@ commit/PR that bumps the version in `package.json`. Format follows the
 Earlier history: `git log -- packages/plugin-litellm-backend` or the
 [GitHub tags](https://github.com/acarmisc/backstage-plugin-litellm-govai/tags).
 
+## 0.21.0
+
+Requires `@acarmisc/backstage-plugin-litellm-common` `0.2.0`.
+
+### Minor Changes
+
+- **feat(connect): JSON mode for `POST /opencode/connect`.** A request with a
+  JSON body (the new frontend connect page, through `fetchApi`) gets
+  `{ key, team }` instead of the `302` to the loopback `redirect_uri`, so a
+  signed-in browser session can mint keys: the HTML form flow only worked
+  with an `Authorization: Bearer` header, which a browser navigation never
+  sends (always `401`). The form flow is unchanged.
+- **feat(connect): `litellm.opencode.budgetDuration`.** Reset period for
+  `maxBudget` on connect keys (e.g. `30d`). Unset, `maxBudget` covers the
+  whole life of the key, which runs out early on long-lived keys.
+
 ## 0.20.0
 
 Requires `@acarmisc/backstage-plugin-litellm-common` `0.2.0`.

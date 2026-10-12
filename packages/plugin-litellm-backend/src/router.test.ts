@@ -4188,6 +4188,7 @@ describe('router /opencode/connect — enabled', () => {
     h = await startHarness({
       config: {
         'litellm.opencode.enabled': true,
+        'litellm.opencode.budgetDuration': '30d',
         'litellm.userIdDomain': 'example.com',
       },
       client: mockClient({
@@ -4270,6 +4271,7 @@ describe('router /opencode/connect — enabled', () => {
     assert.strictEqual(status, 200);
     assert.deepStrictEqual(body, { key: 'sk-new', team: 'marketing' });
     assert.strictEqual(h.client.calls.generateKey.at(-1).team_id, 'marketing');
+    assert.strictEqual(h.client.calls.generateKey.at(-1).budget_duration, '30d');
   });
 
   test('403 when the team is not one of the user teams', async () => {

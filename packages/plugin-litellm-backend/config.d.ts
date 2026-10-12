@@ -217,6 +217,12 @@ export interface Config {
       maxBudget?: number;
 
       /**
+       * Reset period of maxBudget in LiteLLM format (e.g. "30d"). Unset, maxBudget
+       * covers the whole life of the key.
+       */
+      budgetDuration?: string;
+
+      /**
        * When true a team must be supplied and the user must belong to it.
        * @default false
        */

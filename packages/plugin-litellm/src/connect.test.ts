@@ -18,6 +18,7 @@ describe('isLoopbackCallback', () => {
       'http://localhost:1/other',
       'http://localhost:1/callback?x=1',
       'http://user@evil.com/callback',
+      // eslint-disable-next-line no-script-url -- the rejected input under test
       'javascript:alert(1)',
     ]) {
       assert.strictEqual(isLoopbackCallback(uri), false, String(uri));

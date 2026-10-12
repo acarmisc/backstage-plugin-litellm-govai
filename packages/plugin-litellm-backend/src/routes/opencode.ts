@@ -215,6 +215,7 @@ export function registerOpencodeRoutes(router: Router, ctx: RouterContext): void
             alias,
             duration: opencodeCfg.keyDuration,
             max_budget: opencodeCfg.maxBudget,
+            ...(opencodeCfg.budgetDuration && { budget_duration: opencodeCfg.budgetDuration }),
             team_id: teamId,
             metadata: {
               ...opencodeCfg.metadata,

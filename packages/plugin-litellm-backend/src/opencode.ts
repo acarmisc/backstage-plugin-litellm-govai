@@ -21,6 +21,11 @@ export interface OpencodeConfig {
   /** Default max budget (USD) for keys created via the connect flow. Default 50. */
   maxBudget: number;
   /**
+   * Reset period of maxBudget (e.g. "30d"). Unset: maxBudget covers the key's whole life,
+   * which runs out early on long-lived keys.
+   */
+  budgetDuration?: string;
+  /**
    * When true, a team query parameter must reference a team the user is a
    * member of (or manage); otherwise the key is personal-only.
    */
@@ -36,6 +41,7 @@ export function readOpencodeConfig(config: Config): OpencodeConfig {
     keyDuration:
       config.getOptionalString('litellm.opencode.keyDuration') ?? '30d',
     maxBudget: config.getOptionalNumber('litellm.opencode.maxBudget') ?? 50,
+    budgetDuration: config.getOptionalString('litellm.opencode.budgetDuration'),
     requireTeam:
       config.getOptionalBoolean('litellm.opencode.requireTeam') ?? false,
     metadata:
