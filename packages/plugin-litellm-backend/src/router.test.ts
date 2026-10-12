@@ -4361,12 +4361,12 @@ describe('router /opencode/connect — enabled', () => {
   });
 
   test('POST leaves MCP access alone when the team has none', async () => {
-    const before = h.client.calls.generateKey.length;
+    const generated = h.client.calls.generateKey.length;
     await req(h.baseUrl, 'POST', '/opencode/connect', {
       body: { redirect_uri: 'http://localhost:1456/callback', team: 'finance' },
       authRef: 'user:default/alice',
     });
-    assert.strictEqual(h.client.calls.generateKey.length, before + 1);
+    assert.strictEqual(h.client.calls.generateKey.length, generated + 1);
     assert.strictEqual(h.client.calls.generateKey.at(-1).object_permission, undefined);
   });
 
