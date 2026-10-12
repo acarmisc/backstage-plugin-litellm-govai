@@ -4188,6 +4188,7 @@ describe('router /opencode/connect — enabled', () => {
     h = await startHarness({
       config: {
         'litellm.opencode.enabled': true,
+        'litellm.opencode.budgetDuration': '30d',
         'litellm.userIdDomain': 'example.com',
       },
       client: mockClient({
@@ -4260,6 +4261,17 @@ describe('router /opencode/connect — enabled', () => {
     const gen = h.client.calls.generateKey.at(-1);
     assert.strictEqual(gen.team_id, 'finance');
     assert.strictEqual(gen.alias, 'opencode-alice@example.com-finance');
+  });
+
+  test('POST with a JSON body returns the key instead of redirecting (connect page)', async () => {
+    const { status, body } = await req(h.baseUrl, 'POST', '/opencode/connect', {
+      body: { redirect_uri: 'http://localhost:1456/callback', team: 'marketing' },
+      authRef: 'user:default/alice',
+    });
+    assert.strictEqual(status, 200);
+    assert.deepStrictEqual(body, { key: 'sk-new', team: 'marketing' });
+    assert.strictEqual(h.client.calls.generateKey.at(-1).team_id, 'marketing');
+    assert.strictEqual(h.client.calls.generateKey.at(-1).budget_duration, '30d');
   });
 
   test('403 when the team is not one of the user teams', async () => {

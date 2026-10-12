@@ -10,6 +10,21 @@ commit/PR that bumps the version in `package.json`. Format follows the
 Earlier history: `git log -- packages/plugin-litellm` or the
  [GitHub tags](https://github.com/acarmisc/backstage-plugin-litellm-govai/tags).
 
+## 0.36.0
+
+Requires `@acarmisc/backstage-plugin-litellm-backend` `0.21.0` or later with
+`litellm.opencode.enabled: true`.
+
+### Minor Changes
+
+- **feat(connect): `/litellm/connect` page for local clients.** A local
+  application (e.g. an installer) opens
+  `/litellm/connect?redirect_uri=http://localhost:<port>/callback&state=<nonce>&client=<name>`;
+  the signed-in user picks teams and presses **Connect**. The page mints one
+  key per team and hands them to the loopback listener as a form `POST`
+  (`state` + repeated `key`), so keys never appear in a URL or the browser
+  history. Only `http://localhost|127.0.0.1:<port>/callback` is accepted.
+
 ## 0.35.0
 
 Works with `@acarmisc/backstage-plugin-litellm-backend` `0.20.0` or later
