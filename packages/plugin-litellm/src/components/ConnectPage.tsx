@@ -12,7 +12,7 @@ import { useAsync } from 'react-use';
 import { useApi } from '@backstage/core-plugin-api';
 import { Content, Progress } from '@backstage/core-components';
 import { liteLlmApiRef } from '../api';
-import { isLoopbackCallback, postToLoopback } from '../connect';
+import { initialTeams, isLoopbackCallback, postToLoopback } from '../connect';
 
 /**
  * Confirmation page for local clients (abby-desktop installer, OpenCode plugins): mints one
@@ -25,6 +25,8 @@ export const ConnectPage: FC = () => {
   const redirectUri = params.get('redirect_uri');
   const state = params.get('state') ?? '';
   const client = params.get('client') || 'a local application';
+  // Teams the client already holds keys for: left unticked, so only missing teams get a new key.
+  const have = new Set((params.get('have') ?? '').split(',').filter(Boolean));
   const teams = useAsync(() => api.getTeams(), [api]);
   const [selected, setSelected] = useState<Set<string> | undefined>();
   const [busy, setBusy] = useState(false);
@@ -42,7 +44,7 @@ export const ConnectPage: FC = () => {
   if (teams.loading) return <Progress />;
 
   const all = teams.value ?? [];
-  const chosen = selected ?? new Set(all.map(t => t.team_id));
+  const chosen = selected ?? initialTeams(all.map(t => t.team_id), have);
   const toggle = (id: string) => {
     const next = new Set(chosen);
     if (!next.delete(id)) next.add(id);
@@ -72,8 +74,8 @@ export const ConnectPage: FC = () => {
             Connect {client}
           </Typography>
           <Typography variant="body2" color="text.secondary" paragraph>
-            {client} will receive an API key for each selected team. Connecting again replaces the
-            keys created by a previous connection.
+            {client} will receive an API key for each selected team. Selecting a team that is
+            already connected replaces its key, also on your other devices.
           </Typography>
           {teams.error && <Alert severity="error">Could not load your teams: {teams.error.message}</Alert>}
           {all.length > 0 && (
@@ -82,7 +84,7 @@ export const ConnectPage: FC = () => {
                 <FormControlLabel
                   key={t.team_id}
                   control={<Checkbox checked={chosen.has(t.team_id)} onChange={() => toggle(t.team_id)} />}
-                  label={t.team_alias ?? t.team_id}
+                  label={`${t.team_alias ?? t.team_id}${have.has(t.team_id) ? ' (already connected)' : ''}`}
                 />
               ))}
             </FormGroup>

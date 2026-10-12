@@ -10,6 +10,17 @@ commit/PR that bumps the version in `package.json`. Format follows the
 Earlier history: `git log -- packages/plugin-litellm` or the
  [GitHub tags](https://github.com/acarmisc/backstage-plugin-litellm-govai/tags).
 
+## 0.37.0
+
+### Minor Changes
+
+- **feat(connect): connect only the missing teams.** The connect page reads an
+  optional `have=<team ids>` parameter (teams the local client already holds
+  keys for), marks those teams "already connected" and leaves them unticked, so
+  adding a team mints one key instead of rotating every key (which also broke
+  them on the user's other devices). Without `have` every team is ticked, as
+  before.
+
 ## 0.36.0
 
 Requires `@acarmisc/backstage-plugin-litellm-backend` `0.21.0` or later with
