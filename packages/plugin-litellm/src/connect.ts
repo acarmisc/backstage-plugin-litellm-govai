@@ -35,3 +35,9 @@ export function postToLoopback(redirectUri: string, fields: [string, string][]):
   document.body.appendChild(form);
   form.submit();
 }
+
+/** Teams ticked when the page opens: only the ones the client has no key for, when it says (`have`). */
+export function initialTeams(all: string[], have: Set<string>): Set<string> {
+  const missing = all.filter(id => !have.has(id));
+  return new Set(have.size ? missing : all);
+}

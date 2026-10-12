@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert';
-import { isLoopbackCallback } from './connect';
+import { initialTeams, isLoopbackCallback } from './connect';
 
 describe('isLoopbackCallback', () => {
   it('accepts loopback /callback URIs', () => {
@@ -23,5 +23,15 @@ describe('isLoopbackCallback', () => {
     ]) {
       assert.strictEqual(isLoopbackCallback(uri), false, String(uri));
     }
+  });
+});
+
+describe('initialTeams', () => {
+  it('ticks every team on a first connect', () => {
+    assert.deepStrictEqual([...initialTeams(['a', 'b'], new Set())], ['a', 'b']);
+  });
+  it('ticks only the teams the client has no key for', () => {
+    assert.deepStrictEqual([...initialTeams(['a', 'b', 'c'], new Set(['a', 'c']))], ['b']);
+    assert.deepStrictEqual([...initialTeams(['a'], new Set(['a']))], []);
   });
 });

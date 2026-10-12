@@ -4334,6 +4334,42 @@ describe('router /opencode/connect — enabled', () => {
     created_at: '2026-01-01',
   };
 
+  test("POST copies the team's MCP servers onto new and rotated keys", async () => {
+    const perm = { object_permission: { mcp_servers: ['context7'], mcp_access_groups: [] } };
+    for (const listed of [[], [{ ...existingSlotKey, key_alias: 'opencode-alice@example.com-finance' }]]) {
+      const h2 = await startHarness({
+        config: { 'litellm.opencode.enabled': true, 'litellm.userIdDomain': 'example.com' },
+        client: mockClient({
+          userInfo: { user_id: 'alice@example.com', teams: ['finance'] },
+          listKeys: () => Promise.resolve(listed),
+          getTeamInfo: async (id: string) => ({ team_id: id, spend: 0, ...perm }),
+        }),
+      });
+      try {
+        const { status } = await req(h2.baseUrl, 'POST', '/opencode/connect', {
+          body: { redirect_uri: 'http://localhost:1456/callback', team: 'finance' },
+          authRef: 'user:default/alice',
+        });
+        assert.strictEqual(status, 200);
+        const expected = { mcp_servers: ['context7'], mcp_access_groups: [] };
+        if (listed.length) assert.deepStrictEqual(h2.client.calls.updateKey, [{ key: 'sk-regenerated', object_permission: expected }]);
+        else assert.deepStrictEqual(h2.client.calls.generateKey[0].object_permission, expected);
+      } finally {
+        await new Promise<void>(r => h2.server.close(() => r()));
+      }
+    }
+  });
+
+  test('POST leaves MCP access alone when the team has none', async () => {
+    const generated = h.client.calls.generateKey.length;
+    await req(h.baseUrl, 'POST', '/opencode/connect', {
+      body: { redirect_uri: 'http://localhost:1456/callback', team: 'finance' },
+      authRef: 'user:default/alice',
+    });
+    assert.strictEqual(h.client.calls.generateKey.length, generated + 1);
+    assert.strictEqual(h.client.calls.generateKey.at(-1).object_permission, undefined);
+  });
+
   test('POST replaces the key (delete + generate) when LiteLLM has no key regeneration', async () => {
     const h2 = await startHarness({
       config: { 'litellm.opencode.enabled': true, 'litellm.userIdDomain': 'example.com' },

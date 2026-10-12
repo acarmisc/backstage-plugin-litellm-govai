@@ -9,6 +9,21 @@ commit/PR that bumps the version in `package.json`. Format follows the
 Earlier history: `git log -- packages/plugin-litellm-backend` or the
 [GitHub tags](https://github.com/acarmisc/backstage-plugin-litellm-govai/tags).
 
+## 0.22.0
+
+Requires `@acarmisc/backstage-plugin-litellm-common` `0.2.0`.
+
+### Minor Changes
+
+- **feat(connect): keys inherit the team's MCP servers.** `POST /opencode/connect`
+  copies the team's `object_permission.mcp_servers` / `mcp_access_groups` onto
+  the new key, and onto a rotated key with `/key/update` (regeneration keeps the
+  old permissions). With `require_key_mcp_access_defined` the gateway only lets a
+  key reach MCP servers it lists, and a key may only list its team's, so local
+  clients (abby-desktop) now get the team's tools through `$GW/mcp/`. Teams
+  without MCP servers are unchanged, and a failed team lookup never fails the
+  connection.
+
 ## 0.21.0
 
 Requires `@acarmisc/backstage-plugin-litellm-common` `0.2.0`.

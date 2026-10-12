@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import { VirtualKey, GenerateKeyRequest } from '../types';
+import { VirtualKey, GenerateKeyRequest, UpdateKeyRequest } from '../types';
 import {
   toLiteLLMUserId,
   effectiveUserId,
@@ -203,6 +203,14 @@ export function registerOpencodeRoutes(router: Router, ctx: RouterContext): void
           k => k.key_alias === alias && !k.blocked && k.user_id === userId,
         );
 
+        // The gateway requires MCP access on the key itself (require_key_mcp_access_defined), and a
+        // key may only list what its team has: copy the team's MCP servers so local clients get
+        // the team's tools. A team lookup failure only costs the tools, never the connection.
+        const teamPerm = teamId ? (await client.getTeamInfo(teamId).catch(() => undefined))?.object_permission : undefined;
+        const mcp = teamPerm?.mcp_servers?.length || teamPerm?.mcp_access_groups?.length
+          ? { mcp_servers: teamPerm.mcp_servers ?? [], mcp_access_groups: teamPerm.mcp_access_groups ?? [] }
+          : undefined;
+
         // Mint a brand-new key bound to this user (and team) under the slot alias.
         const mintNewKey = async (): Promise<string | undefined> => {
           const profile = await resolveUserProfile(
@@ -225,6 +233,7 @@ export function registerOpencodeRoutes(router: Router, ctx: RouterContext): void
               ...(teamId && { opencode_team: teamId }),
             },
             user_id: userId,
+            ...(mcp && { object_permission: mcp }),
           } as GenerateKeyRequest);
           return result.key;
         };
@@ -238,6 +247,9 @@ export function registerOpencodeRoutes(router: Router, ctx: RouterContext): void
             // Rotate the existing key in place via LiteLLM's key regeneration.
             key = (await client.regenerateKey(keyHashOrId)).key;
             rotated = true;
+            // Rotation keeps the old permissions: refresh them so team MCP changes arrive too.
+            // object_permission is not in the shared UpdateKeyRequest type yet (common 0.2.0).
+            if (key && mcp) await client.updateKey({ key, object_permission: mcp } as UpdateKeyRequest);
           } catch (err: unknown) {
             // Key regeneration isn't available on every LiteLLM edition. Only
             // "not supported / not found" answers fall back to replacing the
