@@ -10,6 +10,20 @@ commit/PR that bumps the version in `package.json`. Format follows the
 Earlier history: `git log -- packages/plugin-litellm` or the
  [GitHub tags](https://github.com/acarmisc/backstage-plugin-litellm-govai/tags).
 
+## 0.38.0
+
+Requires `@acarmisc/backstage-plugin-litellm-backend` `0.23.0` or later for the
+spend-logs panel (`GET /insights/spend-logs`).
+
+### Minor Changes
+
+- **feat(insights): Insights tab replaces the Audit Log tab.** Every user gets
+  a KPI strip (cost/1K tokens, cost/request, out:in ratio, retry-waste $,
+  success rate), a 0–100 good-practices score, a ranked savings-opportunities
+  table (downgrade candidates, failure outliers) and a spend-logs panel with
+  cache-hit rate and failed-token waste. Audit-group members keep the same
+  backend `/audit` route; only the UI tab changed.
+
 ## 0.37.0
 
 ### Minor Changes

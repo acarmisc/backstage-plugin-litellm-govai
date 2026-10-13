@@ -3,6 +3,14 @@
 Shared, dependency-light code for the LiteLLM Backstage plugin packages. This
 changelog is maintained by hand.
 
+## 0.3.0
+
+### Minor Changes
+
+- feat: `InsightSummary`, `PracticeScore` and `ModelOpportunity` types for the
+  Insights tab, plus the `SpendLogEntry` / `SpendLogsParams` /
+  `PaginatedSpendLogs` contract for the spend-logs proxy.
+
 ## 0.2.0
 
 ### Minor Changes

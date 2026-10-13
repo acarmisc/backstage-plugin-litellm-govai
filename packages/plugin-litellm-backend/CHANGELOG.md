@@ -9,6 +9,18 @@ commit/PR that bumps the version in `package.json`. Format follows the
 Earlier history: `git log -- packages/plugin-litellm-backend` or the
 [GitHub tags](https://github.com/acarmisc/backstage-plugin-litellm-govai/tags).
 
+## 0.23.0
+
+Requires `@acarmisc/backstage-plugin-litellm-common` `0.3.0`.
+
+### Minor Changes
+
+- **feat(insights): spend-logs proxy.** `GET /insights/spend-logs` proxies
+  LiteLLM `/spend/logs` (retried as `/spend/logs/v2` on 404) behind the
+  existing login, forcing the caller's own `user_id` unless they belong to
+  `litellm.audit.group`. Rows are normalized tolerantly since the exact
+  upstream shape varies by proxy version.
+
 ## 0.22.0
 
 Requires `@acarmisc/backstage-plugin-litellm-common` `0.2.0`.
