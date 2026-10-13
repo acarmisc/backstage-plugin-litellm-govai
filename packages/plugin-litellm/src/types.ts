@@ -26,6 +26,10 @@ export {
   type InsightSummary,
   type PracticeScore,
   type ModelOpportunity,
+  type QualityByModel,
+  type QualityScore,
+  type QualitySummary,
+  type QualityResponse,
 } from '@acarmisc/backstage-plugin-litellm-common';
 
 export interface VectorStoreInfo {

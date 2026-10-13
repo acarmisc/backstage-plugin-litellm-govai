@@ -14,6 +14,7 @@ import type { KeyValidationConfig } from '@acarmisc/backstage-plugin-litellm-com
 import { TeamBudgetVisibility } from '../teamBudgetVisibility';
 import { OpencodeConfig } from '../opencode';
 import { MemberBreakdownConfig } from '../teamMemberUsage';
+import { LangfuseConfig } from '../langfuse';
 
 /**
  * Shared runtime context for all route handlers. Holds config-derived
@@ -46,6 +47,7 @@ export interface RouterContext {
   teamBudgetVisibility: TeamBudgetVisibility;
   opencodeCfg: OpencodeConfig;
   memberBreakdownCfg: MemberBreakdownConfig;
+  langfuseCfg: LangfuseConfig;
 
   // Helper functions
   /**

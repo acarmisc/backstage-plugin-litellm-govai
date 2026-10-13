@@ -14,6 +14,7 @@ import {
   SpendLogsParams,
   PaginatedSpendLogs,
   LiteLlmConfig,
+  QualityResponse,
   VectorStoreInfo,
   McpServerInfo,
   CreateTeamRequest,
@@ -61,6 +62,8 @@ export interface LiteLlmApiInterface {
   getTeamMemberUsage(teamId: string, startDate: string, endDate: string): Promise<TeamMemberUsage>;
   getAuditLogs(params: AuditLogsParams): Promise<PaginatedAuditLogs>;
   getSpendLogs(params: SpendLogsParams): Promise<PaginatedSpendLogs>;
+  /** Langfuse quality summary; `{configured:false}` when Langfuse is off. */
+  getQuality(params: SpendLogsParams): Promise<QualityResponse>;
   getConfig(): Promise<LiteLlmConfig>;
   createTeam(request: CreateTeamRequest): Promise<CreateTeamResponse>;
   updateTeam(teamId: string, request: UpdateTeamRequest): Promise<TeamInfo>;
@@ -330,6 +333,15 @@ export class LiteLlmApi implements LiteLlmApiInterface {
     if (params.page !== undefined) strParams.page = String(params.page);
     if (params.pageSize !== undefined) strParams.page_size = String(params.pageSize);
     return this.get<PaginatedSpendLogs>('/insights/spend-logs', strParams);
+  }
+
+  async getQuality(params: SpendLogsParams): Promise<QualityResponse> {
+    const strParams: Record<string, string> = {
+      start_date: params.startDate,
+      end_date: params.endDate,
+    };
+    if (params.userId) strParams.userId = params.userId;
+    return this.get<QualityResponse>('/insights/quality', strParams);
   }
 
   async getConfig(): Promise<LiteLlmConfig> {

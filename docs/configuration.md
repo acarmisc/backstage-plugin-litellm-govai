@@ -148,6 +148,19 @@ litellm:
     allowedVectorStores: []                      # default: []  (vector store ids/names)
     allowedMcpServers: []                        # default: []  (MCP server ids/names)
     allowedMcpAccessGroups: []                   # default: []
+
+  # Optional — Langfuse answer-quality scores for the Insights tab
+  # ("Quality scores" card via GET /insights/quality). Disabled by default;
+  # a disabled, unconfigured, or v3 server shows the "connect Langfuse"
+  # empty state instead of erroring.
+  langfuse:
+    enabled: false   # default
+    # baseUrl: https://langfuse.example.com
+    # publicKey: ${LANGFUSE_PUBLIC_KEY}
+    # secretKey: ${LANGFUSE_SECRET_KEY}
+    # Observation field holding the LiteLLM user id (change when your agents
+    # tag traces differently).
+    # userIdField: userId   # default: "userId"
 ```
 
 **Config key reference:**
@@ -193,6 +206,11 @@ litellm:
 | `litellm.supportContact` | string | no | — | Who users should contact when their account isn't set up (shown in the UI) |
 | `litellm.opencode.enabled` | boolean | no | `false` | Mount `/opencode/connect` (see [Security model](../SECURITY.md#security-model)) |
 | `litellm.opencode.keyDuration` / `maxBudget` / `requireTeam` / `metadata` | — | no | `30d` / `50` / `false` / `{}` | Defaults for keys created through the OpenCode connect flow |
+| `litellm.langfuse.enabled` | boolean | no | `false` | Query Langfuse for the Insights "Quality scores" card (`GET /insights/quality`) |
+| `litellm.langfuse.baseUrl` | string | when Langfuse enabled | — | Langfuse host, e.g. `https://langfuse.example.com` (`@visibility backend`) |
+| `litellm.langfuse.publicKey` | string | when Langfuse enabled | — | Langfuse public key, Metrics API Basic-auth username (`@visibility backend`) |
+| `litellm.langfuse.secretKey` | string | when Langfuse enabled | — | Langfuse secret key, Metrics API Basic-auth password (`@visibility secret`) |
+| `litellm.langfuse.userIdField` | string | no | `"userId"` | Langfuse observation field holding the LiteLLM user id (change when agents tag traces differently) |
 | `litellm.display.hideTeamBudgetForMembers` | boolean | no | `false` | Hide team budget dollars from members (percent + status still shown, enforced server-side) |
 | `litellm.teamUsage.memberBreakdown.enabled` | boolean | no | `false` | Per-member usage breakdown of a team (see [Permissions](permissions.md#per-member-team-usage)) |
 | `litellm.teamUsage.memberBreakdown.viewerRoles` | string[] | no | `[]` | LiteLLM team roles whose holders may see their own team's breakdown |

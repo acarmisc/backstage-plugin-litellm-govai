@@ -235,6 +235,45 @@ export interface Config {
     };
 
     /**
+     * Langfuse answer-quality scores for the Insights tab ("Quality scores"
+     * card, GET /insights/quality). Generic Metrics API v2 integration: any
+     * Langfuse host works, and a disabled, unconfigured, or v3 server
+     * degrades to `{configured:false}` instead of erroring.
+     */
+    langfuse?: {
+      /**
+       * When true the /insights/quality route queries Langfuse.
+       * @default false
+       */
+      enabled?: boolean;
+
+      /**
+       * Langfuse host, e.g. https://langfuse.example.com.
+       * @visibility backend
+       */
+      baseUrl?: string;
+
+      /**
+       * Langfuse public key (Metrics API Basic-auth username).
+       * @visibility backend
+       */
+      publicKey?: string;
+
+      /**
+       * Langfuse secret key (Metrics API Basic-auth password).
+       * @visibility secret
+       */
+      secretKey?: string;
+
+      /**
+       * The Langfuse observation field holding the LiteLLM user id.
+       * Deployments whose agents tag traces differently change this one key.
+       * @default "userId"
+       */
+      userIdField?: string;
+    };
+
+    /**
      * Caching configuration for backend data fetches.
      */
     cache?: {

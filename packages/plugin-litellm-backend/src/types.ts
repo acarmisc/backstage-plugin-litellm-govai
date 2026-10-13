@@ -22,6 +22,10 @@ export {
   type SpendLogEntry,
   type SpendLogsParams,
   type PaginatedSpendLogs,
+  type QualityByModel,
+  type QualityScore,
+  type QualitySummary,
+  type QualityResponse,
 } from '@acarmisc/backstage-plugin-litellm-common';
 
 export interface CreateTeamRequest {

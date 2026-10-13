@@ -17,6 +17,7 @@ import type {
   DateRange,
   ModelInfo,
   ModelOpportunity,
+  QualityResponse,
   UsageMetrics,
   VirtualKey,
 } from '../types';
@@ -105,6 +106,81 @@ export const InsightsTab: FC<InsightsTabProps> = ({
       pageSize: 1000,
     });
   }, [api, dateRange]);
+
+  const {
+    value: quality,
+    loading: qualityLoading,
+    error: qualityError,
+    retry: retryQuality,
+  } = useAsyncRetry(async (): Promise<QualityResponse> => {
+    // Older api doubles lack getQuality — treat as unconfigured, never fake data.
+    if (typeof api.getQuality !== 'function') return { configured: false };
+    return api.getQuality({
+      startDate: toLocalDay(dateRange.start),
+      endDate: toLocalDay(dateRange.end),
+    });
+  }, [api, dateRange]);
+
+  const renderQualityBody = () => {
+    if (qualityLoading) return <Skeleton variant="rounded" height={120} />;
+    if (qualityError) {
+      return (
+        <Alert severity="error">
+          Failed to load quality scores: {(qualityError as Error).message || 'Unknown error'}
+          <Box sx={{ mt: 1 }}>
+            <Button size="small" onClick={retryQuality}>Retry</Button>
+          </Box>
+        </Alert>
+      );
+    }
+    if (!quality || quality.configured === false) {
+      return (
+        <EmptyState
+          message="Quality scores — connect Langfuse"
+          hint="LLM-as-judge evaluation is not configured for this deployment."
+        />
+      );
+    }
+    if (quality.byModel.length === 0 && quality.scores.length === 0) {
+      return <EmptyState message="No quality data in this period" />;
+    }
+    return (
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+        {quality.byModel.length > 0 && (
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+            {quality.byModel.map(m => (
+              <Box key={m.model}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 1, mb: 0.5 }}>
+                  <Typography variant="body2" sx={{ fontWeight: 600 }}>{m.model}</Typography>
+                  <Typography variant="caption" color="text.secondary" sx={{ fontVariantNumeric: 'tabular-nums' }}>
+                    {fmtUsd(m.cost)} · {fmtInt(m.tokens)} tokens
+                  </Typography>
+                </Box>
+              </Box>
+            ))}
+          </Box>
+        )}
+        {quality.scores.length > 0 && (
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+            {quality.scores.map(s => (
+              <Box key={s.name}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 1, mb: 0.5 }}>
+                  <Typography variant="body2" sx={{ fontWeight: 600 }}>{s.name}</Typography>
+                  <Typography variant="caption" color="text.secondary" sx={{ fontVariantNumeric: 'tabular-nums' }}>
+                    {s.avg.toFixed(2)}{s.count > 0 ? ` · n=${fmtInt(s.count)}` : ''}
+                  </Typography>
+                </Box>
+                <Meter
+                  value={s.avg <= 1 ? s.avg * 100 : s.avg}
+                  ariaLabel={`${s.name}: average ${s.avg.toFixed(2)}`}
+                />
+              </Box>
+            ))}
+          </Box>
+        )}
+      </Box>
+    );
+  };
 
   const logStats = useMemo(() => {
     const rows = spendLogs?.data ?? [];
@@ -310,10 +386,7 @@ export const InsightsTab: FC<InsightsTabProps> = ({
         title="Quality scores"
         description="Independent answer-quality scores from Langfuse, when connected."
       >
-        <EmptyState
-          message="Quality scores — connect Langfuse"
-          hint="LLM-as-judge evaluation is not configured for this deployment."
-        />
+        {renderQualityBody()}
       </SectionCard>
     </Box>
   );

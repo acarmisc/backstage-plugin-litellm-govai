@@ -41,6 +41,7 @@ const keysFixture = (): VirtualKey[] => ([
 const mockApi = (over: Partial<LiteLlmApiInterface> = {}) =>
   ({
     getSpendLogs: async () => ({ data: [], total: 0, page: 1, pageSize: 25, truncated: false }),
+    getQuality: async () => ({ configured: false }),
     ...over,
   } as unknown as LiteLlmApiInterface);
 
@@ -91,5 +92,44 @@ describe('InsightsTab', () => {
       'flagged model must sort above the healthy one',
     );
     assert.ok(screen.getByText('Downgrade candidate'));
+  });
+
+  test('quality card shows skeleton while loading', () => {
+    renderTab({ api: mockApi({ getQuality: () => new Promise(() => {}) as any }) });
+    assert.ok(
+      document.querySelector('.MuiSkeleton-root'),
+      'a loading skeleton must render while quality loads',
+    );
+  });
+
+  test('quality card shows the connect-Langfuse empty state when unconfigured', async () => {
+    renderTab();
+    assert.ok(await screen.findByText('Quality scores — connect Langfuse'));
+  });
+
+  test('quality card renders per-model rows and score meters when configured', async () => {
+    renderTab({
+      api: mockApi({
+        getQuality: async () => ({
+          configured: true,
+          byModel: [
+            { model: 'gpt-4o', cost: 1.5, tokens: 1000, avgLatencyMs: 250, requests: 10 },
+          ],
+          scores: [{ name: 'helpfulness', avg: 0.8, count: 5 }],
+        }) as any,
+      }),
+    });
+    assert.ok(await screen.findByText('gpt-4o'));
+    assert.ok(screen.getByText('$1.50 · 1,000 tokens'));
+    assert.ok(screen.getByText('helpfulness'));
+    assert.ok(screen.getByText('0.80 · n=5'));
+    assert.ok(screen.getByRole('meter', { name: 'helpfulness: average 0.80' }));
+  });
+
+  test('quality card shows an empty state when configured but period has no data', async () => {
+    renderTab({
+      api: mockApi({ getQuality: async () => ({ configured: true, byModel: [], scores: [] }) as any }),
+    });
+    assert.ok(await screen.findByText('No quality data in this period'));
   });
 });

@@ -330,3 +330,29 @@ export interface PaginatedSpendLogs {
   pageSize: number;
   truncated: boolean;
 }
+
+/** One model's Langfuse usage slice (cost/tokens/latency for the period). */
+export interface QualityByModel {
+  model: string;
+  cost: number;
+  tokens: number;
+  avgLatencyMs: number | null;
+  requests: number;
+}
+
+/** One Langfuse numeric score averaged over the period. */
+export interface QualityScore {
+  name: string;
+  avg: number;
+  count: number;
+}
+
+/** Quality summary served by GET /insights/quality when Langfuse is connected. */
+export interface QualitySummary {
+  configured: true;
+  byModel: QualityByModel[];
+  scores: QualityScore[];
+}
+
+/** GET /insights/quality response: data, or `{configured:false}` when Langfuse is off. */
+export type QualityResponse = { configured: false } | QualitySummary;

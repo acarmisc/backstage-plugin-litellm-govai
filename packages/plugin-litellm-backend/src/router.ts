@@ -31,6 +31,7 @@ import {
 import { readTeamBudgetVisibility } from './teamBudgetVisibility';
 import { readOpencodeConfig } from './opencode';
 import { readMemberBreakdownConfig } from './teamMemberUsage';
+import { readLangfuseConfig } from './langfuse';
 import { sendError } from './errors';
 import type { RouterContext } from './routes/context';
 import { createRequireUser } from './routes/middleware/withUser';
@@ -108,6 +109,7 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
   const teamBudgetVisibility = readTeamBudgetVisibility(config);
   const opencodeCfg = readOpencodeConfig(config);
   const memberBreakdownCfg = readMemberBreakdownConfig(config);
+  const langfuseCfg = readLangfuseConfig(config);
   const catalogClient = options.catalogClient ?? new CatalogClient({ discoveryApi: discovery });
 
   if (provisioningEnabled) {
@@ -171,6 +173,7 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
     teamBudgetVisibility,
     opencodeCfg,
     memberBreakdownCfg,
+    langfuseCfg,
 
     // Helper functions - defined inline below this object
     authorizeKeyAction: async (req: Request, keyId: string) => {
