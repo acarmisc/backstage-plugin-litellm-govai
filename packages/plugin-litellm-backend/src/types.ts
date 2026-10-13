@@ -19,6 +19,9 @@ export {
   type GenerateKeyResponse,
   type AuditLogEntry,
   type PaginatedAuditLogs,
+  type SpendLogEntry,
+  type SpendLogsParams,
+  type PaginatedSpendLogs,
 } from '@acarmisc/backstage-plugin-litellm-common';
 
 export interface CreateTeamRequest {

@@ -269,3 +269,64 @@ export interface CreateTeamResponse {
   team_id: string;
   team_alias?: string;
 }
+
+export interface InsightSummary {
+  costPer1kTokens: number | null;
+  costPerRequest: number | null;
+  outputInputRatio: number | null;
+  retryWasteUsd: number;
+  retryWasteShare: number;
+  successRate: number | null;
+  premiumShare: number;
+  premiumSpend: number;
+  topModelConcentration: number;
+  projectedMonthSpend: number | null;
+  burnMultiple: number | null;
+}
+
+export interface PracticeScore {
+  total: number;
+  checks: Array<{ id: string; label: string; points: number; maxPoints: number; detail: string }>;
+}
+
+export interface ModelOpportunity {
+  model: string;
+  spend: number;
+  requests: number;
+  failureRate: number | null;
+  avgCostPerRequest: number;
+  flag: 'downgrade-candidate' | 'failure-outlier' | 'ok';
+  hint: string;
+}
+
+export interface SpendLogEntry {
+  requestId: string;
+  model: string;
+  spend: number;
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+  status: string;
+  cacheHit: boolean;
+  userId?: string;
+  teamId?: string;
+  keyHash?: string;
+  timestamp: string;
+}
+
+export interface SpendLogsParams {
+  startDate: string;
+  endDate: string;
+  userId?: string;
+  teamId?: string;
+  page?: number;
+  pageSize?: number;
+}
+
+export interface PaginatedSpendLogs {
+  data: SpendLogEntry[];
+  total: number;
+  page: number;
+  pageSize: number;
+  truncated: boolean;
+}

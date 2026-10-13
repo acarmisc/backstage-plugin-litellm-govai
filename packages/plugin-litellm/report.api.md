@@ -21,6 +21,7 @@ import { FetchApi } from '@backstage/frontend-plugin-api';
 import { GenerateKeyRequest } from '@acarmisc/backstage-plugin-litellm-common';
 import { GenerateKeyResponse } from '@acarmisc/backstage-plugin-litellm-common';
 import { IconElement } from '@backstage/frontend-plugin-api';
+import { InsightSummary } from '@acarmisc/backstage-plugin-litellm-common';
 import { JSX as JSX_2 } from 'react';
 import { litellmTeamCreatePermission } from '@acarmisc/backstage-plugin-litellm-common';
 import { litellmTeamKnowledgebaseManagePermission } from '@acarmisc/backstage-plugin-litellm-common';
@@ -28,11 +29,16 @@ import { litellmTeamManagePermission } from '@acarmisc/backstage-plugin-litellm-
 import { litellmTeamMcpManagePermission } from '@acarmisc/backstage-plugin-litellm-common';
 import { litellmTeamMembersManagePermission } from '@acarmisc/backstage-plugin-litellm-common';
 import { ModelInfo } from '@acarmisc/backstage-plugin-litellm-common';
+import { ModelOpportunity } from '@acarmisc/backstage-plugin-litellm-common';
 import { OverridableExtensionDefinition } from '@backstage/frontend-plugin-api';
 import { OverridableFrontendPlugin } from '@backstage/frontend-plugin-api';
 import { PaginatedAuditLogs } from '@acarmisc/backstage-plugin-litellm-common';
+import { PaginatedSpendLogs } from '@acarmisc/backstage-plugin-litellm-common';
+import { PracticeScore } from '@acarmisc/backstage-plugin-litellm-common';
 import { ReactNode } from 'react';
 import { RouteRef } from '@backstage/frontend-plugin-api';
+import { SpendLogEntry } from '@acarmisc/backstage-plugin-litellm-common';
+import { SpendLogsParams } from '@acarmisc/backstage-plugin-litellm-common';
 import { TeamInfo } from '@acarmisc/backstage-plugin-litellm-common';
 import { TeamMember } from '@acarmisc/backstage-plugin-litellm-common';
 import { TeamMemberUsage } from '@acarmisc/backstage-plugin-litellm-common';
@@ -113,6 +119,8 @@ export { GenerateKeyRequest }
 
 export { GenerateKeyResponse }
 
+export { InsightSummary }
+
 // @public (undocumented)
 export const KeyFormDialog: FC<KeyFormDialogProps>;
 
@@ -167,6 +175,10 @@ export class LiteLlmApi implements LiteLlmApiInterface {
     }): Promise<TeamInfo>;
     // (undocumented)
     blockKey(keyId: string): Promise<void>;
+    connectLocalClient(redirectUri: string, team?: string): Promise<{
+        key: string;
+        team: string | null;
+    }>;
     // (undocumented)
     createTeam(request: CreateTeamRequest): Promise<CreateTeamResponse>;
     // (undocumented)
@@ -183,6 +195,8 @@ export class LiteLlmApi implements LiteLlmApiInterface {
     getManagedTeams(): Promise<TeamInfo[]>;
     // (undocumented)
     getMcpServers(): Promise<McpServerInfo[]>;
+    // (undocumented)
+    getSpendLogs(params: SpendLogsParams): Promise<PaginatedSpendLogs>;
     // (undocumented)
     getTeamMemberUsage(teamId: string, startDate: string, endDate: string): Promise<TeamMemberUsage>;
     // (undocumented)
@@ -234,6 +248,11 @@ export interface LiteLlmApiInterface {
     // (undocumented)
     blockKey(keyId: string): Promise<void>;
     // (undocumented)
+    connectLocalClient(redirectUri: string, team?: string): Promise<{
+        key: string;
+        team: string | null;
+    }>;
+    // (undocumented)
     createTeam(request: CreateTeamRequest): Promise<CreateTeamResponse>;
     // (undocumented)
     deleteKey(keyId: string): Promise<{
@@ -249,6 +268,8 @@ export interface LiteLlmApiInterface {
     getManagedTeams(): Promise<TeamInfo[]>;
     // (undocumented)
     getMcpServers(): Promise<McpServerInfo[]>;
+    // (undocumented)
+    getSpendLogs(params: SpendLogsParams): Promise<PaginatedSpendLogs>;
     getTeamMemberUsage(teamId: string, startDate: string, endDate: string): Promise<TeamMemberUsage>;
     // (undocumented)
     getTeams(): Promise<TeamInfo[]>;
@@ -430,6 +451,46 @@ routeRef?: RouteRef;
 noHeader?: boolean;
 };
 }>;
+"page:litellm/connect": OverridableExtensionDefinition<    {
+kind: "page";
+name: "connect";
+config: {
+path: string | undefined;
+title: string | undefined;
+};
+configInput: {
+path?: string | undefined;
+title?: string | undefined;
+};
+output: ExtensionDataRef<string, "core.routing.path", {}> | ExtensionDataRef<RouteRef<AnyRouteRefParams>, "core.routing.ref", {
+optional: true;
+}> | ExtensionDataRef<JSX_2.Element, "core.reactElement", {}> | ExtensionDataRef<string, "core.title", {
+optional: true;
+}> | ExtensionDataRef<IconElement, "core.icon", {
+optional: true;
+}>;
+inputs: {
+pages: ExtensionInput<ConfigurableExtensionDataRef<JSX_2.Element, "core.reactElement", {}> | ConfigurableExtensionDataRef<string, "core.routing.path", {}> | ConfigurableExtensionDataRef<RouteRef<AnyRouteRefParams>, "core.routing.ref", {
+optional: true;
+}> | ConfigurableExtensionDataRef<string, "core.title", {
+optional: true;
+}> | ConfigurableExtensionDataRef<IconElement, "core.icon", {
+optional: true;
+}>, {
+singleton: false;
+optional: false;
+internal: false;
+}>;
+};
+params: {
+path: string;
+title?: string;
+icon?: IconElement;
+loader?: () => Promise<JSX_2.Element>;
+routeRef?: RouteRef;
+noHeader?: boolean;
+};
+}>;
 }>;
 export default litellmPlugin;
 export { litellmPlugin }
@@ -461,7 +522,17 @@ export interface McpServerInfo {
 
 export { ModelInfo }
 
+export { ModelOpportunity }
+
 export { PaginatedAuditLogs }
+
+export { PaginatedSpendLogs }
+
+export { PracticeScore }
+
+export { SpendLogEntry }
+
+export { SpendLogsParams }
 
 export { TeamInfo }
 

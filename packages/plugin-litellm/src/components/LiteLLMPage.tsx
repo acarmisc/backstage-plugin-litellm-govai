@@ -23,7 +23,7 @@ import { UsageStats } from './UsageStats';
 import { LiteLLMBudgetWidget } from './LiteLLMBudgetWidget';
 import { TeamUsage } from './TeamUsage';
 import { ModelsTable } from './ModelsTable';
-import { AuditLog } from './AuditLog';
+import { InsightsTab } from './InsightsTab';
 import { liteLlmApiRef } from '../api';
 import { toLocalDay } from '../dates';
 import {
@@ -46,8 +46,8 @@ import {
 const PERIOD_LS_KEY = 'litellm_usage_period';
 type DatePreset = 'today' | '24h' | '7d' | '30d';
 
-type PageTab = 'overview' | 'keys' | 'teams' | 'models' | 'audit';
-const PAGE_TABS: readonly PageTab[] = ['overview', 'keys', 'teams', 'models', 'audit'];
+type PageTab = 'overview' | 'keys' | 'teams' | 'models' | 'insights';
+const PAGE_TABS: readonly PageTab[] = ['overview', 'keys', 'teams', 'models', 'insights'];
 const isPageTab = (v: string | null): v is PageTab =>
   !!v && (PAGE_TABS as readonly string[]).includes(v);
 
@@ -477,7 +477,7 @@ export const LiteLLMPage: FC = () => {
       <Tab label="Keys" value="keys" />
       <Tab label="Teams" value="teams" />
       <Tab label="Models" value="models" />
-      {userInfo.can_view_audit && <Tab label="Audit Log" value="audit" />}
+      <Tab label="Insights" value="insights" />
     </Tabs>
   );
 
@@ -658,7 +658,16 @@ export const LiteLLMPage: FC = () => {
         );
       })()}
 
-      {activeTab === 'audit' && userInfo.can_view_audit && <AuditLog api={api} />}
+      {activeTab === 'insights' && (
+        <InsightsTab
+          api={api}
+          usage={usage ?? null}
+          models={allModels ?? []}
+          keys={keys ?? []}
+          dateRange={dateRange}
+          loading={usageLoading}
+        />
+      )}
       </Content>
 
       <KeyFormDialog

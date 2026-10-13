@@ -7,7 +7,7 @@ LiteLLM.
 
 | Component | Use it for |
 |---|---|
-| `LiteLLMPage` | The full page (mounted at `/litellm` by the plugin): Overview, Keys, Teams, Models, and Audit Log for members of `litellm.audit.group`. `?tab=keys` opens a tab, `?generate=1` opens the Generate New Key dialog |
+| `LiteLLMPage` | The full page (mounted at `/litellm` by the plugin): Overview, Keys, Teams, Models, and Insights. `?tab=keys` opens a tab, `?generate=1` opens the Generate New Key dialog |
 | `LiteLLMHomeWidget` | Homepage card: spend, tokens and a daily sparkline |
 | `LiteLLMBudgetWidget` | Homepage card explaining the budget hierarchy, with a meter per limit |
 | `LiteLLMBudgetGauges` | Condensed budget card: one ring per enforcement level and a month-to-date chart |
@@ -24,9 +24,10 @@ LiteLLM.
 | **Teams** | **Models** |
 | ![Teams tab: team budgets, daily spend and members](images/teams.png) | ![Models tab: the models a team may call, with costs and limits](images/models.png) |
 
-The **Audit Log** tab appears for members of `litellm.audit.group`:
-
-![Audit Log tab](images/audit-log.png)
+The **Insights** tab shows cost efficiency for the selected period: per-token
+and per-request cost, retry waste, a practice score (idle/uncapped keys),
+cache-hit savings and failed-request waste from spend logs, and a
+per-model opportunities table (failure outliers, downgrade candidates).
 
 ### Dialogs
 

@@ -11,6 +11,8 @@ import {
   UpdateKeyRequest,
   AuditLogsParams,
   PaginatedAuditLogs,
+  SpendLogsParams,
+  PaginatedSpendLogs,
   LiteLlmConfig,
   VectorStoreInfo,
   McpServerInfo,
@@ -58,6 +60,7 @@ export interface LiteLlmApiInterface {
   /** Per-member breakdown; rejects (403/404) when the caller may not see it. */
   getTeamMemberUsage(teamId: string, startDate: string, endDate: string): Promise<TeamMemberUsage>;
   getAuditLogs(params: AuditLogsParams): Promise<PaginatedAuditLogs>;
+  getSpendLogs(params: SpendLogsParams): Promise<PaginatedSpendLogs>;
   getConfig(): Promise<LiteLlmConfig>;
   createTeam(request: CreateTeamRequest): Promise<CreateTeamResponse>;
   updateTeam(teamId: string, request: UpdateTeamRequest): Promise<TeamInfo>;
@@ -315,6 +318,18 @@ export class LiteLlmApi implements LiteLlmApiInterface {
       start_date: startDate,
       end_date: endDate,
     });
+  }
+
+  async getSpendLogs(params: SpendLogsParams): Promise<PaginatedSpendLogs> {
+    const strParams: Record<string, string> = {
+      start_date: params.startDate,
+      end_date: params.endDate,
+    };
+    if (params.userId) strParams.userId = params.userId;
+    if (params.teamId) strParams.teamId = params.teamId;
+    if (params.page !== undefined) strParams.page = String(params.page);
+    if (params.pageSize !== undefined) strParams.page_size = String(params.pageSize);
+    return this.get<PaginatedSpendLogs>('/insights/spend-logs', strParams);
   }
 
   async getConfig(): Promise<LiteLlmConfig> {

@@ -17,6 +17,9 @@ import {
   UpdateTeamRequest,
   AuditLogsParams,
   PaginatedAuditLogs,
+  SpendLogEntry,
+  SpendLogsParams,
+  PaginatedSpendLogs,
 } from './types';
 
 const DEFAULT_TIMEOUT = 30000;
@@ -765,5 +768,109 @@ export class LiteLLMClient {
       }
       throw err;
     }
+  }
+
+  /**
+   * Returns per-request spend rows from `/spend/logs` (retried as
+   * `/spend/logs/v2` on 404 — the path differs across LiteLLM versions).
+   * The response shape is version-dependent, so rows are parsed tolerantly:
+   * a bare array or a `{ data | results | logs }` envelope, with per-field
+   * fallbacks in normalizeSpendLogs.
+   */
+  async getSpendLogs(
+    params: SpendLogsParams & { apiKeyHash?: string },
+  ): Promise<PaginatedSpendLogs> {
+    const page = params.page ?? 1;
+    const pageSize = Math.min(params.pageSize ?? 25, 100);
+    const buildQuery = () => {
+      const q = new URLSearchParams({
+        summarize: 'false',
+        start_date: params.startDate,
+        end_date: params.endDate,
+        page: String(page),
+        page_size: String(pageSize),
+      });
+      if (params.userId) q.set('user_id', params.userId);
+      if (params.teamId) q.set('team_id', params.teamId);
+      if (params.apiKeyHash) q.set('api_key', params.apiKeyHash);
+      return q.toString();
+    };
+    let raw: any;
+    try {
+      raw = await this.request<any>(`/spend/logs?${buildQuery()}`);
+    } catch (err: unknown) {
+      if (err instanceof LiteLLMUpstreamError && err.status === 404) {
+        raw = await this.request<any>(`/spend/logs/v2?${buildQuery()}`);
+      } else {
+        throw err;
+      }
+    }
+    return this.normalizeSpendLogs(raw, page, pageSize);
+  }
+
+  private normalizeSpendLogs(
+    raw: any,
+    page: number,
+    pageSize: number,
+  ): PaginatedSpendLogs {
+    const rows: any[] = Array.isArray(raw)
+      ? raw
+      : Array.isArray(raw?.data)
+        ? raw.data
+        : Array.isArray(raw?.results)
+          ? raw.results
+          : Array.isArray(raw?.logs)
+            ? raw.logs
+            : [];
+    const toNum = (v: unknown, fallback = 0): number => {
+      const n =
+        typeof v === 'number'
+          ? v
+          : typeof v === 'string' && v.trim() !== ''
+            ? Number(v)
+            : NaN;
+      return Number.isFinite(n) ? n : fallback;
+    };
+    const data: SpendLogEntry[] = rows.map((r: any) => {
+      const promptTokens = toNum(
+        r?.prompt_tokens ?? r?.promptTokens ?? r?.input_tokens,
+      );
+      const completionTokens = toNum(
+        r?.completion_tokens ?? r?.completionTokens ?? r?.output_tokens,
+      );
+      return {
+        requestId: String(r?.request_id ?? r?.requestId ?? r?.id ?? ''),
+        model: String(r?.model ?? r?.model_name ?? ''),
+        spend: toNum(r?.spend ?? r?.cost),
+        promptTokens,
+        completionTokens,
+        totalTokens: toNum(
+          r?.total_tokens ?? r?.totalTokens,
+          promptTokens + completionTokens,
+        ),
+        status: String(r?.status ?? r?.request_status ?? 'unknown'),
+        cacheHit: Boolean(r?.cache_hit ?? r?.cacheHit ?? r?.cached === true),
+        ...(r?.user_id ?? r?.userId
+          ? { userId: String(r.user_id ?? r.userId) }
+          : {}),
+        ...(r?.team_id ?? r?.teamId
+          ? { teamId: String(r.team_id ?? r.teamId) }
+          : {}),
+        ...(r?.api_key ?? r?.keyHash
+          ? { keyHash: String(r.api_key ?? r.keyHash) }
+          : {}),
+        timestamp: String(
+          r?.timestamp ?? r?.startTime ?? r?.created_at ?? r?.date ?? '',
+        ),
+      };
+    });
+    // Upstream truncation is not signalled in-band, so truncated = full page.
+    return {
+      data,
+      total: toNum(raw?.total ?? raw?.total_count, data.length),
+      page,
+      pageSize,
+      truncated: data.length >= pageSize,
+    };
   }
 }

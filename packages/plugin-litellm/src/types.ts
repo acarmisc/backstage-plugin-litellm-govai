@@ -19,7 +19,13 @@ export {
   type AuditLogEntry,
   type PaginatedAuditLogs,
   type AuditLogsParams,
+  type SpendLogEntry,
+  type SpendLogsParams,
+  type PaginatedSpendLogs,
   type CreateTeamResponse,
+  type InsightSummary,
+  type PracticeScore,
+  type ModelOpportunity,
 } from '@acarmisc/backstage-plugin-litellm-common';
 
 export interface VectorStoreInfo {

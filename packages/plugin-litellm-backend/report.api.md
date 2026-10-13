@@ -31,10 +31,13 @@ import { litellmTeamMembersManagePermission } from '@acarmisc/backstage-plugin-l
 import { LoggerService } from '@backstage/backend-plugin-api';
 import { ModelInfo } from '@acarmisc/backstage-plugin-litellm-common';
 import { PaginatedAuditLogs } from '@acarmisc/backstage-plugin-litellm-common';
+import { PaginatedSpendLogs } from '@acarmisc/backstage-plugin-litellm-common';
 import { PermissionsService } from '@backstage/backend-plugin-api';
 import { Request as Request_2 } from 'express';
 import { RootConfigService } from '@backstage/backend-plugin-api';
 import { Router } from 'express';
+import { SpendLogEntry } from '@acarmisc/backstage-plugin-litellm-common';
+import { SpendLogsParams } from '@acarmisc/backstage-plugin-litellm-common';
 import { TeamInfo } from '@acarmisc/backstage-plugin-litellm-common';
 import { TeamMember } from '@acarmisc/backstage-plugin-litellm-common';
 import { TeamMemberUsage } from '@acarmisc/backstage-plugin-litellm-common';
@@ -254,6 +257,9 @@ export class LiteLLMClient {
     generateKey(request: GenerateKeyRequest): Promise<GenerateKeyResponse>;
     // (undocumented)
     getAuditLogs(params: AuditLogsParams): Promise<PaginatedAuditLogs>;
+    getSpendLogs(params: SpendLogsParams & {
+        apiKeyHash?: string;
+    }): Promise<PaginatedSpendLogs>;
     getTeamInfo(teamId: string): Promise<TeamInfo>;
     // (undocumented)
     getTeamUsage(teamId: string, startDate: string, endDate: string): Promise<UsageMetrics>;
@@ -375,6 +381,8 @@ export function newDefaultVerifier(cfg: BridgeConfig): TokenVerifier;
 
 export { PaginatedAuditLogs }
 
+export { PaginatedSpendLogs }
+
 // @public (undocumented)
 export interface ProvisioningDefaults {
     // (undocumented)
@@ -467,6 +475,10 @@ export interface RoleConfig {
     // (undocumented)
     userRole?: string;
 }
+
+export { SpendLogEntry }
+
+export { SpendLogsParams }
 
 // @public
 export type TeamAdminCheck = {

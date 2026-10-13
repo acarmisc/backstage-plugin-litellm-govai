@@ -13,6 +13,8 @@ import {
   UpdateKeyRequest,
   AuditLogsParams,
   PaginatedAuditLogs,
+  SpendLogsParams,
+  PaginatedSpendLogs,
   LiteLlmConfig,
   CreateTeamRequest,
   CreateTeamResponse,
@@ -365,6 +367,9 @@ export class MockLiteLlmApi implements LiteLlmApiInterface {
       ? auditLogs.filter(a => a.table_name === params.table_name)
       : auditLogs;
     return { audit_logs: rows, total: rows.length, page: 1, page_size: params.page_size ?? 25, total_pages: 1 };
+  }
+  async getSpendLogs(params: SpendLogsParams): Promise<PaginatedSpendLogs> {
+    return { data: [], total: 0, page: params.page ?? 1, pageSize: params.pageSize ?? 25, truncated: false };
   }
   async getConfig(): Promise<LiteLlmConfig> {
     return {

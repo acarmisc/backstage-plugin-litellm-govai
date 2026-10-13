@@ -41,6 +41,7 @@ import { registerOpencodeRoutes } from './routes/opencode';
 import { registerTeamsRoutes } from './routes/teams';
 import { registerObjectPermissionsRoutes } from './routes/objectPermissions';
 import { registerTeamUsageRoutes } from './routes/teamUsage';
+import { registerInsightsRoutes } from './routes/insights';
 import { registerBridgeRoutes } from './routes/bridge';
 import { withTeamFetchRetry } from './http/teamFetch';
 
@@ -377,7 +378,7 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
   // string or body — so service/external principals (and anonymous callers)
   // are rejected instead of being allowed to name an arbitrary user_id.
   const requireUser = createRequireUser(ctx);
-  router.use(['/user/info', '/keys', '/usage'], requireUser);
+  router.use(['/user/info', '/keys', '/usage', '/insights'], requireUser);
 
   // Register config routes (/health, /config, /openapi.json, /provisioning/preview)
   registerConfigRoutes(router, ctx);
@@ -387,6 +388,7 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
   registerTeamsRoutes(router, ctx);
   registerObjectPermissionsRoutes(router, ctx);
   registerTeamUsageRoutes(router, ctx);
+  registerInsightsRoutes(router, ctx);
   registerBridgeRoutes(router, ctx, { config, tokenVerifier: options.tokenVerifier });
 
   return router;

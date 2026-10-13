@@ -119,7 +119,7 @@ of the `teamAdmin` block can stay in place.
    Drop the `knowledgebase` / `mcp` / `delete` lines you don't want to delegate.
 
 Without the RBAC plugin, the feature still works as a pure group gate (checks
-1 + 2) — the same model the audit tab uses — but you cannot then scope
+1 + 2) — the same model the audit route uses — but you cannot then scope
 individual `litellm.team.*` permissions per role.
 
 ### Mapping a Keycloak group to the admin group
@@ -155,8 +155,8 @@ relations, not token claims.)
   a team referenced by `litellm.provisioning` config without `?force=true`,
   and is best avoided — block the team in LiteLLM instead (this plugin has no
   team block action).
-- Team / member / access changes appear in the **Audit Log** tab under the
-  `Team`, `Team member`, and `Team access (KB / MCP)` table filters.
+- Team / member / access changes are recorded as audit events (queryable via
+  `GET /audit`) under the `Team`, `Team member`, and `Team access (KB / MCP)` tables.
 - `metadata.owning_group` on teams is trusted by the authorization system and
   is editable by LiteLLM admins; guard access to the LiteLLM admin interface accordingly.
 
