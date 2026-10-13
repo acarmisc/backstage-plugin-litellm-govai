@@ -73,7 +73,7 @@ describe('modelOpportunities', () => {
 
   test('flags failure outlier when rate exceeds 2x overall', () => {
     const u = usageFixture();
-    (u.usage_by_model as any)['flaky'] = breakdown({
+    (u.usage_by_model as any).flaky = breakdown({
       total_spend: 1, total_tokens: 10_000, prompt_tokens: 5_000, completion_tokens: 5_000,
       api_requests: 20, successful_requests: 10, failed_requests: 10,
     });

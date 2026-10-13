@@ -125,7 +125,7 @@ function req(
 const DATES = 'start_date=2026-09-01&end_date=2026-10-01';
 
 describe('GET /insights/spend-logs', () => {
-  let harnesses: Harness[] = [];
+  const harnesses: Harness[] = [];
   after(() => {
     for (const h of harnesses) h.server.close();
   });

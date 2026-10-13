@@ -16,7 +16,10 @@ const costPer1k = (
 ): number | null => {
   const info = models?.find(m => m.model_name === model);
   const listed =
-    info?.input_cost_per_token != null && info?.output_cost_per_token != null
+    info?.input_cost_per_token !== undefined &&
+    info?.input_cost_per_token !== null &&
+    info?.output_cost_per_token !== undefined &&
+    info?.output_cost_per_token !== null
       ? ((info.input_cost_per_token + info.output_cost_per_token) / 2) * 1000
       : null;
   if (listed !== null) return listed;
@@ -69,11 +72,17 @@ export const scorePractices = (
 ): PracticeScore => {
   // Thresholds reward low waste, low premium concentration, diffuse model
   // mix, and capped/active keys; each check degrades in coarse bands.
-  const waste = summary.retryWasteShare <= 0.01 ? 30 : summary.retryWasteShare <= 0.05 ? 20 : summary.retryWasteShare <= 0.1 ? 10 : 0;
-  const premium = summary.premiumShare <= 0.2 ? 25 : summary.premiumShare <= 0.5 ? 15 : summary.premiumShare <= 0.8 ? 5 : 0;
-  const conc = summary.topModelConcentration <= 0.5 ? 20 : summary.topModelConcentration <= 0.8 ? 10 : 0;
+  const band = (v: number, limits: Array<[number, number]>): number => {
+    for (const [max, pts] of limits) {
+      if (v <= max) return pts;
+    }
+    return 0;
+  };
+  const waste = band(summary.retryWasteShare, [[0.01, 30], [0.05, 20], [0.1, 10]]);
+  const premium = band(summary.premiumShare, [[0.2, 25], [0.5, 15], [0.8, 5]]);
+  const conc = band(summary.topModelConcentration, [[0.5, 20], [0.8, 10]]);
   const bad = keyStats.totalKeys > 0 ? (keyStats.idleKeys + keyStats.uncappedKeys) / keyStats.totalKeys : 0;
-  const hygiene = keyStats.totalKeys === 0 ? 25 : bad === 0 ? 25 : bad <= 0.2 ? 15 : bad <= 0.5 ? 5 : 0;
+  const hygiene = keyStats.totalKeys === 0 ? 25 : band(bad, [[0, 25], [0.2, 15], [0.5, 5]]);
   const checks: PracticeScore['checks'] = [
     { id: 'retry-waste', label: 'Low retry waste', points: waste, maxPoints: 30, detail: `${(summary.retryWasteShare * 100).toFixed(1)}% of requests failed` },
     { id: 'premium-mix', label: 'Balanced model mix', points: premium, maxPoints: 25, detail: `${(summary.premiumShare * 100).toFixed(1)}% of spend on premium models` },

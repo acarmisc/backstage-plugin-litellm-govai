@@ -813,23 +813,18 @@ export class LiteLLMClient {
     page: number,
     pageSize: number,
   ): PaginatedSpendLogs {
-    const rows: any[] = Array.isArray(raw)
-      ? raw
-      : Array.isArray(raw?.data)
-        ? raw.data
-        : Array.isArray(raw?.results)
-          ? raw.results
-          : Array.isArray(raw?.logs)
-            ? raw.logs
-            : [];
+    const rows: any[] = [];
+    if (Array.isArray(raw)) rows.push(...raw);
+    else if (Array.isArray(raw?.data)) rows.push(...raw.data);
+    else if (Array.isArray(raw?.results)) rows.push(...raw.results);
+    else if (Array.isArray(raw?.logs)) rows.push(...raw.logs);
     const toNum = (v: unknown, fallback = 0): number => {
-      const n =
-        typeof v === 'number'
-          ? v
-          : typeof v === 'string' && v.trim() !== ''
-            ? Number(v)
-            : NaN;
-      return Number.isFinite(n) ? n : fallback;
+      if (typeof v === 'number') return Number.isFinite(v) ? v : fallback;
+      if (typeof v === 'string' && v.trim() !== '') {
+        const n = Number(v);
+        return Number.isFinite(n) ? n : fallback;
+      }
+      return fallback;
     };
     const data: SpendLogEntry[] = rows.map((r: any) => {
       const promptTokens = toNum(
