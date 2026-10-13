@@ -10,6 +10,18 @@ commit/PR that bumps the version in `package.json`. Format follows the
 Earlier history: `git log -- packages/plugin-litellm` or the
  [GitHub tags](https://github.com/acarmisc/backstage-plugin-litellm-govai/tags).
 
+## 0.39.0
+
+Requires `@acarmisc/backstage-plugin-litellm-backend` `0.24.0` or later for the
+quality panel (`GET /insights/quality`).
+
+### Minor Changes
+
+- **feat(insights): card explainers + live quality scores.** Every Insights
+  card carries a one-line description of its metrics, and the Quality scores
+  card renders per-model cost/tokens with score meters when Langfuse is
+  connected (stays a "not configured" empty state otherwise).
+
 ## 0.38.0
 
 Requires `@acarmisc/backstage-plugin-litellm-backend` `0.23.0` or later for the

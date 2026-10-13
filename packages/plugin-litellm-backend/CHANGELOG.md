@@ -9,6 +9,17 @@ commit/PR that bumps the version in `package.json`. Format follows the
 Earlier history: `git log -- packages/plugin-litellm-backend` or the
 [GitHub tags](https://github.com/acarmisc/backstage-plugin-litellm-govai/tags).
 
+## 0.24.0
+
+Requires `@acarmisc/backstage-plugin-litellm-common` `0.4.0`.
+
+### Minor Changes
+
+- **feat(insights): generic Langfuse integration.** `GET /insights/quality`
+  proxies the Langfuse Metrics API v2 behind `litellm.langfuse.*` config
+  (off by default; secret stays server-side). Disabled, half-configured,
+  unreachable or v3 servers degrade to `{configured:false}`.
+
 ## 0.23.0
 
 Requires `@acarmisc/backstage-plugin-litellm-common` `0.3.0`.

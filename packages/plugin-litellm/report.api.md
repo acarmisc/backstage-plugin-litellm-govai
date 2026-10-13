@@ -35,6 +35,10 @@ import { OverridableFrontendPlugin } from '@backstage/frontend-plugin-api';
 import { PaginatedAuditLogs } from '@acarmisc/backstage-plugin-litellm-common';
 import { PaginatedSpendLogs } from '@acarmisc/backstage-plugin-litellm-common';
 import { PracticeScore } from '@acarmisc/backstage-plugin-litellm-common';
+import { QualityByModel } from '@acarmisc/backstage-plugin-litellm-common';
+import { QualityResponse } from '@acarmisc/backstage-plugin-litellm-common';
+import { QualityScore } from '@acarmisc/backstage-plugin-litellm-common';
+import { QualitySummary } from '@acarmisc/backstage-plugin-litellm-common';
 import { ReactNode } from 'react';
 import { RouteRef } from '@backstage/frontend-plugin-api';
 import { SpendLogEntry } from '@acarmisc/backstage-plugin-litellm-common';
@@ -196,6 +200,8 @@ export class LiteLlmApi implements LiteLlmApiInterface {
     // (undocumented)
     getMcpServers(): Promise<McpServerInfo[]>;
     // (undocumented)
+    getQuality(params: SpendLogsParams): Promise<QualityResponse>;
+    // (undocumented)
     getSpendLogs(params: SpendLogsParams): Promise<PaginatedSpendLogs>;
     // (undocumented)
     getTeamMemberUsage(teamId: string, startDate: string, endDate: string): Promise<TeamMemberUsage>;
@@ -268,6 +274,7 @@ export interface LiteLlmApiInterface {
     getManagedTeams(): Promise<TeamInfo[]>;
     // (undocumented)
     getMcpServers(): Promise<McpServerInfo[]>;
+    getQuality(params: SpendLogsParams): Promise<QualityResponse>;
     // (undocumented)
     getSpendLogs(params: SpendLogsParams): Promise<PaginatedSpendLogs>;
     getTeamMemberUsage(teamId: string, startDate: string, endDate: string): Promise<TeamMemberUsage>;
@@ -529,6 +536,14 @@ export { PaginatedAuditLogs }
 export { PaginatedSpendLogs }
 
 export { PracticeScore }
+
+export { QualityByModel }
+
+export { QualityResponse }
+
+export { QualityScore }
+
+export { QualitySummary }
 
 export { SpendLogEntry }
 

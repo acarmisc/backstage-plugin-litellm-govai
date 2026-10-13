@@ -33,6 +33,10 @@ import { ModelInfo } from '@acarmisc/backstage-plugin-litellm-common';
 import { PaginatedAuditLogs } from '@acarmisc/backstage-plugin-litellm-common';
 import { PaginatedSpendLogs } from '@acarmisc/backstage-plugin-litellm-common';
 import { PermissionsService } from '@backstage/backend-plugin-api';
+import { QualityByModel } from '@acarmisc/backstage-plugin-litellm-common';
+import { QualityResponse } from '@acarmisc/backstage-plugin-litellm-common';
+import { QualityScore } from '@acarmisc/backstage-plugin-litellm-common';
+import { QualitySummary } from '@acarmisc/backstage-plugin-litellm-common';
 import { Request as Request_2 } from 'express';
 import { RootConfigService } from '@backstage/backend-plugin-api';
 import { Router } from 'express';
@@ -417,6 +421,14 @@ export class ProvisioningError extends Error {
 
 // @public
 export function provisionUser(client: LiteLLMClient, userId: string, defaults: ProvisioningDefaults, profile: BackstageUserProfile, backstageEntity: string | undefined, logger: LoggerService): Promise<UserInfo | null>;
+
+export { QualityByModel }
+
+export { QualityResponse }
+
+export { QualityScore }
+
+export { QualitySummary }
 
 // @public (undocumented)
 export function readBridgeConfig(config: Config): BridgeConfig;

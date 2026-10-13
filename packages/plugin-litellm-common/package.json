@@ -1,6 +1,6 @@
 {
   "name": "@acarmisc/backstage-plugin-litellm-common",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Shared types, permissions, and schemas for the LiteLLM Backstage plugin",
   "backstage": {
     "role": "common-library",
