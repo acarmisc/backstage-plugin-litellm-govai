@@ -201,13 +201,18 @@ export const InsightsTab: FC<InsightsTabProps> = ({
       <SectionCard
         title="Efficiency"
         subtitle={`${dateRange.start.toLocaleDateString()} – ${dateRange.end.toLocaleDateString()}`}
+        description="What each token and request costs, and how much failed requests waste."
       >
         {renderEfficiencyBody()}
       </SectionCard>
 
       <Grid container spacing={2} alignItems="flex-start">
         <Grid item xs={12} md={5}>
-          <SectionCard title="Practice score" subtitle="Out of 100">
+          <SectionCard
+            title="Practice score"
+            subtitle="Out of 100"
+            description="Five everyday habits in one number — higher means cheaper, safer usage."
+          >
             {loading ? (
               <Skeleton variant="rounded" height={160} />
             ) : (
@@ -239,13 +244,21 @@ export const InsightsTab: FC<InsightsTabProps> = ({
         </Grid>
 
         <Grid item xs={12} md={7}>
-          <SectionCard title="Cache & errors" subtitle="From spend logs (estimate)">
+          <SectionCard
+            title="Cache & errors"
+            subtitle="From spend logs (estimate)"
+            description="Repeated prompts served from cache save money; failures still bill."
+          >
             {renderSpendLogsBody()}
           </SectionCard>
         </Grid>
       </Grid>
 
-      <SectionCard title="Model opportunities" flush>
+      <SectionCard
+        title="Model opportunities"
+        description="Where a cheaper model or a reliability fix would save the most."
+        flush
+      >
         {loading ? (
           <Box sx={{ p: 2.5 }}><Skeleton variant="rounded" height={120} /></Box>
         ) : (
@@ -293,7 +306,10 @@ export const InsightsTab: FC<InsightsTabProps> = ({
         )}
       </SectionCard>
 
-      <SectionCard title="Quality scores">
+      <SectionCard
+        title="Quality scores"
+        description="Independent answer-quality scores from Langfuse, when connected."
+      >
         <EmptyState
           message="Quality scores — connect Langfuse"
           hint="LLM-as-judge evaluation is not configured for this deployment."

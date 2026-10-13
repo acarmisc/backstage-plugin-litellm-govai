@@ -12,11 +12,13 @@ import { toneColor, type Tone } from './tokens';
 export const SectionCard: FC<{
   title?: ReactNode;
   subtitle?: ReactNode;
+  /** One-line explainer under the title row. */
+  description?: ReactNode;
   actions?: ReactNode;
   /** Set when the body renders its own edge-to-edge content (e.g. a table). */
   flush?: boolean;
   children: ReactNode;
-}> = ({ title, subtitle, actions, flush = false, children }) => (
+}> = ({ title, subtitle, description, actions, flush = false, children }) => (
   <Paper sx={{ borderRadius: 2, overflow: 'hidden' }}>
     {(title || actions) && (
       <Box
@@ -42,6 +44,11 @@ export const SectionCard: FC<{
           </Box>
         )}
       </Box>
+    )}
+    {description && (
+      <Typography variant="body2" color="text.secondary" sx={{ px: 2.5, pb: 1.5 }}>
+        {description}
+      </Typography>
     )}
     <Box sx={flush ? undefined : { px: 2.5, pb: 2.5, pt: title ? 0 : 2.5 }}>{children}</Box>
   </Paper>
