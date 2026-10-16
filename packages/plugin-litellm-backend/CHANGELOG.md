@@ -9,6 +9,25 @@ commit/PR that bumps the version in `package.json`. Format follows the
 Earlier history: `git log -- packages/plugin-litellm-backend` or the
 [GitHub tags](https://github.com/acarmisc/backstage-plugin-litellm-govai/tags).
 
+## 0.25.0
+
+Requires `@acarmisc/backstage-plugin-litellm-common` `0.5.0`.
+
+### Minor Changes
+
+- **feat(bridge): bind MCP servers to a key.** `POST /bridge/keys` accepts
+  `mcp_servers`; every name must be in the key's team list
+  (`object_permission.mcp_servers`), else 403 with `disallowed_mcp_servers`
+  (400 without `team_id`). Valid names go to LiteLLM as
+  `object_permission.mcp_servers` (`[]` becomes `no-mcp-servers`). A team with no
+  list grants nothing, because an empty team list means "unrestricted" to
+  LiteLLM and must not let a member name servers the team was never given.
+  Omitting the field keeps the previous behaviour. LiteLLM enforces MCP access
+  per key, so a team-level grant alone is not enough for a CLI-minted key.
+- **feat(bridge): `GET /bridge/mcp?team_id=`** returns the team's MCP server
+  names (`[{ server_name }]`) for CLI pickers; the caller must belong to the
+  team. Added to `BRIDGE_UNAUTHENTICATED_PATHS`.
+
 ## 0.24.0
 
 Requires `@acarmisc/backstage-plugin-litellm-common` `0.4.0`.

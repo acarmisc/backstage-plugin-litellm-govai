@@ -10,6 +10,13 @@ commit/PR that bumps the version in `package.json`. Format follows the
 Earlier history: `git log -- packages/plugin-litellm` or the
  [GitHub tags](https://github.com/acarmisc/backstage-plugin-litellm-govai/tags).
 
+## 0.40.0
+
+### Minor Changes
+
+- chore: depend on `@acarmisc/backstage-plugin-litellm-common` `0.5.0` (new
+  optional `mcp_servers` key-creation field). No UI change.
+
 ## 0.39.0
 
 Requires `@acarmisc/backstage-plugin-litellm-backend` `0.24.0` or later for the

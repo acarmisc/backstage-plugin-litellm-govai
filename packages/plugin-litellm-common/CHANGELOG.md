@@ -3,6 +3,14 @@
 Shared, dependency-light code for the LiteLLM Backstage plugin packages. This
 changelog is maintained by hand.
 
+## 0.5.0
+
+### Minor Changes
+
+- feat: `mcp_servers` on the key-creation schema (names only, `[]` = none) and
+  `object_permission` on `GenerateKeyRequest`, so a key can be bound to a subset
+  of its team's MCP servers.
+
 ## 0.4.0
 
 ### Minor Changes
