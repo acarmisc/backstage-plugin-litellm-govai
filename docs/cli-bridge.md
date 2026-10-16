@@ -41,6 +41,7 @@ edit their username in the Keycloak realm (the default).
 | `/bridge/user/info` | GET | Caller's `user_id`, team ids and team display names |
 | `/bridge/keys` | GET | List the caller's keys |
 | `/bridge/keys` | POST | Mint a key for the caller |
+| `/bridge/mcp` | GET | MCP server names the caller's team may use (`?team_id=` required; caller must belong to the team) |
 | `/bridge/models` | GET | Model catalogue; with `?team_id=` only that team's models (caller must belong to the team) |
 
 Configuration:

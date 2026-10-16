@@ -41,3 +41,20 @@ describe('createGenerateKeyInputSchema budget_duration', () => {
     assert.strictEqual(r.data.budget_duration, undefined);
   });
 });
+
+describe('createGenerateKeyInputSchema mcp_servers', () => {
+  const schema = createGenerateKeyInputSchema(base);
+
+  test('accepts names, an empty list, and leaves it optional', () => {
+    assert.ok(schema.safeParse({ alias: 'k', mcp_servers: ['context7', 'my.server_1'] }).success);
+    assert.ok(schema.safeParse({ alias: 'k', mcp_servers: [] }).success);
+    assert.ok(schema.safeParse({ alias: 'k' }).success);
+  });
+
+  test('rejects separators, whitespace, control characters and oversized lists', () => {
+    for (const bad of ['a,b', 'a b', 'a\r\nx', '', '../x']) {
+      assert.ok(!schema.safeParse({ alias: 'k', mcp_servers: [bad] }).success, JSON.stringify(bad));
+    }
+    assert.ok(!schema.safeParse({ alias: 'k', mcp_servers: Array.from({ length: 51 }, (_, i) => `s${i}`) }).success);
+  });
+});

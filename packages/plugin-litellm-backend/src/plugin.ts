@@ -11,6 +11,7 @@ import { litellmPermissions } from '@acarmisc/backstage-plugin-litellm-common';
 export const BRIDGE_UNAUTHENTICATED_PATHS = [
   '/bridge/health',
   '/bridge/keys',
+  '/bridge/mcp',
   '/bridge/models',
   '/bridge/user/info',
 ];

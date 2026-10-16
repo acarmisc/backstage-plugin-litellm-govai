@@ -23,6 +23,7 @@ import {
 } from '@acarmisc/backstage-plugin-litellm-common';
 
 import { findDisallowedModels } from './modelAccess';
+import { NO_MCP_SERVERS, findDisallowedMcpServers, teamMcpServers } from './mcpAccess';
 
 /** User identity for key creation — already resolved by the caller. */
 export interface KeyCreateUser {
@@ -120,6 +121,10 @@ export async function createKeyForUser(
     }
   }
 
+  // The team is read at most once per mint, and only if a check needs it.
+  let teamPromise: ReturnType<typeof client.getTeamInfo> | undefined;
+  const getTeam = (teamId: string) => (teamPromise ??= client.getTeamInfo(teamId));
+
   // ── Validate models are subset of allowed ────────────────────────────
   if (input.models && input.models.length > 0) {
     // When team_id is set, use team's models; otherwise use user's models.
@@ -129,7 +134,7 @@ export async function createKeyForUser(
       // Fetch team info to get its allowed models.
       // Fail closed: if the team can't be fetched the error propagates
       // rather than silently skipping the model check.
-      const teamInfo = await client.getTeamInfo(input.team_id);
+      const teamInfo = await getTeam(input.team_id);
       allowedModels = teamInfo?.models ?? [];
     } else {
       allowedModels = userInfo?.models ?? [];
@@ -173,6 +178,24 @@ export async function createKeyForUser(
     ...serverMetadata,
   };
 
+  // ── Validate MCP servers are a subset of the team's ──────────────────
+  // [] is "no MCP servers" and needs no team; any name needs a team to be
+  // checked against, so a client cannot grant itself servers it has no
+  // ceiling for.
+  const mcpServers = input.mcp_servers ? [...new Set(input.mcp_servers)] : undefined;
+  if (mcpServers && mcpServers.length > 0) {
+    if (!input.team_id) {
+      throw new KeyServiceError(400, { error: 'team_id is required when mcp_servers is set' });
+    }
+    const disallowed = findDisallowedMcpServers(mcpServers, teamMcpServers(await getTeam(input.team_id)));
+    if (disallowed.length > 0) {
+      throw new KeyServiceError(403, {
+        error: 'One or more requested MCP servers are not allowed',
+        disallowed_mcp_servers: disallowed,
+      });
+    }
+  }
+
   // ── Build upstream request EXPLICITLY from parsed fields ──────────────
   // Never spread the raw body; only include fields we've explicitly validated.
   const upstreamRequest: GenerateKeyRequest = {
@@ -207,6 +230,11 @@ export async function createKeyForUser(
   }
   if (input.key_type !== undefined) {
     upstreamRequest.key_type = input.key_type;
+  }
+  if (mcpServers) {
+    upstreamRequest.object_permission = {
+      mcp_servers: mcpServers.length > 0 ? mcpServers : [NO_MCP_SERVERS],
+    };
   }
   upstreamRequest.metadata = enrichedMetadata;
 

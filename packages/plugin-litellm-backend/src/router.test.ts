@@ -5114,6 +5114,115 @@ describe('bridge routes: identity matches the UI', () => {
     }
   });
 
+  test('GET /bridge/mcp?team_id lists the team servers, requires team_id and membership', async () => {
+    const h = await startHarness({
+      config: bridgeConfig({ 'litellm.bridge.allowedEmailDomains': ['abstract.it'] }),
+      tokenVerifier: verifier,
+      client: mockClient({
+        userInfo: { user_id: 'degiorgis', teams: ['t1'] },
+        getTeamInfo: async () => ({ team_id: 't1', object_permission: { mcp_servers: ['context7', 'jira'] } }),
+      }),
+    });
+    try {
+      const ok = await req(h.baseUrl, 'GET', '/bridge/mcp?team_id=t1', bearer);
+      assert.strictEqual(ok.status, 200);
+      assert.deepStrictEqual(ok.body, [{ server_name: 'context7' }, { server_name: 'jira' }]);
+      assert.strictEqual((await req(h.baseUrl, 'GET', '/bridge/mcp', bearer)).status, 400);
+      assert.strictEqual((await req(h.baseUrl, 'GET', '/bridge/mcp?team_id=other', bearer)).status, 403);
+    } finally {
+      h.server.close();
+    }
+  });
+
+  test('POST /bridge/keys forwards mcp_servers as object_permission after a team subset check', async () => {
+    const h = await startHarness({
+      config: bridgeConfig({ 'litellm.bridge.allowedEmailDomains': ['abstract.it'] }),
+      tokenVerifier: verifier,
+      client: mockClient({
+        userInfo: { user_id: 'degiorgis', teams: ['t1'] },
+        getTeamInfo: async () => ({ team_id: 't1', object_permission: { mcp_servers: ['context7', 'jira'] } }),
+      }),
+    });
+    try {
+      const last = () => h.client.calls.generateKey[h.client.calls.generateKey.length - 1];
+      const ok = await req(h.baseUrl, 'POST', '/bridge/keys', {
+        ...bearer, body: { alias: 'cli', max_budget: 5, team_id: 't1', mcp_servers: ['context7', 'context7'] },
+      });
+      assert.strictEqual(ok.status, 200);
+      assert.deepStrictEqual(last().object_permission, { mcp_servers: ['context7'] });
+
+      const none = await req(h.baseUrl, 'POST', '/bridge/keys', {
+        ...bearer, body: { alias: 'cli2', max_budget: 5, mcp_servers: [] },
+      });
+      assert.strictEqual(none.status, 200);
+      assert.deepStrictEqual(last().object_permission, { mcp_servers: ['no-mcp-servers'] });
+
+      const mintedBefore = h.client.calls.generateKey.length;
+      const outside = await req(h.baseUrl, 'POST', '/bridge/keys', {
+        ...bearer, body: { alias: 'cli3', max_budget: 5, team_id: 't1', mcp_servers: ['context7', 'secret'] },
+      });
+      assert.strictEqual(outside.status, 403);
+      assert.deepStrictEqual(outside.body.disallowed_mcp_servers, ['secret']);
+      const noTeam = await req(h.baseUrl, 'POST', '/bridge/keys', {
+        ...bearer, body: { alias: 'cli4', max_budget: 5, mcp_servers: ['context7'] },
+      });
+      assert.strictEqual(noTeam.status, 400);
+      assert.strictEqual(h.client.calls.generateKey.length, mintedBefore, 'rejected requests must not mint');
+      const foreign = await req(h.baseUrl, 'POST', '/bridge/keys', {
+        ...bearer, body: { alias: 'cli6', max_budget: 5, team_id: 'other', mcp_servers: ['context7'] },
+      });
+      assert.strictEqual(foreign.status, 403);
+      assert.strictEqual(h.client.calls.generateKey.length, mintedBefore);
+
+      const plain = await req(h.baseUrl, 'POST', '/bridge/keys', { ...bearer, body: { alias: 'cli5', max_budget: 5 } });
+      assert.strictEqual(plain.status, 200);
+      assert.ok(!('object_permission' in last()));
+    } finally {
+      h.server.close();
+    }
+  });
+
+  test('POST /bridge/keys refuses MCP servers for a team without an MCP list and when the team cannot be read', async () => {
+    const empty = await startHarness({
+      config: bridgeConfig({ 'litellm.bridge.allowedEmailDomains': ['abstract.it'] }),
+      tokenVerifier: verifier,
+      client: mockClient({
+        userInfo: { user_id: 'degiorgis', teams: ['t1'] },
+        getTeamInfo: async () => ({ team_id: 't1' }),
+        listMcpServers: async () => [{ id: 'x', name: 'secret' }],
+      }),
+    });
+    try {
+      const r = await req(empty.baseUrl, 'POST', '/bridge/keys', {
+        ...bearer, body: { alias: 'cli', max_budget: 5, team_id: 't1', mcp_servers: ['secret'] },
+      });
+      assert.strictEqual(r.status, 403);
+      assert.strictEqual(empty.client.calls.generateKey.length, 0);
+      const list = await req(empty.baseUrl, 'GET', '/bridge/mcp?team_id=t1', bearer);
+      assert.deepStrictEqual(list.body, []);
+    } finally {
+      empty.server.close();
+    }
+
+    const down = await startHarness({
+      config: bridgeConfig({ 'litellm.bridge.allowedEmailDomains': ['abstract.it'] }),
+      tokenVerifier: verifier,
+      client: mockClient({
+        userInfo: { user_id: 'degiorgis', teams: ['t1'] },
+        getTeamInfo: async () => { throw new Error('upstream down'); },
+      }),
+    });
+    try {
+      const r = await req(down.baseUrl, 'POST', '/bridge/keys', {
+        ...bearer, body: { alias: 'cli', max_budget: 5, team_id: 't1', mcp_servers: ['context7'] },
+      });
+      assert.ok(r.status >= 500, `expected an upstream error, got ${r.status}`);
+      assert.strictEqual(down.client.calls.generateKey.length, 0);
+    } finally {
+      down.server.close();
+    }
+  });
+
   test('userIdDomain, when set, is applied like in the UI', async () => {
     const h = await startHarness({
       config: bridgeConfig({ 'litellm.userIdDomain': 'abstract.it' }),

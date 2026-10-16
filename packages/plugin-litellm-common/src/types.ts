@@ -205,6 +205,8 @@ export interface GenerateKeyRequest {
   rpm_limit?: number;
   key_type?: string;
   metadata?: Record<string, string>;
+  /** Backend-only: MCP permissions forwarded to LiteLLM, built from the validated `mcp_servers`. */
+  object_permission?: { mcp_servers?: string[] };
   /** Backend-only: user ID for the key owner (set from authenticated principal). */
   user_id?: string;
 }

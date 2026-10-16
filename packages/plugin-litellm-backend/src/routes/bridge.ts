@@ -13,6 +13,7 @@ import {
   type BridgeIdentityOptions,
 } from '../bridge';
 import { isModelAllowed, ALL_PROXY_MODELS, type GenerateKeyInput } from '@acarmisc/backstage-plugin-litellm-common';
+import { teamMcpServers } from '../services/mcpAccess';
 import { createKeyForUser, KeyServiceError, type KeyCreateContext } from '../services/keyService';
 import { sendError } from '../errors';
 import { createGenerateKeyInputSchema } from '@acarmisc/backstage-plugin-litellm-common';
@@ -238,6 +239,36 @@ export function registerBridgeRoutes(router: Router, ctx: RouterContext, bridgeO
         handleBridgeError(error, res);
       }
     });
+    // MCP servers the caller's team may use, for CLI clients that let the user
+    // pick which to attach to a new key. team_id is required: unlike models
+    // there is no meaningful unscoped catalogue to hand out.
+    router.get('/bridge/mcp', async (req: Request, res: Response) => {
+      try {
+        const claims = await requireClaims(req);
+        const teamId = typeof req.query.team_id === 'string' ? req.query.team_id : '';
+        if (!teamId) {
+          res.status(400).json({ error: 'team_id is required' });
+          return;
+        }
+        const user = await getOrProvisionUserFromClaims(
+          client,
+          claims,
+          provisioningEnabled,
+          provisioningDefaults,
+          logger,
+          bridgeIdentity,
+        );
+        if (!(user.teams ?? []).includes(teamId)) {
+          res.status(403).json({ error: 'Access denied: team is not one of your teams', team_id: teamId });
+          return;
+        }
+        const names = teamMcpServers(await client.getTeamInfo(teamId));
+        res.json(names.map(server_name => ({ server_name })));
+      } catch (error: unknown) {
+        handleBridgeError(error, res);
+      }
+    });
+
   } else if (bridgeCfg.enabled) {
     logger.warn(
       'litellm.bridge.enabled is true but no verifier could be built — bridge endpoints not mounted',

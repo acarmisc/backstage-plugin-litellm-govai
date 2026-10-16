@@ -79,7 +79,9 @@ Only when `litellm.bridge.enabled: true`.
    models) and is stamped `created_via: abby-cli`. Backstage permissions are
    not evaluated on this path: there is no Backstage credential.
 6. The key is returned to the CLI. `GET /bridge/user/info` and
-   `GET /bridge/models?team_id=` support team and model pickers.
+   `GET /bridge/models?team_id=` support team and model pickers; `GET /bridge/mcp?team_id=`
+   lists the team's MCP servers, and `POST /bridge/keys` accepts `mcp_servers`
+   (a subset of them) to bind to the new key.
 
 ### 4. Team admin adds a member
 

@@ -32,6 +32,9 @@ export interface KeyValidationConfig {
   allowedBudgetDurations?: string[];
 }
 
+/** Allowed characters in an MCP server name sent to or listed by the bridge. */
+export const MCP_SERVER_NAME_RE = /^[A-Za-z0-9._-]+$/;
+
 /**
  * Creates a strict Zod schema for GenerateKeyInput validation.
  * Rejects unknown fields and enforces server-side ceilings.
@@ -97,6 +100,19 @@ export function createGenerateKeyInputSchema(config: KeyValidationConfig) {
         .max(config.maxRpm, `rpm_limit must not exceed ${config.maxRpm}`)
         .optional(),
       team_id: z.string().optional(),
+      // MCP servers the key may use; must be a subset of the team's (checked
+      // server-side). [] denies every MCP server; omitted leaves LiteLLM's
+      // default. Names only, so the value is safe to forward as-is.
+      mcp_servers: z
+        .array(
+          z
+            .string()
+            .min(1)
+            .max(128)
+            .regex(MCP_SERVER_NAME_RE, 'mcp_servers entries may only use letters, digits, ".", "_" and "-"'),
+        )
+        .max(50, 'mcp_servers array is too large')
+        .optional(),
       // The UI always sends 'llm_api'; no other key type may be requested.
       key_type: z.literal('llm_api').optional(),
       metadata: z
