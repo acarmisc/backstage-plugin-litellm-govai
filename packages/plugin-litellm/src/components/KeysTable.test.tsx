@@ -2,7 +2,7 @@ import { fakeAlertApi } from '../testing/setupDom';
 import { describe, test, afterEach } from 'node:test';
 import assert from 'node:assert';
 import { ComponentProps } from 'react';
-import { render, cleanup, screen, waitFor, within } from '@testing-library/react';
+import { render, cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { TestApiProvider, mockApis } from '@backstage/test-utils';
@@ -140,5 +140,29 @@ describe('KeysTable', () => {
 
     await userEvent.click(d.getByRole('button', { name: /revoke/i }));
     await waitFor(() => assert.deepStrictEqual(deleted, ['hash-test-12345']));
+  });
+
+  test('renders the team a key belongs to in its own column', () => {
+    renderTable({ keys: [mockKey] });
+    assert.ok(screen.getByRole('columnheader', { name: 'Team' }));
+    assert.ok(screen.getByText('team-1'));
+  });
+
+  test('team filter narrows rows to the chosen team', async () => {
+    const otherTeamKey: VirtualKey = {
+      ...mockKey,
+      key_alias: 'other-alias',
+      token: 'hash-other-team',
+      team_id: 'team-2',
+    };
+    renderTable({ keys: [mockKey, otherTeamKey] });
+
+    assert.ok(screen.getByText('other-alias'));
+    fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Team' }));
+    await userEvent.click(await screen.findByRole('option', { name: 'team-2' }));
+
+    await waitFor(() => assert.strictEqual(screen.queryByText('test-alias'), null));
+    assert.ok(screen.getByText('other-alias'));
+    assert.ok(screen.getByText('1 of 2 key'));
   });
 });

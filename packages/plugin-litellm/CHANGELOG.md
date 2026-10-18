@@ -10,6 +10,12 @@ commit/PR that bumps the version in `package.json`. Format follows the
 Earlier history: `git log -- packages/plugin-litellm` or the
  [GitHub tags](https://github.com/acarmisc/backstage-plugin-litellm-govai/tags).
 
+## 0.41.0
+
+### Minor Changes
+
+- feat(keys): Team column and team filter on the Keys page.
+
 ## 0.40.0
 
 ### Minor Changes

@@ -15,6 +15,7 @@ import DialogTitle from '@mui/material/DialogTitle';
 import DialogContent from '@mui/material/DialogContent';
 import DialogActions from '@mui/material/DialogActions';
 import TextField from '@mui/material/TextField';
+import MenuItem from '@mui/material/MenuItem';
 import CircularProgress from '@mui/material/CircularProgress';
 import Skeleton from '@mui/material/Skeleton';
 import InputAdornment from '@mui/material/InputAdornment';
@@ -203,6 +204,7 @@ export const KeysTable: FC<KeysTableProps> = ({
 
   // Filter
   const [filterText, setFilterText] = useState('');
+  const [teamFilter, setTeamFilter] = useState('');
   const [sortKey, setSortKey] = useState<SortKey>('created');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
 
@@ -215,10 +217,18 @@ export const KeysTable: FC<KeysTableProps> = ({
     }
   };
 
+  const teamIds = useMemo(
+    () => [...new Set(keys.map(k => k.team_id).filter((t): t is string => !!t))].sort(),
+    [keys],
+  );
+
   const filteredKeys = useMemo(() => {
     let result = keys;
     // Apply status filter (expired/expiring)
     result = filterKeysByStatus(result, filter);
+    if (teamFilter) {
+      result = result.filter(k => k.team_id === teamFilter);
+    }
     // Apply text filter
     if (filterText.trim()) {
       const q = filterText.toLowerCase();
@@ -231,7 +241,7 @@ export const KeysTable: FC<KeysTableProps> = ({
       const comparison = compareKeys(a, b, sortKey);
       return sortDirection === 'asc' ? comparison : -comparison;
     });
-  }, [keys, filterText, sortKey, sortDirection, filter]);
+  }, [keys, filterText, teamFilter, sortKey, sortDirection, filter]);
 
   const handleOpenEdit = (k: VirtualKey) => {
     onEditKey(k);
@@ -305,7 +315,7 @@ export const KeysTable: FC<KeysTableProps> = ({
     if (loading) {
       return (
         <TableRow>
-          <TableCell colSpan={8} sx={{ py: 2 }}>
+          <TableCell colSpan={9} sx={{ py: 2 }}>
             <Skeleton variant="rounded" height={140} />
           </TableCell>
         </TableRow>
@@ -314,8 +324,8 @@ export const KeysTable: FC<KeysTableProps> = ({
     if (filteredKeys.length === 0) {
       return (
         <TableRow>
-          <TableCell colSpan={8}>
-            {filterText ? (
+          <TableCell colSpan={9}>
+            {filterText || teamFilter ? (
               <EmptyState
                 message="No keys match that filter"
                 hint="Try a different alias or model name."
@@ -366,6 +376,9 @@ export const KeysTable: FC<KeysTableProps> = ({
               </Typography>
               {key.blocked && <StatusPill label="Blocked" tone="danger" />}
             </Box>
+          </TableCell>
+          <TableCell>
+            <Typography variant="body2" color="text.secondary">{key.team_id || '—'}</Typography>
           </TableCell>
           <TableCell>
             <Box display="flex" alignItems="center" gap={0.5}>
@@ -485,7 +498,7 @@ export const KeysTable: FC<KeysTableProps> = ({
         subtitle={
           loading
             ? 'Loading…'
-            : `${filteredKeys.length}${filterText ? ` of ${keys.length}` : ''} key${filteredKeys.length === 1 ? '' : 's'}`
+            : `${filteredKeys.length}${filterText || teamFilter ? ` of ${keys.length}` : ''} key${filteredKeys.length === 1 ? '' : 's'}`
         }
         flush
         actions={
@@ -505,6 +518,19 @@ export const KeysTable: FC<KeysTableProps> = ({
                 ),
               }}
             />
+            <TextField
+              select
+              size="small"
+              label="Team"
+              value={teamFilter}
+              onChange={e => setTeamFilter(e.target.value)}
+              sx={{ minWidth: 160 }}
+            >
+              <MenuItem value="">All teams</MenuItem>
+              {teamIds.map(id => (
+                <MenuItem key={id} value={id}>{id}</MenuItem>
+              ))}
+            </TextField>
             {expiredKeys.length > 0 && (
               <Button
                 variant="outlined"
@@ -545,6 +571,7 @@ export const KeysTable: FC<KeysTableProps> = ({
                 <TableCell sortDirection={sortKey === 'alias' ? sortDirection : false}>
                   <TableSortLabel active={sortKey === 'alias'} direction={sortKey === 'alias' ? sortDirection : 'asc'} onClick={() => handleSort('alias')}>Alias</TableSortLabel>
                 </TableCell>
+                <TableCell>Team</TableCell>
                 <TableCell>Key ID</TableCell>
                 <TableCell sortDirection={sortKey === 'created' ? sortDirection : false}>
                   <TableSortLabel active={sortKey === 'created'} direction={sortKey === 'created' ? sortDirection : 'asc'} onClick={() => handleSort('created')}>Created</TableSortLabel>
