@@ -311,6 +311,9 @@ export class MockLiteLlmApi implements LiteLlmApiInterface {
       { id: 'support-kb', name: 'Support knowledge base' },
     ];
   }
+  async getObjectNames(): Promise<{ vector_stores: VectorStoreInfo[]; mcp_servers: McpServerInfo[] }> {
+    return { vector_stores: await this.getVectorStores(), mcp_servers: await this.getMcpServers() };
+  }
   async setTeamKnowledgeBases(teamId: string, vectorStores: string[]): Promise<TeamInfo> {
     const team = teams.find(t => t.team_id === teamId) ?? teams[0];
     return { ...team, object_permission: { ...team.object_permission, vector_stores: vectorStores } };

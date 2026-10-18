@@ -53,6 +53,8 @@ export interface LiteLlmApiInterface {
   ): Promise<TeamInfo>;
   removeTeamMember(teamId: string, userEntityRef: string): Promise<TeamInfo>;
   getVectorStores(): Promise<VectorStoreInfo[]>;
+  /** Id → name for every KB and MCP server, for labels only (not allowlist-filtered). */
+  getObjectNames(): Promise<{ vector_stores: VectorStoreInfo[]; mcp_servers: McpServerInfo[] }>;
   setTeamKnowledgeBases(teamId: string, vectorStores: string[]): Promise<TeamInfo>;
   getMcpServers(): Promise<McpServerInfo[]>;
   setTeamMcpServers(teamId: string, mcpServers: string[]): Promise<TeamInfo>;
@@ -279,6 +281,11 @@ export class LiteLlmApi implements LiteLlmApiInterface {
   // server-side to the operator's allowlist.
   async getVectorStores(): Promise<VectorStoreInfo[]> {
     return this.get<VectorStoreInfo[]>('/vector-stores');
+  }
+
+  // Names only, readable by any signed-in user; never used for the picker.
+  async getObjectNames(): Promise<{ vector_stores: VectorStoreInfo[]; mcp_servers: McpServerInfo[] }> {
+    return this.get<{ vector_stores: VectorStoreInfo[]; mcp_servers: McpServerInfo[] }>('/object-names');
   }
 
   async setTeamKnowledgeBases(

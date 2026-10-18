@@ -263,7 +263,14 @@ export function registerBridgeRoutes(router: Router, ctx: RouterContext, bridgeO
           return;
         }
         const names = teamMcpServers(await client.getTeamInfo(teamId));
-        res.json(names.map(server_name => ({ server_name })));
+        // Display alias for each server; server_name stays the value sent back.
+        const catalogue = await client.listMcpServers().catch(() => []);
+        res.json(
+          names.map(server_name => ({
+            server_name,
+            name: catalogue.find(s => s.id === server_name || s.name === server_name)?.name ?? server_name,
+          })),
+        );
       } catch (error: unknown) {
         handleBridgeError(error, res);
       }

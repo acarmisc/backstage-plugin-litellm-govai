@@ -307,6 +307,14 @@ describe('team knowledge bases', () => {
     assert.deepStrictEqual(result, stores);
   });
 
+  test('getObjectNames → GET /object-names', async () => {
+    const names = { vector_stores: [{ id: 'vs_1', name: 'HR' }], mcp_servers: [] };
+    const { api, calls } = makeApi(200, names);
+    const result = await api.getObjectNames();
+    assert.ok(calls[0].url.endsWith('/object-names'), calls[0].url);
+    assert.deepStrictEqual(result, names);
+  });
+
   test('setTeamKnowledgeBases → PUT /teams/:id/knowledge-bases with body', async () => {
     const { api, calls } = makeApi(200, { team_id: 't1' });
     await api.setTeamKnowledgeBases('t1', ['vs_1', 'vs_2']);

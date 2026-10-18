@@ -201,13 +201,18 @@ export const LiteLLMPage: FC = () => {
   const teamMgmtEnabled = liteLlmConfig?.teamManagement?.enabled ?? false;
   const objectPermsEnabled = liteLlmConfig?.teamManagement?.objectPermissionsEnabled ?? false;
 
-  // Loaded regardless of the object-permissions flag so the Teams page can show names.
+  // Allowlisted items offered in the team picker only.
   const { value: vectorStores } = useAsync(
     () => api.getVectorStores().catch(() => []),
     [api],
   );
   const { value: mcpServers } = useAsync(
     () => api.getMcpServers().catch(() => []),
+    [api],
+  );
+  // Names for every attached item, so members see labels too.
+  const { value: objectNames } = useAsync(
+    () => api.getObjectNames().catch(() => ({ vector_stores: [], mcp_servers: [] })),
     [api],
   );
 
@@ -623,8 +628,8 @@ export const LiteLLMPage: FC = () => {
             onEditTeam={t => setManageTeam({ mode: 'edit', team: t })}
             canCreate={teamMgmtEnabled && canCreateTeam && !readOnly}
             onCreateTeam={() => setManageTeam({ mode: 'create' })}
-            vectorStores={vectorStores ?? []}
-            mcpServers={mcpServers ?? []}
+            vectorStores={objectNames?.vector_stores ?? []}
+            mcpServers={objectNames?.mcp_servers ?? []}
             canManageMembers={t =>
               teamMgmtEnabled &&
               canManageMembers &&
@@ -764,6 +769,7 @@ export const LiteLLMPage: FC = () => {
           teamMgmtEnabled && objectPermsEnabled && canManageKnowledgeBases
         }
         vectorStores={vectorStores ?? []}
+        vectorStoreNames={objectNames?.vector_stores ?? []}
         onSaveKnowledgeBases={async vectorStoreIds => {
           if (!manageTeam?.team) return;
           try {
@@ -784,6 +790,7 @@ export const LiteLLMPage: FC = () => {
           teamMgmtEnabled && objectPermsEnabled && canManageMcpServers
         }
         mcpServers={mcpServers ?? []}
+        mcpServerNames={objectNames?.mcp_servers ?? []}
         onSaveMcpServers={async mcpServerIds => {
           if (!manageTeam?.team) return;
           try {

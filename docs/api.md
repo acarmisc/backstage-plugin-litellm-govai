@@ -30,6 +30,7 @@ instead of maintaining this table by hand.
 | `/teams/:teamId/knowledge-bases` | PUT | Set a team's knowledge bases (`litellm.team.knowledgebase.manage`) |
 | `/mcp-servers` | GET | Allowlisted MCP servers (`litellm.team.mcp.manage`) |
 | `/teams/:teamId/mcp-servers` | PUT | Set a team's MCP servers (`litellm.team.mcp.manage`) |
+| `/object-names` | GET | Id → name for all knowledge bases and MCP servers, for labels; any signed-in user, not allowlist-filtered |
 | `/teams/:teamId/usage` | GET | Usage metrics for a team (`start_date`, `end_date` required) |
 | `/teams/:teamId/usage/members` | GET | Per-member usage breakdown for a team (opt-in, see [Permissions](permissions.md#per-member-team-usage)) |
 | `/usage` | GET | Get usage metrics and analytics for the current user |

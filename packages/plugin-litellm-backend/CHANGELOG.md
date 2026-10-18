@@ -9,6 +9,15 @@ commit/PR that bumps the version in `package.json`. Format follows the
 Earlier history: `git log -- packages/plugin-litellm-backend` or the
 [GitHub tags](https://github.com/acarmisc/backstage-plugin-litellm-govai/tags).
 
+## 0.26.0
+
+### Minor Changes
+
+- feat: `GET /object-names` returns the names of every knowledge base and MCP
+  server on the proxy to any signed-in user, so the UI can show names instead
+  of ids. `GET /bridge/mcp` entries gain a `name` (alias); `server_name` is
+  unchanged.
+
 ## 0.25.0
 
 Requires `@acarmisc/backstage-plugin-litellm-common` `0.5.0`.

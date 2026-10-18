@@ -4,6 +4,7 @@ import { litellmTeamKnowledgebaseManagePermission, litellmTeamMcpManagePermissio
 import { assertTeamAdmin } from '../teamAdmin';
 import type { RouterContext } from './context';
 import { respondTeam } from '../http/respondTeam';
+import { createRequireUser } from './middleware/withUser';
 
 export function registerObjectPermissionsRoutes(router: Router, ctx: RouterContext): void {
   const {
@@ -17,6 +18,22 @@ export function registerObjectPermissionsRoutes(router: Router, ctx: RouterConte
     sendTeamError,
     authorizeTeamSubresource,
   } = ctx;
+
+  // ── Display names ───────────────────────────────────────────────────────
+  //
+  // Read-only id → alias map so members can see names for the KBs and MCP
+  // servers on their teams. Not allowlist-filtered and not team-admin gated:
+  // only ids and names leave the server, never URLs.
+  router.get('/object-names', createRequireUser(ctx), async (_req: Request, res: Response) => {
+    const [vectorStores, mcpServers] = await Promise.all([
+      client.listVectorStores().catch(() => []),
+      client.listMcpServers().catch(() => []),
+    ]);
+    res.json({
+      vector_stores: vectorStores.map(({ id, name }) => ({ id, name })),
+      mcp_servers: mcpServers.map(({ id, name }) => ({ id, name })),
+    });
+  });
 
   // ── Knowledge-base (vector store) management ────────────────────────────
   //

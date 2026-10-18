@@ -10,6 +10,16 @@ commit/PR that bumps the version in `package.json`. Format follows the
 Earlier history: `git log -- packages/plugin-litellm` or the
  [GitHub tags](https://github.com/acarmisc/backstage-plugin-litellm-govai/tags).
 
+## 0.43.0
+
+Requires `@acarmisc/backstage-plugin-litellm-backend` `0.26.0` or later for
+`/object-names`; without it KBs and MCP servers fall back to their ids.
+
+### Minor Changes
+
+- feat(teams): knowledge bases and MCP servers show their names for every
+  user, not only team admins.
+
 ## 0.42.0
 
 ### Minor Changes

@@ -83,12 +83,16 @@ interface ManageTeamDialogProps {
   canManageKnowledgeBases?: boolean;
   /** Vector stores the caller may attach (already allowlist-filtered server-side). */
   vectorStores?: VectorStoreInfo[];
+  /** Names for labelling attached stores; may include stores not offered in the picker. */
+  vectorStoreNames?: VectorStoreInfo[];
   /** Called to replace the team's attached knowledge bases; parent refreshes `team`. */
   onSaveKnowledgeBases?: (vectorStoreIds: string[]) => Promise<void>;
   /** When true, the MCP Servers section (edit mode only) is shown. */
   canManageMcpServers?: boolean;
   /** MCP servers the caller may attach (already allowlist-filtered server-side). */
   mcpServers?: McpServerInfo[];
+  /** Names for labelling attached servers; may include servers not offered in the picker. */
+  mcpServerNames?: McpServerInfo[];
   /** Called to replace the team's attached MCP servers; parent refreshes `team`. */
   onSaveMcpServers?: (mcpServerIds: string[]) => Promise<void>;
   /** When true, only members section is shown (not budget/models/KB/MCP); title changes; Save becomes Done. */
@@ -112,9 +116,11 @@ export const ManageTeamDialog: FC<ManageTeamDialogProps> = ({
   onRemoveMember,
   canManageKnowledgeBases,
   vectorStores,
+  vectorStoreNames,
   onSaveKnowledgeBases,
   canManageMcpServers,
   mcpServers,
+  mcpServerNames,
   onSaveMcpServers,
   membersOnly,
   currentUserId,
@@ -444,11 +450,11 @@ export const ManageTeamDialog: FC<ManageTeamDialogProps> = ({
   const showKnowledgeBases = mode === 'edit' && !!canManageKnowledgeBases;
   const kbOptions = (vectorStores ?? []).map(v => v.id);
   const kbLabel = (id: string) =>
-    (vectorStores ?? []).find(v => v.id === id)?.name ?? id;
+    (vectorStoreNames ?? []).find(v => v.id === id)?.name ?? id;
   const showMcpServers = mode === 'edit' && !!canManageMcpServers;
   const mcpOptions = (mcpServers ?? []).map(s => s.id);
   const mcpLabel = (id: string) =>
-    (mcpServers ?? []).find(s => s.id === id)?.name ?? id;
+    (mcpServerNames ?? []).find(s => s.id === id)?.name ?? id;
 
   // In membersOnly mode, determine if a member removal is disabled
   const isRemovalDisabled = (memberUserId: string, memberRole: string): { disabled: boolean; reason?: string } => {

@@ -3690,6 +3690,50 @@ describe('router MCP server routes', () => {
   });
 });
 
+describe('router GET /object-names', () => {
+  test('returns id + name for every item, not allowlist-filtered, with no url, for a plain user', async () => {
+    const h = await startHarness({
+      client: mockClient({
+        listVectorStores: async () => [{ id: 'vs_secret', name: 'Secrets' }],
+        listMcpServers: async () => [{ id: 'mcp_x', name: 'Jira', url: 'https://internal' }],
+      }),
+    });
+    try {
+      const { status, body } = await req(h.baseUrl, 'GET', '/object-names', {
+        authRef: 'user:default/alice',
+      });
+      assert.strictEqual(status, 200);
+      assert.deepStrictEqual(body, {
+        vector_stores: [{ id: 'vs_secret', name: 'Secrets' }],
+        mcp_servers: [{ id: 'mcp_x', name: 'Jira' }],
+      });
+    } finally {
+      await new Promise<void>(r => h.server.close(() => r()));
+    }
+  });
+
+  test('a failing list degrades to an empty list for that kind only', async () => {
+    const h = await startHarness({
+      client: mockClient({
+        listVectorStores: async () => [{ id: 'vs_1', name: 'HR' }],
+        listMcpServers: async () => { throw new Error('proxy down'); },
+      }),
+    });
+    try {
+      const { status, body } = await req(h.baseUrl, 'GET', '/object-names', {
+        authRef: 'user:default/alice',
+      });
+      assert.strictEqual(status, 200);
+      assert.deepStrictEqual(body, {
+        vector_stores: [{ id: 'vs_1', name: 'HR' }],
+        mcp_servers: [],
+      });
+    } finally {
+      await new Promise<void>(r => h.server.close(() => r()));
+    }
+  });
+});
+
 describe('router /openapi.json', () => {
   let h: Harness;
   before(async () => { h = await startHarness({}); });
@@ -4520,6 +4564,7 @@ describe('user principal enforcement', () => {
     ['POST', '/keys/generate?user_id=alice@example.com'],
     ['POST', '/keys/hash-own/update?user_id=alice@example.com'],
     ['DELETE', '/keys/hash-own?user_id=alice@example.com'],
+    ['GET', '/object-names'],
   ];
 
   for (const [method, path] of cases) {
@@ -5126,9 +5171,31 @@ describe('bridge routes: identity matches the UI', () => {
     try {
       const ok = await req(h.baseUrl, 'GET', '/bridge/mcp?team_id=t1', bearer);
       assert.strictEqual(ok.status, 200);
-      assert.deepStrictEqual(ok.body, [{ server_name: 'context7' }, { server_name: 'jira' }]);
+      assert.deepStrictEqual(ok.body, [{ server_name: 'context7', name: 'context7' }, { server_name: 'jira', name: 'jira' }]);
       assert.strictEqual((await req(h.baseUrl, 'GET', '/bridge/mcp', bearer)).status, 400);
       assert.strictEqual((await req(h.baseUrl, 'GET', '/bridge/mcp?team_id=other', bearer)).status, 403);
+    } finally {
+      h.server.close();
+    }
+  });
+
+  test('GET /bridge/mcp resolves display names from the proxy, keeping server_name as the value', async () => {
+    const h = await startHarness({
+      config: bridgeConfig({ 'litellm.bridge.allowedEmailDomains': ['abstract.it'] }),
+      tokenVerifier: verifier,
+      client: mockClient({
+        userInfo: { user_id: 'degiorgis', teams: ['t1'] },
+        getTeamInfo: async () => ({ team_id: 't1', object_permission: { mcp_servers: ['mcp_gh', 'jira'] } }),
+        listMcpServers: async () => [{ id: 'mcp_gh', name: 'GitHub' }],
+      }),
+    });
+    try {
+      const ok = await req(h.baseUrl, 'GET', '/bridge/mcp?team_id=t1', bearer);
+      assert.strictEqual(ok.status, 200);
+      assert.deepStrictEqual(ok.body, [
+        { server_name: 'mcp_gh', name: 'GitHub' },
+        { server_name: 'jira', name: 'jira' },
+      ]);
     } finally {
       h.server.close();
     }

@@ -200,6 +200,11 @@ export class LiteLlmApi implements LiteLlmApiInterface {
     // (undocumented)
     getMcpServers(): Promise<McpServerInfo[]>;
     // (undocumented)
+    getObjectNames(): Promise<{
+        vector_stores: VectorStoreInfo[];
+        mcp_servers: McpServerInfo[];
+    }>;
+    // (undocumented)
     getQuality(params: SpendLogsParams): Promise<QualityResponse>;
     // (undocumented)
     getSpendLogs(params: SpendLogsParams): Promise<PaginatedSpendLogs>;
@@ -274,6 +279,10 @@ export interface LiteLlmApiInterface {
     getManagedTeams(): Promise<TeamInfo[]>;
     // (undocumented)
     getMcpServers(): Promise<McpServerInfo[]>;
+    getObjectNames(): Promise<{
+        vector_stores: VectorStoreInfo[];
+        mcp_servers: McpServerInfo[];
+    }>;
     getQuality(params: SpendLogsParams): Promise<QualityResponse>;
     // (undocumented)
     getSpendLogs(params: SpendLogsParams): Promise<PaginatedSpendLogs>;
