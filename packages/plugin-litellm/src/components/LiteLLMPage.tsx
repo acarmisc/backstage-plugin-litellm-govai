@@ -201,15 +201,14 @@ export const LiteLLMPage: FC = () => {
   const teamMgmtEnabled = liteLlmConfig?.teamManagement?.enabled ?? false;
   const objectPermsEnabled = liteLlmConfig?.teamManagement?.objectPermissionsEnabled ?? false;
 
+  // Loaded regardless of the object-permissions flag so the Teams page can show names.
   const { value: vectorStores } = useAsync(
-    async () =>
-      objectPermsEnabled ? api.getVectorStores().catch(() => []) : [],
-    [api, objectPermsEnabled],
+    () => api.getVectorStores().catch(() => []),
+    [api],
   );
   const { value: mcpServers } = useAsync(
-    async () =>
-      objectPermsEnabled ? api.getMcpServers().catch(() => []) : [],
-    [api, objectPermsEnabled],
+    () => api.getMcpServers().catch(() => []),
+    [api],
   );
 
   // Filter to teams the current user belongs to
@@ -587,6 +586,7 @@ export const LiteLLMPage: FC = () => {
             onPruneExpiredKeys={handlePruneExpiredKeys}
             filter={filter}
             onClearFilter={clearFilter}
+            teams={allTeams ?? []}
           />
         );
       })()}
@@ -623,6 +623,8 @@ export const LiteLLMPage: FC = () => {
             onEditTeam={t => setManageTeam({ mode: 'edit', team: t })}
             canCreate={teamMgmtEnabled && canCreateTeam && !readOnly}
             onCreateTeam={() => setManageTeam({ mode: 'create' })}
+            vectorStores={vectorStores ?? []}
+            mcpServers={mcpServers ?? []}
             canManageMembers={t =>
               teamMgmtEnabled &&
               canManageMembers &&

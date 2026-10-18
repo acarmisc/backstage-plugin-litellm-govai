@@ -9,7 +9,7 @@ import { TestApiProvider, mockApis } from '@backstage/test-utils';
 import { alertApiRef } from '@backstage/core-plugin-api';
 import { permissionApiRef } from '@backstage/plugin-permission-react';
 import { KeysTable } from './KeysTable';
-import { VirtualKey } from '../types';
+import { TeamInfo, VirtualKey } from '../types';
 
 afterEach(() => cleanup());
 
@@ -155,11 +155,15 @@ describe('KeysTable', () => {
       token: 'hash-other-team',
       team_id: 'team-2',
     };
-    renderTable({ keys: [mockKey, otherTeamKey] });
+    const teams = [
+      { team_id: 'team-1', team_alias: 'Alpha' },
+      { team_id: 'team-2', team_alias: 'Beta' },
+    ] as TeamInfo[];
+    renderTable({ keys: [mockKey, otherTeamKey], teams });
 
     assert.ok(screen.getByText('other-alias'));
     fireEvent.mouseDown(screen.getByRole('combobox', { name: 'Team' }));
-    await userEvent.click(await screen.findByRole('option', { name: 'team-2' }));
+    await userEvent.click(await screen.findByRole('option', { name: 'Beta' }));
 
     await waitFor(() => assert.strictEqual(screen.queryByText('test-alias'), null));
     assert.ok(screen.getByText('other-alias'));

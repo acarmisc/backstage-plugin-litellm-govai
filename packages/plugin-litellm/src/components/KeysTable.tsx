@@ -36,6 +36,7 @@ import { fmtUsd, fmtLimits } from '../format';
 import { filterKeysByStatus, type KeyFilterType } from '../keyFilter';
 import { GenerateKeyButton } from './GenerateKeyButton';
 import {
+  TeamInfo,
   VirtualKey,
 } from '../types';
 import {
@@ -62,6 +63,8 @@ interface KeysTableProps {
   onPruneExpiredKeys: () => Promise<{ pruned: number }>;
   filter?: KeyFilterType;
   onClearFilter?: () => void;
+  /** Used to show team names instead of raw team ids. */
+  teams?: TeamInfo[];
 }
 
 const shortKeyId = (token: string): string => {
@@ -176,6 +179,7 @@ export const KeysTable: FC<KeysTableProps> = ({
   onPruneExpiredKeys,
   filter,
   onClearFilter,
+  teams,
 }) => {
   // Permission checks
   const managePermission = usePermission({ permission: litellmKeyManagePermission });
@@ -217,9 +221,16 @@ export const KeysTable: FC<KeysTableProps> = ({
     }
   };
 
+  const teamNames = useMemo(
+    () => new Map((teams ?? []).map(t => [t.team_id, t.team_alias || t.team_id])),
+    [teams],
+  );
+  const teamLabel = (id: string) => teamNames.get(id) ?? id;
+
   const teamIds = useMemo(
-    () => [...new Set(keys.map(k => k.team_id).filter((t): t is string => !!t))].sort(),
-    [keys],
+    () => [...new Set(keys.map(k => k.team_id).filter((t): t is string => !!t))]
+      .sort((a, b) => (teamNames.get(a) ?? a).localeCompare(teamNames.get(b) ?? b)),
+    [keys, teamNames],
   );
 
   const filteredKeys = useMemo(() => {
@@ -378,7 +389,7 @@ export const KeysTable: FC<KeysTableProps> = ({
             </Box>
           </TableCell>
           <TableCell>
-            <Typography variant="body2" color="text.secondary">{key.team_id || '—'}</Typography>
+            <Typography variant="body2" color="text.secondary">{key.team_id ? teamLabel(key.team_id) : '—'}</Typography>
           </TableCell>
           <TableCell>
             <Box display="flex" alignItems="center" gap={0.5}>
@@ -528,7 +539,7 @@ export const KeysTable: FC<KeysTableProps> = ({
             >
               <MenuItem value="">All teams</MenuItem>
               {teamIds.map(id => (
-                <MenuItem key={id} value={id}>{id}</MenuItem>
+                <MenuItem key={id} value={id}>{teamLabel(id)}</MenuItem>
               ))}
             </TextField>
             {expiredKeys.length > 0 && (

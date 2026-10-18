@@ -26,7 +26,7 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from 'recharts';
-import { TeamInfo, TeamMemberUsage, UsageMetrics } from '../types';
+import { McpServerInfo, TeamInfo, TeamMemberUsage, UsageMetrics, VectorStoreInfo } from '../types';
 import {
   ChartTooltip,
   EmptyState,
@@ -143,9 +143,11 @@ interface TeamCardProps {
   canManageMembers?: boolean;
   onManageMembers?: (team: TeamInfo) => void;
   onExpand?: (team: TeamInfo) => void;
+  vectorStores?: VectorStoreInfo[];
+  mcpServers?: McpServerInfo[];
 }
 
-const TeamCard: FC<TeamCardProps> = ({ team, usage, usageLoading, memberUsage, memberUsageLoading, canManage, onEditTeam, canManageMembers, onManageMembers, onExpand }) => {
+const TeamCard: FC<TeamCardProps> = ({ team, usage, usageLoading, memberUsage, memberUsageLoading, canManage, onEditTeam, canManageMembers, onManageMembers, onExpand, vectorStores, mcpServers }) => {
   const [expanded, setExpanded] = useState(false);
   const chart = useChartTheme();
 
@@ -230,6 +232,26 @@ const TeamCard: FC<TeamCardProps> = ({ team, usage, usageLoading, memberUsage, m
     >
       {label}
     </Typography>
+  );
+
+  // Shows attached ids by display name, falling back to the id when unknown.
+  const renderNamedTags = (
+    label: string,
+    ids: string[] | undefined,
+    items: { id: string; name?: string }[] | undefined,
+  ) => (
+    <Box mb={2.5}>
+      {sectionLabel(label)}
+      {ids?.length ? (
+        <Box display="flex" gap={0.5} flexWrap="wrap">
+          {ids.map(id => (
+            <TagChip key={id} label={items?.find(i => i.id === id)?.name ?? id} title={id} />
+          ))}
+        </Box>
+      ) : (
+        <Typography variant="body2" color="text.secondary">None configured</Typography>
+      )}
+    </Box>
   );
 
   return (
@@ -369,6 +391,9 @@ const TeamCard: FC<TeamCardProps> = ({ team, usage, usageLoading, memberUsage, m
           )}
         </Box>
 
+        {renderNamedTags('Knowledge bases', team.object_permission?.vector_stores, vectorStores)}
+        {renderNamedTags('MCP servers', team.object_permission?.mcp_servers, mcpServers)}
+
         {renderDailySpendSection()}
 
         {(memberUsageLoading || memberUsage) && (
@@ -464,6 +489,10 @@ interface TeamUsageProps {
   onManageMembers?: (team: TeamInfo) => void;
   /** Teams are synced from an identity provider: show a badge, no write controls. */
   readOnly?: boolean;
+  /** Used to show knowledge base names instead of raw ids. */
+  vectorStores?: VectorStoreInfo[];
+  /** Used to show MCP server names instead of raw ids. */
+  mcpServers?: McpServerInfo[];
 }
 
 export const TeamUsage: FC<TeamUsageProps> = ({
@@ -481,6 +510,8 @@ export const TeamUsage: FC<TeamUsageProps> = ({
   canManageMembers,
   onManageMembers,
   readOnly,
+  vectorStores,
+  mcpServers,
 }) => {
   const readOnlyBadge = (
     <MuiTooltip title="Teams and memberships are managed in your identity provider. Changes made here would be overwritten, so editing is disabled.">
@@ -547,6 +578,8 @@ export const TeamUsage: FC<TeamUsageProps> = ({
             canManageMembers={canManageMembers?.(team)}
             onManageMembers={onManageMembers}
             onExpand={onTeamExpand}
+            vectorStores={vectorStores}
+            mcpServers={mcpServers}
           />
         ))}
       </Box>
