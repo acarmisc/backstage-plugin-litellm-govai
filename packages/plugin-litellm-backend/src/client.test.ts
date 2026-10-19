@@ -310,21 +310,21 @@ describe('LiteLLMClient team CRUD methods', () => {
     );
   });
 
-  test('listMcpServers GETs /mcp/server/list and normalises id/name/url', async () => {
+  test('listMcpServers GETs /v1/mcp/server and normalises id/name/url', async () => {
     stubFetch({
       data: [
         { server_id: 'srv_1', alias: 'GitHub', url: 'https://mcp.example/gh' },
-        { id: 'srv_2' },
+        { server_id: 'srv_2', server_name: 'abstract_kb', alias: null },
         { name: 'srv_3' },
         { note: 'no id' },
       ],
     });
     const client = new LiteLLMClient(mockConfig);
     const result = await client.listMcpServers();
-    assert.ok(fetchCalls[0].url.endsWith('/mcp/server/list'), fetchCalls[0].url);
+    assert.ok(fetchCalls[0].url.endsWith('/v1/mcp/server'), fetchCalls[0].url);
     assert.deepStrictEqual(result, [
       { id: 'srv_1', name: 'GitHub', url: 'https://mcp.example/gh' },
-      { id: 'srv_2', name: undefined, url: undefined },
+      { id: 'srv_2', name: 'abstract_kb', url: undefined },
       { id: 'srv_3', name: 'srv_3', url: undefined },
     ]);
   });

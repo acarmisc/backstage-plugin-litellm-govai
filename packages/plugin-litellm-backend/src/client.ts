@@ -563,22 +563,23 @@ export class LiteLLMClient {
 
   /**
    * Lists the MCP servers registered on the LiteLLM proxy. Path is
-   * `/mcp/server/list`; tolerates a bare array, `{ data: [...] }` or
+   * `/v1/mcp/server` (`/mcp/server/list` hangs on current proxies); tolerates a bare array, `{ data: [...] }` or
    * `{ servers: [...] }`. Normalised to `{ id, name?, url? }` — `id` prefers
-   * `server_id` then `id` then `alias`/`name`.
+   * `server_id` then `id` then `alias`/`server_name`/`name`; the display name is
+   * `alias`, else `server_name`, else `name`.
    */
   async listMcpServers(): Promise<
     Array<{ id: string; name?: string; url?: string }>
   > {
-    const raw = await this.request<any>('/mcp/server/list');
+    const raw = await this.request<any>('/v1/mcp/server');
     let rows: any[] = [];
     if (Array.isArray(raw)) rows = raw;
     else if (Array.isArray(raw?.data)) rows = raw.data;
     else if (Array.isArray(raw?.servers)) rows = raw.servers;
     return rows
       .map(r => ({
-        id: r?.server_id ?? r?.id ?? r?.alias ?? r?.name ?? '',
-        name: r?.alias ?? r?.name ?? undefined,
+        id: r?.server_id ?? r?.id ?? r?.alias ?? r?.server_name ?? r?.name ?? '',
+        name: r?.alias ?? r?.server_name ?? r?.name ?? undefined,
         url: r?.url ?? undefined,
       }))
       .filter(r => r.id);

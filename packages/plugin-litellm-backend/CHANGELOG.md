@@ -9,6 +9,14 @@ commit/PR that bumps the version in `package.json`. Format follows the
 Earlier history: `git log -- packages/plugin-litellm-backend` or the
 [GitHub tags](https://github.com/acarmisc/backstage-plugin-litellm-govai/tags).
 
+## 0.26.1
+
+### Patch Changes
+
+- fix: list MCP servers from `/v1/mcp/server` (`/mcp/server/list` hangs on the
+  proxy, which stalled `GET /object-names` and left KBs/MCP shown as ids). The
+  display name is the server `alias`, else `server_name`.
+
 ## 0.26.0
 
 ### Minor Changes
