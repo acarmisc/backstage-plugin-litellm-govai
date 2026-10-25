@@ -33,7 +33,7 @@ import {
   litellmTeamKnowledgebaseManagePermission,
   litellmTeamMcpManagePermission,
 } from '@acarmisc/backstage-plugin-litellm-common';
-import { DateRange, GenerateKeyRequest, GenerateKeyResponse, UpdateKeyRequest, UsageMetrics, TeamMemberUsage, CreateTeamRequest, UpdateTeamRequest, TeamInfo, VirtualKey } from '../types';
+import { DateRange, GenerateKeyRequest, GenerateKeyResponse, UpdateKeyRequest, UsageMetrics, TeamMemberUsage, TeamKeyUsage, CreateTeamRequest, UpdateTeamRequest, TeamInfo, VirtualKey } from '../types';
 import { toastFor } from '../feedback';
 import { isTeamMemberManager } from '../teamMemberManager';
 import {
@@ -160,6 +160,9 @@ export const LiteLLMPage: FC = () => {
   // Per-member breakdown cache: teamId -> breakdown, or null when not allowed.
   const [memberUsageCache, setMemberUsageCache] = useState<Record<string, TeamMemberUsage | null>>({});
   const [memberUsageLoading, setMemberUsageLoading] = useState<Record<string, boolean>>({});
+  // Per-key usage of a team, same access rules: teamId -> keys, or null when not allowed.
+  const [keyUsageCache, setKeyUsageCache] = useState<Record<string, TeamKeyUsage | null>>({});
+  const [keyUsageLoading, setKeyUsageLoading] = useState<Record<string, boolean>>({});
 
   const { value: userInfo, loading: userLoading, error: userError } = useAsync(
     () => api.getUserInfo(),
@@ -248,6 +251,8 @@ export const LiteLLMPage: FC = () => {
     setTeamUsageLoading({});
     setMemberUsageCache({});
     setMemberUsageLoading({});
+    setKeyUsageCache({});
+    setKeyUsageLoading({});
   }, [setDateRange, setCurrentPreset]);
 
   // Fetch team usage on demand when a team card is expanded
@@ -281,6 +286,21 @@ export const LiteLLMPage: FC = () => {
       setMemberUsageLoading(prev => ({ ...prev, [teamId]: false }));
     }
   }, [api, dateRange, memberUsageCache, memberUsageLoading]);
+
+  const loadKeyUsage = useCallback(async (teamId: string) => {
+    if (keyUsageCache[teamId] !== undefined || keyUsageLoading[teamId]) return;
+    setKeyUsageLoading(prev => ({ ...prev, [teamId]: true }));
+    try {
+      const startDate = toLocalDay(dateRange.start);
+      const endDate = toLocalDay(dateRange.end);
+      const data = await api.getTeamKeyUsage(teamId, startDate, endDate);
+      setKeyUsageCache(prev => ({ ...prev, [teamId]: data }));
+    } catch {
+      setKeyUsageCache(prev => ({ ...prev, [teamId]: null }));
+    } finally {
+      setKeyUsageLoading(prev => ({ ...prev, [teamId]: false }));
+    }
+  }, [api, dateRange, keyUsageCache, keyUsageLoading]);
 
   // Models offered for key generation: when the user has a model restriction, the
   // UNION of their own allowed models and their teams' models (a team-bound key is
@@ -624,6 +644,8 @@ export const LiteLLMPage: FC = () => {
             getTeamUsageLoading={teamId => teamUsageLoading[teamId] ?? false}
             getTeamMemberUsage={teamId => memberUsageCache[teamId] ?? null}
             getTeamMemberUsageLoading={teamId => memberUsageLoading[teamId] ?? false}
+            getTeamKeyUsage={teamId => keyUsageCache[teamId] ?? null}
+            getTeamKeyUsageLoading={teamId => keyUsageLoading[teamId] ?? false}
             canManage={teamMgmtEnabled && canManageTeam && !readOnly}
             onEditTeam={t => setManageTeam({ mode: 'edit', team: t })}
             canCreate={teamMgmtEnabled && canCreateTeam && !readOnly}
@@ -639,7 +661,10 @@ export const LiteLLMPage: FC = () => {
             readOnly={readOnly}
             onTeamExpand={team => {
               loadTeamUsage(team.team_id);
-              if (liteLlmConfig?.teamUsage?.memberBreakdown) loadMemberUsage(team.team_id);
+              if (liteLlmConfig?.teamUsage?.memberBreakdown) {
+                loadMemberUsage(team.team_id);
+                loadKeyUsage(team.team_id);
+              }
             }}
           />
         );

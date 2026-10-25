@@ -126,6 +126,14 @@ describe('LiteLlmApi routing', () => {
     assert.ok(calls[0].url.includes('end_date=2025-01-31'), calls[0].url);
   });
 
+  test('getTeamKeyUsage → GET /teams/:id/usage/keys with date params', async () => {
+    const { api, calls } = makeApi(200, { team_id: 't', keys: [] });
+    await api.getTeamKeyUsage('team/alpha', '2025-01-01', '2025-01-31');
+    assert.ok(calls[0].url.includes('/teams/team%2Falpha/usage/keys?'), calls[0].url);
+    assert.ok(calls[0].url.includes('start_date=2025-01-01'), calls[0].url);
+    assert.ok(calls[0].url.includes('end_date=2025-01-31'), calls[0].url);
+  });
+
   test('getManagedTeams → GET /teams/managed', async () => {
     const teams = [{ team_id: 't1', spend: 0 }];
     const { api, calls } = makeApi(200, teams);

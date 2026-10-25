@@ -5398,6 +5398,7 @@ describe('GET /teams/:teamId/usage/members', () => {
     permissions?: any;
     team?: any;
     catalog?: any;
+    path?: string;
   } = {}) => {
     const caller = opts.caller ?? 'bob';
     const client = mockClient({
@@ -5406,8 +5407,8 @@ describe('GET /teams/:teamId/usage/members', () => {
       getTeamUsage: async () => usage,
     });
     client.listTeamKeys = async () => [
-      { token: 'ha', user_id: 'alice' },
-      { token: 'hb', user_id: 'bob' },
+      { key: 'sk-...aaaa', token: 'ha', user_id: 'alice', key_alias: 'alice-dev', created_at: '2026-01-02', max_budget: 50, metadata: { secret: 'x' } },
+      { key: 'sk-...bbbb', token: 'hb', user_id: 'bob', created_at: '2026-01-03', blocked: true },
     ];
     const h = await startHarness({
       config: {
@@ -5420,7 +5421,7 @@ describe('GET /teams/:teamId/usage/members', () => {
       permissions: opts.permissions ?? deny,
       catalogClient: opts.catalog ?? mockCatalog([]),
     });
-    return { h, get: () => req(h.baseUrl, 'GET', path, { authRef: `user:default/${caller}` }) };
+    return { h, get: () => req(h.baseUrl, 'GET', opts.path ?? path, { authRef: `user:default/${caller}` }) };
   };
   const run = async (opts: Parameters<typeof start>[0]) => {
     const { h, get } = await start(opts);
@@ -5504,5 +5505,62 @@ describe('GET /teams/:teamId/usage/members', () => {
     } finally {
       h.server.close();
     }
+  });
+
+  describe('/usage/keys', () => {
+    const keysPath = '/teams/t1/usage/keys?start_date=2026-01-01&end_date=2026-01-31';
+
+    test('a viewer-role member sees the team keys with their usage', async () => {
+      const r = await run({ caller: 'alice', path: keysPath });
+      assert.strictEqual(r.status, 200);
+      assert.deepStrictEqual(
+        r.body.keys.map((k: any) => [k.key_alias ?? k.key, k.user_id, k.spend, k.api_requests, k.blocked]),
+        [['alice-dev', 'alice', 2, 2, false], ['sk-...bbbb', 'bob', 1, 1, true]],
+      );
+    });
+
+    test('never exposes the key hash or metadata', async () => {
+      const r = await run({ caller: 'alice', path: keysPath });
+      for (const k of r.body.keys) {
+        assert.ok(!('token' in k));
+        assert.ok(!('metadata' in k));
+      }
+    });
+
+    test('a plain member is refused (403)', async () => {
+      const r = await run({ caller: 'bob', path: keysPath });
+      assert.strictEqual(r.status, 403);
+    });
+
+    test('a lead of another team gets a 404 for this team', async () => {
+      const r = await run({ caller: 'alice', teams: ['t2'], path: keysPath, permissions: mockPermissions() });
+      assert.strictEqual(r.status, 404);
+    });
+
+    test('404 when the feature is disabled', async () => {
+      const r = await run({
+        caller: 'alice',
+        path: keysPath,
+        config: { 'litellm.teamUsage.memberBreakdown.enabled': false },
+      });
+      assert.strictEqual(r.status, 404);
+    });
+
+    test('requires the date range', async () => {
+      const r = await run({ caller: 'alice', path: '/teams/t1/usage/keys' });
+      assert.strictEqual(r.status, 400);
+    });
+
+    test('hides dollars (spend and key budgets) under budget hiding', async () => {
+      const r = await run({
+        caller: 'alice',
+        path: keysPath,
+        config: { 'litellm.display.hideTeamBudgetForMembers': true },
+      });
+      assert.strictEqual(r.status, 200);
+      assert.strictEqual(r.body.budget_hidden, true);
+      assert.ok(r.body.keys.every((k: any) => k.spend === 0 && !('max_budget' in k)));
+      assert.strictEqual(r.body.keys[0].total_tokens, 20);
+    });
   });
 });

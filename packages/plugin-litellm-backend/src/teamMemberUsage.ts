@@ -1,6 +1,8 @@
 import { Config } from '@backstage/config';
 import {
   TeamInfo,
+  TeamKeyUsage,
+  TeamKeyUsageRow,
   TeamMemberUsage,
   TeamMemberUsageRow,
   UsageMetrics,
@@ -138,5 +140,65 @@ export function redactTeamMemberUsage(usage: TeamMemberUsage): TeamMemberUsage {
     total_spend: 0,
     budget_hidden: true,
     members: usage.members.map(m => ({ ...m, spend: 0 })),
+  };
+}
+
+/**
+ * Lists a team's keys with their usage over the period, credited by key hash
+ * from the team's daily activity. Only fields safe to show a team lead are
+ * copied: no secret, hash or metadata. Keys without activity get zero rows.
+ */
+export function buildTeamKeyUsage(
+  teamId: string,
+  usage: UsageMetrics,
+  keys: VirtualKey[],
+  team: TeamInfo,
+  profiles: MemberProfiles = new Map(),
+): TeamKeyUsage {
+  const emailById = new Map<string, string>();
+  for (const m of team.members_with_roles ?? []) {
+    if (m.user_id && m.user_email) emailById.set(m.user_id, m.user_email);
+  }
+
+  const rows: TeamKeyUsageRow[] = keys.map(k => {
+    const u = (k.token && usage.usage_by_key?.[k.token]) || undefined;
+    const userId = k.user_id ?? null;
+    const email = (userId && emailById.get(userId)) || (userId?.includes('@') ? userId : undefined);
+    const displayName = email && profiles.get(email.toLowerCase())?.displayName;
+    return {
+      key: k.key,
+      ...(k.key_alias && { key_alias: k.key_alias }),
+      user_id: userId,
+      ...(email && { user_email: email }),
+      ...(displayName && { display_name: displayName }),
+      created_at: k.created_at,
+      ...(k.expires_at && { expires_at: k.expires_at }),
+      blocked: k.blocked === true,
+      ...(k.max_budget !== undefined && { max_budget: k.max_budget }),
+      spend: u?.total_spend ?? 0,
+      prompt_tokens: u?.prompt_tokens ?? 0,
+      completion_tokens: u?.completion_tokens ?? 0,
+      total_tokens: u?.total_tokens ?? 0,
+      api_requests: u?.api_requests ?? 0,
+      successful_requests: u?.successful_requests ?? 0,
+      failed_requests: u?.failed_requests ?? 0,
+    };
+  });
+
+  rows.sort(
+    (a, b) =>
+      b.spend - a.spend ||
+      b.total_tokens - a.total_tokens ||
+      a.key.localeCompare(b.key),
+  );
+  return { team_id: teamId, keys: rows };
+}
+
+/** Hides dollar amounts (period spend and key budgets); tokens and requests stay. */
+export function redactTeamKeyUsage(usage: TeamKeyUsage): TeamKeyUsage {
+  return {
+    ...usage,
+    budget_hidden: true,
+    keys: usage.keys.map(({ max_budget: _hidden, ...k }) => ({ ...k, spend: 0 })),
   };
 }

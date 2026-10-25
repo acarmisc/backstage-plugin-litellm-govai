@@ -26,7 +26,7 @@ wiring these up only restricts behavior once you opt in.
 | `litellm.team.knowledgebase.manage` | `GET /vector-stores`, `PUT /teams/:id/knowledge-bases` | Needs `litellm.teamAdmin.objectPermissions.enabled` |
 | `litellm.team.mcp.manage` | `GET /mcp-servers`, `PUT /teams/:id/mcp-servers` | Needs `litellm.teamAdmin.objectPermissions.enabled` |
 | `litellm.team.delete` | `DELETE /teams/:id` | Needs `litellm.teamAdmin.allowTeamDelete` |
-| `litellm.team.usage.read` | `GET /teams/:id/usage/members` | Needs `litellm.teamUsage.memberBreakdown.enabled` and `permission.enabled`; the caller must also be a member of the team — see [Per-member team usage](#per-member-team-usage) |
+| `litellm.team.usage.read` | `GET /teams/:id/usage/members`, `GET /teams/:id/usage/keys` | Needs `litellm.teamUsage.memberBreakdown.enabled` and `permission.enabled`; the caller must also be a member of the team — see [Per-member team usage](#per-member-team-usage) |
 
 All key-mutation routes still enforce the existing ownership guard (a caller
 can only ever act on keys they own) regardless of permission policy. The
@@ -200,6 +200,23 @@ The `litellm.display` flags apply: when dollars are hidden for the caller
 (member or manager rule), spend is zeroed, `budget_hidden: true` is set, and
 members are compared by `spend_share_pct`. Each successful read is logged as
 `team.usage.members.read` with the caller, the team and the access path.
+
+### Team keys and per-key usage
+
+The same switch and the same three access paths also open the team's **keys**:
+the card shows a "Keys by member" table with each key's alias, masked key,
+owner, creation date, status (active / blocked), budget, and its spend, tokens
+and requests for the selected period. This is how a team lead sees the keys of
+the other members of the team they lead.
+
+`GET /teams/:teamId/usage/keys?start_date=&end_date=` is scoped to the single
+team in the path: leading team A reveals nothing about team B (`404` for a
+team the caller is not in and does not manage, `403` for a member without a
+viewer role or permission). The response carries no key secret, key hash or
+key metadata. When dollars are hidden for the caller, `spend` is zeroed,
+`max_budget` is dropped and `budget_hidden: true` is set. Each successful read
+is logged as `team.usage.keys.read`. `GET /keys` is unchanged: everyone still
+lists only their own keys there.
 
 ## Hiding team budgets (`litellm.display`)
 

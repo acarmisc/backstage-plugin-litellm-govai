@@ -13,6 +13,8 @@ export {
   type UsageMetrics,
   type TeamMemberUsage,
   type TeamMemberUsageRow,
+  type TeamKeyUsage,
+  type TeamKeyUsageRow,
   type GenerateKeyRequest,
   type UpdateKeyRequest,
   type GenerateKeyResponse,
