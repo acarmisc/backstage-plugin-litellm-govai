@@ -9,6 +9,16 @@ commit/PR that bumps the version in `package.json`. Format follows the
 Earlier history: `git log -- packages/plugin-litellm-backend` or the
 [GitHub tags](https://github.com/acarmisc/backstage-plugin-litellm-govai/tags).
 
+## 0.27.0
+
+### Minor Changes
+
+- feat: `GET /teams/:teamId/usage/keys` lists a team's keys (alias, masked key,
+  owner, status, budget) with per-key spend, tokens and requests, so team leads
+  can see their members' keys. Same opt-in and access rules as
+  `/teams/:teamId/usage/members` (`litellm.teamUsage.memberBreakdown`), scoped to
+  the one team, and never returns the key hash or metadata.
+
 ## 0.26.1
 
 ### Patch Changes

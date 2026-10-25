@@ -10,6 +10,16 @@ commit/PR that bumps the version in `package.json`. Format follows the
 Earlier history: `git log -- packages/plugin-litellm` or the
  [GitHub tags](https://github.com/acarmisc/backstage-plugin-litellm-govai/tags).
 
+## 0.44.0
+
+Requires `@acarmisc/backstage-plugin-litellm-backend` `0.27.0` or later for
+`/teams/:teamId/usage/keys`; without it the section stays hidden.
+
+### Minor Changes
+
+- feat: "Keys by member" table on the Teams card for team leads, with each key's
+  owner, status, budget and usage for the selected period.
+
 ## 0.43.0
 
 Requires `@acarmisc/backstage-plugin-litellm-backend` `0.26.0` or later for

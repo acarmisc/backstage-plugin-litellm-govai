@@ -3,6 +3,13 @@
 Shared, dependency-light code for the LiteLLM Backstage plugin packages. This
 changelog is maintained by hand.
 
+## 0.6.0
+
+### Minor Changes
+
+- feat: `TeamKeyUsage` and `TeamKeyUsageRow` types for a team's keys with
+  per-key usage.
+
 ## 0.5.0
 
 ### Minor Changes
