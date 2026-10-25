@@ -192,6 +192,39 @@ export interface TeamMemberUsage {
   members: TeamMemberUsageRow[];
 }
 
+/** One team key with its usage over a period. Never carries the key secret, hash or metadata. */
+export interface TeamKeyUsageRow {
+  /** Masked key (e.g. `sk-...abcd`). */
+  key: string;
+  key_alias?: string;
+  /** LiteLLM user id of the owner; null for ownerless keys. */
+  user_id: string | null;
+  user_email?: string;
+  display_name?: string;
+  created_at: string;
+  expires_at?: string;
+  blocked: boolean;
+  /** USD; omitted when `budget_hidden` is set on the response. */
+  max_budget?: number;
+  /** USD in the period; 0 when `budget_hidden` is set. */
+  spend: number;
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
+  api_requests: number;
+  successful_requests: number;
+  failed_requests: number;
+}
+
+/** Response of `GET /teams/:teamId/usage/keys`. */
+export interface TeamKeyUsage {
+  team_id: string;
+  /** Dollars are hidden for the caller. */
+  budget_hidden?: boolean;
+  /** Sorted by spend, then tokens. */
+  keys: TeamKeyUsageRow[];
+}
+
 export interface GenerateKeyRequest {
   alias?: string;
   models?: string[];

@@ -4,6 +4,7 @@ import {
   ModelInfo,
   UsageMetrics,
   TeamMemberUsage,
+  TeamKeyUsage,
   UsageDailyModelPoint,
   UsageModelBreakdown,
   UsageKeyBreakdown,
@@ -364,6 +365,31 @@ export class MockLiteLlmApi implements LiteLlmApiInterface {
       };
     });
     return { team_id: teamId, total_spend: total, members };
+  }
+  async getTeamKeyUsage(teamId: string, startDate: string, endDate: string): Promise<TeamKeyUsage> {
+    const { members } = await this.getTeamMemberUsage(teamId, startDate, endDate);
+    const teamKeys = members.flatMap(m =>
+      Array.from({ length: m.key_count }, (_, i) => {
+        const share = 1 / m.key_count;
+        return {
+          key: `sk-...${(m.user_id ?? 'x').slice(0, 2)}${i}${i}`,
+          key_alias: `${m.user_id.split('@')[0]}-key-${i + 1}`,
+          user_id: m.user_id,
+          user_email: m.user_email,
+          display_name: m.display_name,
+          created_at: '2025-11-03T09:00:00Z',
+          blocked: false,
+          spend: m.spend * share,
+          prompt_tokens: Math.round(m.prompt_tokens * share),
+          completion_tokens: Math.round(m.completion_tokens * share),
+          total_tokens: Math.round(m.total_tokens * share),
+          api_requests: Math.round(m.api_requests * share),
+          successful_requests: Math.round(m.successful_requests * share),
+          failed_requests: Math.round(m.failed_requests * share),
+        };
+      }),
+    );
+    return { team_id: teamId, keys: teamKeys };
   }
   async getAuditLogs(params: AuditLogsParams): Promise<PaginatedAuditLogs> {
     const rows = params.table_name

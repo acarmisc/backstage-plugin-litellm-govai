@@ -33,6 +33,7 @@ instead of maintaining this table by hand.
 | `/object-names` | GET | Id → name for all knowledge bases and MCP servers, for labels; any signed-in user, not allowlist-filtered |
 | `/teams/:teamId/usage` | GET | Usage metrics for a team (`start_date`, `end_date` required) |
 | `/teams/:teamId/usage/members` | GET | Per-member usage breakdown for a team (opt-in, see [Permissions](permissions.md#per-member-team-usage)) |
+| `/teams/:teamId/usage/keys` | GET | A team's keys with per-key usage, for team leads (same access as `usage/members`, see [Permissions](permissions.md#team-keys-and-per-key-usage)) |
 | `/usage` | GET | Get usage metrics and analytics for the current user |
 | `/audit` | GET | Audit logs (gated by `litellm.audit.group` membership) |
 | `/opencode/connect` | GET / POST | OpenCode SSO connect: GET shows a confirmation page (no state change); POST creates or rotates the key and redirects to the local callback (only when `litellm.opencode.enabled`) |

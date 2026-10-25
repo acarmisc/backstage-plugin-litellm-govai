@@ -26,7 +26,7 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from 'recharts';
-import { McpServerInfo, TeamInfo, TeamMemberUsage, UsageMetrics, VectorStoreInfo } from '../types';
+import { McpServerInfo, TeamInfo, TeamKeyUsage, TeamMemberUsage, UsageMetrics, VectorStoreInfo } from '../types';
 import {
   ChartTooltip,
   EmptyState,
@@ -130,6 +130,70 @@ export const MemberUsageTable: FC<{ usage: TeamMemberUsage }> = ({ usage }) => {
   );
 };
 
+/**
+ * A team's keys with the period's usage, for team leads. The backend never
+ * sends secrets; dollars are dropped when it hides them.
+ */
+export const TeamKeyUsageTable: FC<{ usage: TeamKeyUsage }> = ({ usage }) => {
+  const hidden = usage.budget_hidden === true;
+  if (!usage.keys.length) {
+    return <Typography variant="body2" color="text.secondary">This team has no keys.</Typography>;
+  }
+  return (
+    <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 1.5 }}>
+      <Table size="small" sx={dataTableSx} aria-label="Keys by member">
+        <TableHead>
+          <TableRow>
+            <TableCell>Key</TableCell>
+            <TableCell>Owner</TableCell>
+            <TableCell>Created</TableCell>
+            <TableCell>Status</TableCell>
+            {!hidden && <TableCell align="right">Spend</TableCell>}
+            {!hidden && <TableCell align="right">Budget</TableCell>}
+            <TableCell align="right">Tokens</TableCell>
+            <TableCell align="right">Requests</TableCell>
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          {usage.keys.map(k => {
+            const owner = k.display_name ?? k.user_email ?? k.user_id;
+            return (
+              <TableRow key={k.key}>
+                <TableCell>
+                  <Typography variant="body2">{k.key_alias ?? k.key}</Typography>
+                  {k.key_alias && (
+                    <Typography variant="caption" color="text.secondary" sx={monoSx}>
+                      {k.key}
+                    </Typography>
+                  )}
+                </TableCell>
+                <TableCell>
+                  {owner ?? <Typography variant="body2" color="text.secondary">—</Typography>}
+                </TableCell>
+                <TableCell>{fmtDateShort(k.created_at)}</TableCell>
+                <TableCell>
+                  <StatusPill
+                    label={k.blocked ? 'Blocked' : 'Active'}
+                    tone={k.blocked ? 'danger' : 'success'}
+                  />
+                </TableCell>
+                {!hidden && <TableCell align="right">{fmtUsd2(k.spend)}</TableCell>}
+                {!hidden && (
+                  <TableCell align="right">
+                    {k.max_budget === undefined ? 'Unlimited' : fmtUsd2(k.max_budget)}
+                  </TableCell>
+                )}
+                <TableCell align="right">{fmtCompact(k.total_tokens)}</TableCell>
+                <TableCell align="right">{k.api_requests.toLocaleString()}</TableCell>
+              </TableRow>
+            );
+          })}
+        </TableBody>
+      </Table>
+    </TableContainer>
+  );
+};
+
 interface TeamCardProps {
   team: TeamInfo;
   usage: UsageMetrics | null;
@@ -137,6 +201,9 @@ interface TeamCardProps {
   /** Per-member breakdown; null when unavailable to the caller (the section is hidden). */
   memberUsage?: TeamMemberUsage | null;
   memberUsageLoading?: boolean;
+  /** Per-key usage; null when unavailable to the caller (the section is hidden). */
+  keyUsage?: TeamKeyUsage | null;
+  keyUsageLoading?: boolean;
   canManage?: boolean;
   onEditTeam?: (team: TeamInfo) => void;
   /** Members-only management (team-role path); hidden when `canManage`. */
@@ -147,7 +214,7 @@ interface TeamCardProps {
   mcpServers?: McpServerInfo[];
 }
 
-const TeamCard: FC<TeamCardProps> = ({ team, usage, usageLoading, memberUsage, memberUsageLoading, canManage, onEditTeam, canManageMembers, onManageMembers, onExpand, vectorStores, mcpServers }) => {
+const TeamCard: FC<TeamCardProps> = ({ team, usage, usageLoading, memberUsage, memberUsageLoading, keyUsage, keyUsageLoading, canManage, onEditTeam, canManageMembers, onManageMembers, onExpand, vectorStores, mcpServers }) => {
   const [expanded, setExpanded] = useState(false);
   const chart = useChartTheme();
 
@@ -409,6 +476,19 @@ const TeamCard: FC<TeamCardProps> = ({ team, usage, usageLoading, memberUsage, m
           </Box>
         )}
 
+        {(keyUsageLoading || keyUsage) && (
+          <Box mb={2.5}>
+            {sectionLabel('Keys by member')}
+            {keyUsage ? (
+              <TeamKeyUsageTable usage={keyUsage} />
+            ) : (
+              <Box display="flex" justifyContent="center" py={2}>
+                <CircularProgress size={22} />
+              </Box>
+            )}
+          </Box>
+        )}
+
         <Box>
           {sectionLabel('Members')}
           {team.members_with_roles?.length ? (
@@ -477,6 +557,9 @@ interface TeamUsageProps {
   /** Per-member breakdown for a team; null hides the section. */
   getTeamMemberUsage?: (teamId: string) => TeamMemberUsage | null;
   getTeamMemberUsageLoading?: (teamId: string) => boolean;
+  /** Per-key usage for a team; null hides the section. */
+  getTeamKeyUsage?: (teamId: string) => TeamKeyUsage | null;
+  getTeamKeyUsageLoading?: (teamId: string) => boolean;
   canManage?: boolean;
   onEditTeam?: (team: TeamInfo) => void;
   /** When true (with `onCreateTeam`), a "Create Team" action renders in the section header. */
@@ -502,6 +585,8 @@ export const TeamUsage: FC<TeamUsageProps> = ({
   getTeamUsageLoading,
   getTeamMemberUsage,
   getTeamMemberUsageLoading,
+  getTeamKeyUsage,
+  getTeamKeyUsageLoading,
   canManage,
   onEditTeam,
   canCreate,
@@ -573,6 +658,8 @@ export const TeamUsage: FC<TeamUsageProps> = ({
             usageLoading={getTeamUsageLoading(team.team_id)}
             memberUsage={getTeamMemberUsage?.(team.team_id) ?? null}
             memberUsageLoading={getTeamMemberUsageLoading?.(team.team_id) ?? false}
+            keyUsage={getTeamKeyUsage?.(team.team_id) ?? null}
+            keyUsageLoading={getTeamKeyUsageLoading?.(team.team_id) ?? false}
             canManage={canManage}
             onEditTeam={onEditTeam}
             canManageMembers={canManageMembers?.(team)}

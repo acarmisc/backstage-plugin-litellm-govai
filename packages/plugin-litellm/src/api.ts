@@ -5,6 +5,7 @@ import {
   ModelInfo,
   UsageMetrics,
   TeamMemberUsage,
+  TeamKeyUsage,
   TeamInfo,
   GenerateKeyRequest,
   GenerateKeyResponse,
@@ -62,6 +63,8 @@ export interface LiteLlmApiInterface {
   getTeamUsage(teamId: string, startDate: string, endDate: string): Promise<UsageMetrics>;
   /** Per-member breakdown; rejects (403/404) when the caller may not see it. */
   getTeamMemberUsage(teamId: string, startDate: string, endDate: string): Promise<TeamMemberUsage>;
+  /** A team's keys with per-key usage; same access rules as the per-member breakdown. */
+  getTeamKeyUsage(teamId: string, startDate: string, endDate: string): Promise<TeamKeyUsage>;
   getAuditLogs(params: AuditLogsParams): Promise<PaginatedAuditLogs>;
   getSpendLogs(params: SpendLogsParams): Promise<PaginatedSpendLogs>;
   /** Langfuse quality summary; `{configured:false}` when Langfuse is off. */
@@ -325,6 +328,13 @@ export class LiteLlmApi implements LiteLlmApiInterface {
 
   async getTeamMemberUsage(teamId: string, startDate: string, endDate: string): Promise<TeamMemberUsage> {
     return this.get<TeamMemberUsage>(`/teams/${encodeURIComponent(teamId)}/usage/members`, {
+      start_date: startDate,
+      end_date: endDate,
+    });
+  }
+
+  async getTeamKeyUsage(teamId: string, startDate: string, endDate: string): Promise<TeamKeyUsage> {
+    return this.get<TeamKeyUsage>(`/teams/${encodeURIComponent(teamId)}/usage/keys`, {
       start_date: startDate,
       end_date: endDate,
     });

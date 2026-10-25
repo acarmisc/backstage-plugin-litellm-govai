@@ -5,9 +5,11 @@ import { TeamInfo, UsageMetrics } from '../types';
 import { isUserMemberOfGroup, ProvisioningError } from '../provisioning';
 import { redactTeamUsage } from '../teamBudgetVisibility';
 import {
+  buildTeamKeyUsage,
   buildTeamMemberUsage,
   memberEmails,
   MemberProfiles,
+  redactTeamKeyUsage,
   redactTeamMemberUsage,
 } from '../teamMemberUsage';
 import { sendError } from '../errors';
@@ -101,89 +103,152 @@ export function registerTeamUsageRoutes(router: Router, ctx: RouterContext): voi
     }
   });
 
-  // Per-member breakdown of a team's usage. Opt-in (404 when disabled) and
+  // Shared gate of the per-member routes. Opt-in (404 when disabled) and
   // fail-closed: the caller must be a manager of the team (owning_group), or
   // a member who holds one of memberBreakdown.viewerRoles in the team or is
-  // granted litellm.team.usage.read.
-  router.get('/teams/:teamId/usage/members', requireUser, async (req: Request, res: Response) => {
+  // granted litellm.team.usage.read. Scoped to the one team in the path, so
+  // leading a team never reveals another. Replies and returns null on refusal.
+  async function authorizeMemberView(
+    req: Request,
+    res: Response,
+  ): Promise<{
+    teamId: string;
+    team: TeamInfo;
+    startDate: string;
+    endDate: string;
+    isManager: boolean;
+    via: string;
+  } | null> {
     const cfg = ctx.memberBreakdownCfg;
     if (!cfg.enabled) {
       res.status(404).json({ error: 'Not found' });
-      return;
+      return null;
     }
+    const { teamId } = req.params;
+    const { start_date, end_date } = req.query;
+    if (!start_date || !end_date) {
+      res.status(400).json({ error: 'start_date and end_date are required' });
+      return null;
+    }
+
+    const tokenEntityRef = res.locals.tokenEntityRef as string;
+    const userInfo = await getProvisionedUser(ctx, res);
+    const callerId = res.locals.userId as string;
+    const isMember = userInfo?.teams?.includes(teamId) ?? false;
+
+    let team: TeamInfo;
     try {
-      const { teamId } = req.params;
-      const { start_date, end_date } = req.query;
-      if (!start_date || !end_date) {
-        res.status(400).json({ error: 'start_date and end_date are required' });
-        return;
-      }
-
-      const tokenEntityRef = res.locals.tokenEntityRef as string;
-      const userInfo = await getProvisionedUser(ctx, res);
-      const callerId = res.locals.userId as string;
-      const isMember = userInfo?.teams?.includes(teamId) ?? false;
-
-      let team: TeamInfo;
-      try {
-        team = await withTeamFetchRetry(() => client.getTeamInfo(teamId));
-      } catch (err: unknown) {
-        if (err instanceof LiteLLMUpstreamError && err.status === 404) {
-          res.status(404).json({ error: 'Team not found' });
-          return;
-        }
-        throw err;
-      }
-
-      const owningGroup =
-        typeof team.metadata?.owning_group === 'string' ? team.metadata.owning_group : undefined;
-      const isManager =
-        ctx.teamMgmtEnabled &&
-        !!owningGroup &&
-        (await isUserMemberOfGroup(tokenEntityRef, owningGroup, catalogClient, auth, logger));
-
-      if (!isMember && !isManager) {
+      team = await withTeamFetchRetry(() => client.getTeamInfo(teamId));
+    } catch (err: unknown) {
+      if (err instanceof LiteLLMUpstreamError && err.status === 404) {
         res.status(404).json({ error: 'Team not found' });
-        return;
+        return null;
       }
+      throw err;
+    }
 
-      const role = team.members_with_roles?.find(m => m.user_id === callerId)?.role;
-      const viaRole = isMember && !!role && cfg.viewerRoles.includes(role);
-      const allowed =
-        isManager ||
-        viaRole ||
-        (isMember &&
-          cfg.permissionEnabled &&
-          (await ctx.assertPermission(req, litellmTeamUsageReadPermission)));
-      if (!allowed) {
-        res.status(403).json({
-          error: 'Access denied: viewing per-member usage needs a team role or permission',
-        });
-        return;
-      }
+    const owningGroup =
+      typeof team.metadata?.owning_group === 'string' ? team.metadata.owning_group : undefined;
+    const isManager =
+      ctx.teamMgmtEnabled &&
+      !!owningGroup &&
+      (await isUserMemberOfGroup(tokenEntityRef, owningGroup, catalogClient, auth, logger));
+
+    if (!isMember && !isManager) {
+      res.status(404).json({ error: 'Team not found' });
+      return null;
+    }
+
+    const role = team.members_with_roles?.find(m => m.user_id === callerId)?.role;
+    const viaRole = isMember && !!role && cfg.viewerRoles.includes(role);
+    const allowed =
+      isManager ||
+      viaRole ||
+      (isMember &&
+        cfg.permissionEnabled &&
+        (await ctx.assertPermission(req, litellmTeamUsageReadPermission)));
+    if (!allowed) {
+      res.status(403).json({
+        error: 'Access denied: viewing per-member usage needs a team role or permission',
+      });
+      return null;
+    }
+
+    let via = 'permission';
+    if (isManager) via = 'manager';
+    else if (viaRole) via = 'teamRole';
+    return {
+      teamId,
+      team,
+      startDate: start_date as string,
+      endDate: end_date as string,
+      isManager,
+      via,
+    };
+  }
+
+  const hideFor = (isManager: boolean): boolean =>
+    isManager
+      ? teamBudgetVisibility.hideTeamBudgetForManagers
+      : teamBudgetVisibility.hideTeamBudgetForMembers;
+
+  // Per-member breakdown of a team's usage.
+  router.get('/teams/:teamId/usage/members', requireUser, async (req: Request, res: Response) => {
+    try {
+      const gate = await authorizeMemberView(req, res);
+      if (!gate) return;
+      const { teamId, team, startDate, endDate, isManager, via } = gate;
 
       const [usage, keys] = await Promise.all([
-        client.getTeamUsage(teamId, start_date as string, end_date as string),
+        client.getTeamUsage(teamId, startDate, endDate),
         client.listTeamKeys(teamId),
       ]);
       const profiles = await lookupProfiles(memberEmails(team, keys));
       const breakdown = buildTeamMemberUsage(teamId, usage, keys, team, profiles);
 
-      let via = 'permission';
-      if (isManager) via = 'manager';
-      else if (viaRole) via = 'teamRole';
-      logger.info('team.usage.members.read', { actor: tokenEntityRef, teamId, via });
-
-      const hide = isManager
-        ? teamBudgetVisibility.hideTeamBudgetForManagers
-        : teamBudgetVisibility.hideTeamBudgetForMembers;
-      res.json(hide ? redactTeamMemberUsage(breakdown) : breakdown);
+      logger.info('team.usage.members.read', {
+        actor: res.locals.tokenEntityRef as string,
+        teamId,
+        via,
+      });
+      res.json(hideFor(isManager) ? redactTeamMemberUsage(breakdown) : breakdown);
     } catch (error: unknown) {
       if (error instanceof ProvisioningError) {
         res.status(error.status).json(error.body);
         return;
       }
       sendError(res, error, logger, 'fetch team member usage');
+    }
+  });
+
+  // The team's keys (alias, owner, status, budget) with per-key usage, so a
+  // team lead sees the members' keys and their consumption. Same gate and
+  // redaction as the per-member breakdown.
+  router.get('/teams/:teamId/usage/keys', requireUser, async (req: Request, res: Response) => {
+    try {
+      const gate = await authorizeMemberView(req, res);
+      if (!gate) return;
+      const { teamId, team, startDate, endDate, isManager, via } = gate;
+
+      const [usage, keys] = await Promise.all([
+        client.getTeamUsage(teamId, startDate, endDate),
+        client.listTeamKeys(teamId),
+      ]);
+      const profiles = await lookupProfiles(memberEmails(team, keys));
+      const keyUsage = buildTeamKeyUsage(teamId, usage, keys, team, profiles);
+
+      logger.info('team.usage.keys.read', {
+        actor: res.locals.tokenEntityRef as string,
+        teamId,
+        via,
+      });
+      res.json(hideFor(isManager) ? redactTeamKeyUsage(keyUsage) : keyUsage);
+    } catch (error: unknown) {
+      if (error instanceof ProvisioningError) {
+        res.status(error.status).json(error.body);
+        return;
+      }
+      sendError(res, error, logger, 'fetch team key usage');
     }
   });
 
