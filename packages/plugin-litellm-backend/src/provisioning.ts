@@ -85,6 +85,11 @@ export function applyRoleOverrides(
  *   tpmLimit:       none — LiteLLM global / team limits still apply
  *   rpmLimit:       none — same
  *   metadata:       backstage source tag only
+ *
+ * With `useGatewayBudgetDefaults: true` the maxBudget / budgetDuration
+ * fallbacks are dropped: an unset field stays undefined, provisionUser leaves
+ * it out of /user/new, and LiteLLM's max_internal_user_budget /
+ * internal_user_budget_duration apply instead (internal_user role only).
  */
 export function readProvisioningDefaults(config: Config): {
   enabled: boolean;
@@ -92,13 +97,20 @@ export function readProvisioningDefaults(config: Config): {
 } {
   const enabled =
     config.getOptionalBoolean('litellm.provisioning.enabled') ?? false;
+  const useGatewayBudgetDefaults =
+    config.getOptionalBoolean(
+      'litellm.provisioning.defaults.useGatewayBudgetDefaults',
+    ) ?? false;
+  const maxBudget = config.getOptionalNumber(
+    'litellm.provisioning.defaults.maxBudget',
+  );
+  const budgetDuration = config.getOptionalString(
+    'litellm.provisioning.defaults.budgetDuration',
+  );
   const defaults: ProvisioningDefaults = {
-    maxBudget:
-      config.getOptionalNumber('litellm.provisioning.defaults.maxBudget') ?? 10,
+    maxBudget: maxBudget ?? (useGatewayBudgetDefaults ? undefined : 10),
     budgetDuration:
-      config.getOptionalString(
-        'litellm.provisioning.defaults.budgetDuration',
-      ) ?? '30d',
+      budgetDuration ?? (useGatewayBudgetDefaults ? undefined : '30d'),
     models:
       config.getOptionalStringArray('litellm.provisioning.defaults.models') ??
       [],
@@ -223,8 +235,11 @@ export async function provisionUser(
     user_id: userId,
     ...(profile.email && { user_email: profile.email }),
     ...(profile.displayName && { user_alias: profile.displayName }),
-    max_budget: defaults.maxBudget,
-    budget_duration: defaults.budgetDuration,
+    // Undefined = left out, so LiteLLM's internal-user defaults apply.
+    ...(defaults.maxBudget !== undefined && { max_budget: defaults.maxBudget }),
+    ...(defaults.budgetDuration !== undefined && {
+      budget_duration: defaults.budgetDuration,
+    }),
     models: defaults.models,
     teams: defaults.teams,
     ...(defaults.tpmLimit !== undefined && { tpm_limit: defaults.tpmLimit }),

@@ -5029,6 +5029,28 @@ describe('bridge routes: identity matches the UI', () => {
     }
   });
 
+  test('POST /bridge/keys without max_budget is rejected when the provisioning budget is left to the gateway', async () => {
+    const h = await startHarness({
+      config: bridgeConfig({
+        'litellm.bridge.allowedEmailDomains': ['abstract.it'],
+        'litellm.keyGeneration.allowUnlimitedBudget': false,
+        'litellm.provisioning.defaults.useGatewayBudgetDefaults': true,
+      }),
+      tokenVerifier: verifier,
+      client: mockClient({ userInfo: { user_id: 'degiorgis', teams: [] } }),
+    });
+    try {
+      const { status, body } = await req(h.baseUrl, 'POST', '/bridge/keys', {
+        ...bearer, body: { alias: 'cli' },
+      });
+      assert.strictEqual(status, 400);
+      assert.match(body.error, /max_budget is required/);
+      assert.strictEqual(h.client.calls.generateKey.length, 0);
+    } finally {
+      h.server.close();
+    }
+  });
+
   test('POST /bridge/keys keeps an explicit max_budget and still rejects explicit null when unlimited is not allowed', async () => {
     const h = await startHarness({
       config: bridgeConfig({
@@ -5562,5 +5584,47 @@ describe('GET /teams/:teamId/usage/members', () => {
       assert.ok(r.body.keys.every((k: any) => k.spend === 0 && !('max_budget' in k)));
       assert.strictEqual(r.body.keys[0].total_tokens, 20);
     });
+  });
+});
+
+describe('router startup log for auto-provisioning', () => {
+  async function provisioningLog(config: Record<string, any>): Promise<string> {
+    const infos: string[] = [];
+    await createRouter({
+      config: mockConfig({
+        'litellm.baseUrl': 'http://litellm.local',
+        'litellm.masterKey': 'mk-test',
+        'litellm.provisioning.enabled': true,
+        ...config,
+      }),
+      logger: { ...silentLogger(), info: (m: string) => infos.push(m) } as any,
+      auth: mockAuth(),
+      discovery: mockDiscovery(),
+      permissions: mockPermissions(),
+      client: mockClient({}),
+    });
+    const line = infos.find(m => m.startsWith('LiteLLM auto-provisioning enabled'));
+    assert.ok(line, 'no auto-provisioning startup log');
+    return line;
+  }
+
+  test('shows the built-in budget fallbacks when the flag is off', async () => {
+    assert.match(await provisioningLog({}), /budget=\$10\/30d,/);
+  });
+
+  test('names the gateway default for each budget field left to LiteLLM', async () => {
+    assert.match(
+      await provisioningLog({
+        'litellm.provisioning.defaults.useGatewayBudgetDefaults': true,
+      }),
+      /budget=gateway default\/gateway default,/,
+    );
+    assert.match(
+      await provisioningLog({
+        'litellm.provisioning.defaults.useGatewayBudgetDefaults': true,
+        'litellm.provisioning.defaults.maxBudget': 25,
+      }),
+      /budget=\$25\/gateway default,/,
+    );
   });
 });

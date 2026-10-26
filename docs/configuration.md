@@ -47,6 +47,13 @@ litellm:
     enabled: false   # default
 
     defaults:
+      # Leave user budgets to LiteLLM's litellm_settings.max_internal_user_budget
+      # and internal_user_budget_duration. When true, maxBudget and
+      # budgetDuration have no fallback: each is sent only if set here or on
+      # the matching roles[] entry. LiteLLM applies its defaults to
+      # userRole internal_user only.
+      useGatewayBudgetDefaults: false   # default
+
       # Max lifetime spend (USD) before the account is blocked.
       maxBudget: 10          # default: 10
 
@@ -172,8 +179,9 @@ litellm:
 | `litellm.masterKey` | string | yes | — | Admin master key (`@visibility secret`) |
 | `litellm.userIdDomain` | string | no | — | Email domain for LiteLLM user IDs |
 | `litellm.provisioning.enabled` | boolean | no | `false` | Enable autoprovisioning |
-| `litellm.provisioning.defaults.maxBudget` | number | no | `10` | Max spend (USD) per reset period |
-| `litellm.provisioning.defaults.budgetDuration` | string | no | `"30d"` | Spend-reset period |
+| `litellm.provisioning.defaults.useGatewayBudgetDefaults` | boolean | no | `false` | Drop the `10` / `"30d"` fallbacks below: unset budget fields are left out of `/user/new`, so LiteLLM's `max_internal_user_budget` / `internal_user_budget_duration` apply (LiteLLM applies them to `internal_user` only) |
+| `litellm.provisioning.defaults.maxBudget` | number | no | `10` (unset with `useGatewayBudgetDefaults`) | Max spend (USD) per reset period |
+| `litellm.provisioning.defaults.budgetDuration` | string | no | `"30d"` (unset with `useGatewayBudgetDefaults`) | Spend-reset period |
 | `litellm.provisioning.defaults.models` | string[] | no | `[]` | Allowed model IDs (empty = all) |
 | `litellm.provisioning.defaults.teams` | string[] | no | `[]` | Team IDs to join on creation |
 | `litellm.provisioning.defaults.userRole` | string | no | `"internal_user"` | LiteLLM role |
