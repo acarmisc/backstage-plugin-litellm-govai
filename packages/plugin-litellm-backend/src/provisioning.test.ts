@@ -10,6 +10,7 @@ import {
   effectiveUserId,
   provisionUser,
 } from './provisioning';
+import { RoleConfig } from './types';
 
 // ---------------------------------------------------------------------------
 // Minimal mock factories — avoid heavy frameworks, keep dependencies minimal
@@ -154,8 +155,10 @@ describe('readProvisioningDefaults', () => {
 describe('provisionUser budget fields', () => {
   async function createUserPayload(
     configValues: Record<string, any>,
+    role?: RoleConfig,
   ): Promise<Record<string, any>> {
-    const { defaults } = readProvisioningDefaults(mockConfig(configValues));
+    const base = readProvisioningDefaults(mockConfig(configValues)).defaults;
+    const defaults = role ? applyRoleOverrides(base, role) : base;
     let payload: Record<string, any> | undefined;
     const client: any = {
       createUser: async (p: any) => {
@@ -205,15 +208,12 @@ describe('provisionUser budget fields', () => {
   });
 
   test('flag on: a role override still supplies the budget', async () => {
-    const { defaults } = readProvisioningDefaults(
-      mockConfig({ 'litellm.provisioning.defaults.useGatewayBudgetDefaults': true }),
+    const payload = await createUserPayload(
+      { 'litellm.provisioning.defaults.useGatewayBudgetDefaults': true },
+      { group: 'group:default/power', budgetDuration: '7d' },
     );
-    const merged = applyRoleOverrides(defaults, {
-      group: 'group:default/power',
-      budgetDuration: '7d',
-    });
-    assert.strictEqual(merged.maxBudget, undefined);
-    assert.strictEqual(merged.budgetDuration, '7d');
+    assert.strictEqual('max_budget' in payload, false);
+    assert.strictEqual(payload.budget_duration, '7d');
   });
 });
 
