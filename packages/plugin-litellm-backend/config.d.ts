@@ -463,6 +463,8 @@ export interface Config {
        * reaches:
        *   - managers of the team (members of its metadata.owning_group, with
        *     team management enabled);
+       *   - team leads (members of the catalog group `<team_alias><leadGroupSuffix>`,
+       *     when leadGroupSuffix is set);
        *   - members of the team holding one of `viewerRoles` in it;
        *   - members of the team granted `litellm.team.usage.read` (only
        *     consulted when permission.enabled is true).
@@ -480,6 +482,13 @@ export interface Config {
          * @default []
          */
         viewerRoles?: string[];
+
+        /**
+         * Suffix of a catalog group named `<team_alias><suffix>` whose members
+         * are team leads (e.g. "-leads" -> group:default/abstrid-leads). For
+         * teams synced without metadata.owning_group. Unset: no lead access.
+         */
+        leadGroupSuffix?: string;
       };
     };
 

@@ -17,6 +17,8 @@ export interface MemberBreakdownConfig {
   viewerRoles: string[];
   /** Whether `litellm.team.usage.read` may grant access (needs `permission.enabled`). */
   permissionEnabled: boolean;
+  /** Suffix of a catalog group named `<team_alias><suffix>` whose members are team leads. */
+  leadGroupSuffix?: string;
 }
 
 export function readMemberBreakdownConfig(config: Config): MemberBreakdownConfig {
@@ -26,6 +28,8 @@ export function readMemberBreakdownConfig(config: Config): MemberBreakdownConfig
     viewerRoles:
       config.getOptionalStringArray('litellm.teamUsage.memberBreakdown.viewerRoles') ?? [],
     permissionEnabled: config.getOptionalBoolean('permission.enabled') ?? false,
+    leadGroupSuffix:
+      config.getOptionalString('litellm.teamUsage.memberBreakdown.leadGroupSuffix') || undefined,
   };
 }
 

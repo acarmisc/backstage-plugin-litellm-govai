@@ -24,7 +24,7 @@ import { LiteLLMBudgetWidget } from './LiteLLMBudgetWidget';
 import { TeamUsage } from './TeamUsage';
 import { ModelsTable } from './ModelsTable';
 import { InsightsTab } from './InsightsTab';
-import { liteLlmApiRef } from '../api';
+import { ApiError, liteLlmApiRef } from '../api';
 import { toLocalDay } from '../dates';
 import {
   litellmTeamCreatePermission,
@@ -50,6 +50,10 @@ type PageTab = 'overview' | 'keys' | 'teams' | 'models' | 'insights';
 const PAGE_TABS: readonly PageTab[] = ['overview', 'keys', 'teams', 'models', 'insights'];
 const isPageTab = (v: string | null): v is PageTab =>
   !!v && (PAGE_TABS as readonly string[]).includes(v);
+
+// 403/404 mean "not allowed" or "feature off": the section is hidden, not reported as an error.
+const isRefusal = (err: unknown): boolean =>
+  err instanceof ApiError && (err.status === 403 || err.status === 404);
 
 function initDateRange(): DateRange {
   let preset = '7d';
@@ -163,6 +167,9 @@ export const LiteLLMPage: FC = () => {
   // Per-key usage of a team, same access rules: teamId -> keys, or null when not allowed.
   const [keyUsageCache, setKeyUsageCache] = useState<Record<string, TeamKeyUsage | null>>({});
   const [keyUsageLoading, setKeyUsageLoading] = useState<Record<string, boolean>>({});
+  // Teams whose breakdown failed for a reason other than refusal (403/404): show a caption.
+  const [memberUsageFailed, setMemberUsageFailed] = useState<Record<string, boolean>>({});
+  const [keyUsageFailed, setKeyUsageFailed] = useState<Record<string, boolean>>({});
 
   const { value: userInfo, loading: userLoading, error: userError } = useAsync(
     () => api.getUserInfo(),
@@ -253,6 +260,8 @@ export const LiteLLMPage: FC = () => {
     setMemberUsageLoading({});
     setKeyUsageCache({});
     setKeyUsageLoading({});
+    setMemberUsageFailed({});
+    setKeyUsageFailed({});
   }, [setDateRange, setCurrentPreset]);
 
   // Fetch team usage on demand when a team card is expanded
@@ -280,8 +289,9 @@ export const LiteLLMPage: FC = () => {
       const endDate = toLocalDay(dateRange.end);
       const data = await api.getTeamMemberUsage(teamId, startDate, endDate);
       setMemberUsageCache(prev => ({ ...prev, [teamId]: data }));
-    } catch {
+    } catch (err) {
       setMemberUsageCache(prev => ({ ...prev, [teamId]: null }));
+      setMemberUsageFailed(prev => ({ ...prev, [teamId]: !isRefusal(err) }));
     } finally {
       setMemberUsageLoading(prev => ({ ...prev, [teamId]: false }));
     }
@@ -295,8 +305,9 @@ export const LiteLLMPage: FC = () => {
       const endDate = toLocalDay(dateRange.end);
       const data = await api.getTeamKeyUsage(teamId, startDate, endDate);
       setKeyUsageCache(prev => ({ ...prev, [teamId]: data }));
-    } catch {
+    } catch (err) {
       setKeyUsageCache(prev => ({ ...prev, [teamId]: null }));
+      setKeyUsageFailed(prev => ({ ...prev, [teamId]: !isRefusal(err) }));
     } finally {
       setKeyUsageLoading(prev => ({ ...prev, [teamId]: false }));
     }
@@ -646,6 +657,8 @@ export const LiteLLMPage: FC = () => {
             getTeamMemberUsageLoading={teamId => memberUsageLoading[teamId] ?? false}
             getTeamKeyUsage={teamId => keyUsageCache[teamId] ?? null}
             getTeamKeyUsageLoading={teamId => keyUsageLoading[teamId] ?? false}
+            getTeamMemberUsageFailed={teamId => memberUsageFailed[teamId] ?? false}
+            getTeamKeyUsageFailed={teamId => keyUsageFailed[teamId] ?? false}
             canManage={teamMgmtEnabled && canManageTeam && !readOnly}
             onEditTeam={t => setManageTeam({ mode: 'edit', team: t })}
             canCreate={teamMgmtEnabled && canCreateTeam && !readOnly}

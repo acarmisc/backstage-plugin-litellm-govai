@@ -5488,6 +5488,38 @@ describe('GET /teams/:teamId/usage/members', () => {
     assert.strictEqual(r.status, 200);
   });
 
+  describe('team lead via the catalog lead group', () => {
+    const leadConfig = { 'litellm.teamUsage.memberBreakdown.leadGroupSuffix': '-leads' };
+    const leadTeam = { ...team, team_alias: 'Abstrid' };
+    const leads = mockCatalog(['group:default/abstrid-leads']);
+
+    test('a member of <alias>-leads gets the breakdown without owning_group or a viewer role', async () => {
+      const r = await run({ caller: 'bob', team: leadTeam, catalog: leads, config: leadConfig });
+      assert.strictEqual(r.status, 200);
+    });
+
+    test('a member of <alias>-leads gets the key usage too', async () => {
+      const r = await run({
+        caller: 'bob',
+        team: leadTeam,
+        catalog: leads,
+        config: leadConfig,
+        path: '/teams/t1/usage/keys?start_date=2026-01-01&end_date=2026-01-31',
+      });
+      assert.strictEqual(r.status, 200);
+    });
+
+    test('a member outside the lead group is refused (403)', async () => {
+      const r = await run({ caller: 'bob', team: leadTeam, catalog: mockCatalog([]), config: leadConfig });
+      assert.strictEqual(r.status, 403);
+    });
+
+    test('no lead access when leadGroupSuffix is unset', async () => {
+      const r = await run({ caller: 'bob', team: leadTeam, catalog: leads });
+      assert.strictEqual(r.status, 403);
+    });
+  });
+
   test('hides dollars when the caller is under budget hiding', async () => {
     const r = await run({ caller: 'alice', config: { 'litellm.display.hideTeamBudgetForMembers': true } });
     assert.strictEqual(r.status, 200);

@@ -27,6 +27,32 @@ export function registerTeamUsageRoutes(router: Router, ctx: RouterContext): voi
   } = ctx;
   const requireUser = createRequireUser(ctx);
 
+  // A team manager: a member of the team's owning group (team management
+  // enabled), or a member of the catalog lead group `<alias><leadGroupSuffix>`
+  // for teams synced without an owning_group.
+  async function isTeamManager(team: TeamInfo, tokenEntityRef: string): Promise<boolean> {
+    const owningGroup =
+      typeof team.metadata?.owning_group === 'string' ? team.metadata.owning_group : undefined;
+    if (
+      ctx.teamMgmtEnabled &&
+      owningGroup &&
+      (await isUserMemberOfGroup(tokenEntityRef, owningGroup, catalogClient, auth, logger))
+    ) {
+      return true;
+    }
+    const suffix = ctx.memberBreakdownCfg.leadGroupSuffix;
+    if (!suffix || !team.team_alias) return false;
+    // Same slug rule as the catalog group names: lower-case, other chars become '-'.
+    const slug = team.team_alias.toLowerCase().replace(/[^a-z0-9\-_.]/g, '-');
+    return isUserMemberOfGroup(
+      tokenEntityRef,
+      `group:default/${slug}${suffix}`,
+      catalogClient,
+      auth,
+      logger,
+    );
+  }
+
   router.get('/teams/:teamId/usage', requireUser, async (req: Request, res: Response) => {
     try {
       const { teamId } = req.params;
@@ -43,32 +69,21 @@ export function registerTeamUsageRoutes(router: Router, ctx: RouterContext): voi
 
       // Check membership: user must be in the team OR be a team manager
       const isMember = userInfo?.teams?.includes(teamId) ?? false;
-      // A "manager" administers this specific team: team management is enabled
-      // and the caller belongs to the team's owning group (metadata.owning_group).
+      // A "manager" administers this specific team (see isTeamManager).
       // Membership of the global team-admin group alone is not enough.
       let isManager = false;
       // Skip the extra lookup when it can't change the outcome: members always
       // get through, and manager-ness only matters for members when the budget
       // hiding flags differ between the two roles.
       const managerCheckNeeded =
-        ctx.teamMgmtEnabled &&
+        (ctx.teamMgmtEnabled || !!ctx.memberBreakdownCfg.leadGroupSuffix) &&
         (!isMember ||
           teamBudgetVisibility.hideTeamBudgetForMembers !==
             teamBudgetVisibility.hideTeamBudgetForManagers);
       if (managerCheckNeeded) {
         try {
           const team = await withTeamFetchRetry(() => client.getTeamInfo(teamId));
-          const owningGroup =
-            typeof team.metadata?.owning_group === 'string' ? team.metadata.owning_group : undefined;
-          if (owningGroup) {
-            isManager = await isUserMemberOfGroup(
-              tokenEntityRef,
-              owningGroup,
-              catalogClient,
-              auth,
-              logger,
-            );
-          }
+          isManager = await isTeamManager(team, tokenEntityRef);
         } catch (err: unknown) {
           const message = err instanceof Error ? err.message : String(err);
           logger.warn(`Team-manager check failed: ${message}`);
@@ -147,12 +162,7 @@ export function registerTeamUsageRoutes(router: Router, ctx: RouterContext): voi
       throw err;
     }
 
-    const owningGroup =
-      typeof team.metadata?.owning_group === 'string' ? team.metadata.owning_group : undefined;
-    const isManager =
-      ctx.teamMgmtEnabled &&
-      !!owningGroup &&
-      (await isUserMemberOfGroup(tokenEntityRef, owningGroup, catalogClient, auth, logger));
+    const isManager = await isTeamManager(team, tokenEntityRef);
 
     if (!isMember && !isManager) {
       res.status(404).json({ error: 'Team not found' });

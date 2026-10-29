@@ -171,6 +171,7 @@ litellm:
     memberBreakdown:
       enabled: true          # default false: the route 404s, the UI hides the table
       viewerRoles: [admin]   # optional: LiteLLM team roles that may see it
+      leadGroupSuffix: "-leads"  # optional: catalog group <team_alias>-leads = team leads
 ```
 
 With the breakdown enabled, expanding a team card on the **Teams** tab shows a
@@ -181,15 +182,26 @@ spend, tokens, requests, success rate and number of keys per member.
 
 1. **Team managers**: members of the team's `metadata.owning_group` (team
    management enabled), as for the other manager surfaces.
-2. **Members holding a viewer role**: the caller is in the team with one of
+2. **Team leads**: when `leadGroupSuffix` is set, members of the catalog group
+   named `<team_alias><leadGroupSuffix>`. The alias is lower-cased and every
+   character outside `a-z 0-9 - _ .` becomes `-`, so with the suffix `-leads` a
+   team aliased `Abstrid` is led by `group:default/abstrid-leads`. This needs no
+   `owning_group` and no LiteLLM role, which suits teams synced from an identity
+   provider.
+3. **Members holding a viewer role**: the caller is in the team with one of
    `viewerRoles` (e.g. teams synced from an identity provider, where no team has
    an `owning_group`).
-3. **Members granted `litellm.team.usage.read`**: only when
+4. **Members granted `litellm.team.usage.read`**: only when
    `permission.enabled: true`. The permission never opens a team the caller is
    not a member of. Without a policy, Backstage allows every permission, so with
    the framework enabled but no policy installed **every member** would qualify:
    install a policy (e.g. `plugin-rbac`) that grants it only to team leads or
    FinOps roles.
+
+Keycloak convention: the reconciler that syncs teams from Keycloak must not turn
+`*-leads` groups into LiteLLM teams. Lead groups exist only in the Backstage
+catalog, so a `<alias>-leads` group in Keycloak must be skipped by the sync, or
+it appears as a team of its own.
 
 Spend is attributed through each key's owner (`/key/list?team_id=`), so the rows
 add up to the team total. Activity of deleted or ownerless keys is grouped in an

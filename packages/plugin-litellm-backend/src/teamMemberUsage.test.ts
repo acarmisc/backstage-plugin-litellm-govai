@@ -120,6 +120,7 @@ describe('memberEmails', () => {
 describe('readMemberBreakdownConfig', () => {
   const cfg = (v: Record<string, any>): any => ({
     getOptionalBoolean: (k: string) => v[k],
+    getOptionalString: (k: string) => v[k],
     getOptionalStringArray: (k: string) => v[k],
   });
   test('defaults to disabled', () => {
@@ -127,6 +128,7 @@ describe('readMemberBreakdownConfig', () => {
       enabled: false,
       viewerRoles: [],
       permissionEnabled: false,
+      leadGroupSuffix: undefined,
     });
   });
   test('reads the keys', () => {
@@ -134,9 +136,16 @@ describe('readMemberBreakdownConfig', () => {
       readMemberBreakdownConfig(cfg({
         'litellm.teamUsage.memberBreakdown.enabled': true,
         'litellm.teamUsage.memberBreakdown.viewerRoles': ['admin'],
+        'litellm.teamUsage.memberBreakdown.leadGroupSuffix': '-leads',
         'permission.enabled': true,
       })),
-      { enabled: true, viewerRoles: ['admin'], permissionEnabled: true },
+      { enabled: true, viewerRoles: ['admin'], permissionEnabled: true, leadGroupSuffix: '-leads' },
+    );
+  });
+  test('an empty leadGroupSuffix is treated as unset', () => {
+    assert.strictEqual(
+      readMemberBreakdownConfig(cfg({ 'litellm.teamUsage.memberBreakdown.leadGroupSuffix': '' })).leadGroupSuffix,
+      undefined,
     );
   });
 });

@@ -9,6 +9,12 @@ commit/PR that bumps the version in `package.json`. Format follows the
 Earlier history: `git log -- packages/plugin-litellm-backend` or the
 [GitHub tags](https://github.com/acarmisc/backstage-plugin-litellm-govai/tags).
 
+## 0.28.0
+
+### Minor Changes
+
+- feat: `litellm.teamUsage.memberBreakdown.leadGroupSuffix` makes members of the catalog group `<team_alias><suffix>` (e.g. `abstrid-leads`) team managers, for teams synced without `owning_group`. One shared manager check now serves `/usage`, `/usage/members` and `/usage/keys`.
+
 ## 0.27.0
 
 ### Minor Changes

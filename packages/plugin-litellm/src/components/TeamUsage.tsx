@@ -204,6 +204,8 @@ interface TeamCardProps {
   /** Per-key usage; null when unavailable to the caller (the section is hidden). */
   keyUsage?: TeamKeyUsage | null;
   keyUsageLoading?: boolean;
+  memberUsageFailed?: boolean;
+  keyUsageFailed?: boolean;
   canManage?: boolean;
   onEditTeam?: (team: TeamInfo) => void;
   /** Members-only management (team-role path); hidden when `canManage`. */
@@ -214,7 +216,7 @@ interface TeamCardProps {
   mcpServers?: McpServerInfo[];
 }
 
-const TeamCard: FC<TeamCardProps> = ({ team, usage, usageLoading, memberUsage, memberUsageLoading, keyUsage, keyUsageLoading, canManage, onEditTeam, canManageMembers, onManageMembers, onExpand, vectorStores, mcpServers }) => {
+const TeamCard: FC<TeamCardProps> = ({ team, usage, usageLoading, memberUsage, memberUsageLoading, memberUsageFailed, keyUsage, keyUsageLoading, keyUsageFailed, canManage, onEditTeam, canManageMembers, onManageMembers, onExpand, vectorStores, mcpServers }) => {
   const [expanded, setExpanded] = useState(false);
   const chart = useChartTheme();
 
@@ -463,12 +465,14 @@ const TeamCard: FC<TeamCardProps> = ({ team, usage, usageLoading, memberUsage, m
 
         {renderDailySpendSection()}
 
-        {(memberUsageLoading || memberUsage) && (
+        {(memberUsageLoading || memberUsage || memberUsageFailed) && (
           <Box mb={2.5}>
             {sectionLabel('Usage by member')}
-            {memberUsage ? (
-              <MemberUsageTable usage={memberUsage} />
-            ) : (
+            {memberUsage && <MemberUsageTable usage={memberUsage} />}
+            {!memberUsage && memberUsageFailed && (
+              <Typography variant="caption" color="text.secondary">Could not load per-member usage</Typography>
+            )}
+            {!memberUsage && !memberUsageFailed && (
               <Box display="flex" justifyContent="center" py={2}>
                 <CircularProgress size={22} />
               </Box>
@@ -476,12 +480,14 @@ const TeamCard: FC<TeamCardProps> = ({ team, usage, usageLoading, memberUsage, m
           </Box>
         )}
 
-        {(keyUsageLoading || keyUsage) && (
+        {(keyUsageLoading || keyUsage || keyUsageFailed) && (
           <Box mb={2.5}>
             {sectionLabel('Keys by member')}
-            {keyUsage ? (
-              <TeamKeyUsageTable usage={keyUsage} />
-            ) : (
+            {keyUsage && <TeamKeyUsageTable usage={keyUsage} />}
+            {!keyUsage && keyUsageFailed && (
+              <Typography variant="caption" color="text.secondary">Could not load per-key usage</Typography>
+            )}
+            {!keyUsage && !keyUsageFailed && (
               <Box display="flex" justifyContent="center" py={2}>
                 <CircularProgress size={22} />
               </Box>
@@ -560,6 +566,9 @@ interface TeamUsageProps {
   /** Per-key usage for a team; null hides the section. */
   getTeamKeyUsage?: (teamId: string) => TeamKeyUsage | null;
   getTeamKeyUsageLoading?: (teamId: string) => boolean;
+  /** True when the breakdown failed for a reason other than refusal: shows a caption. */
+  getTeamMemberUsageFailed?: (teamId: string) => boolean;
+  getTeamKeyUsageFailed?: (teamId: string) => boolean;
   canManage?: boolean;
   onEditTeam?: (team: TeamInfo) => void;
   /** When true (with `onCreateTeam`), a "Create Team" action renders in the section header. */
@@ -587,6 +596,8 @@ export const TeamUsage: FC<TeamUsageProps> = ({
   getTeamMemberUsageLoading,
   getTeamKeyUsage,
   getTeamKeyUsageLoading,
+  getTeamMemberUsageFailed,
+  getTeamKeyUsageFailed,
   canManage,
   onEditTeam,
   canCreate,
@@ -660,6 +671,8 @@ export const TeamUsage: FC<TeamUsageProps> = ({
             memberUsageLoading={getTeamMemberUsageLoading?.(team.team_id) ?? false}
             keyUsage={getTeamKeyUsage?.(team.team_id) ?? null}
             keyUsageLoading={getTeamKeyUsageLoading?.(team.team_id) ?? false}
+            memberUsageFailed={getTeamMemberUsageFailed?.(team.team_id) ?? false}
+            keyUsageFailed={getTeamKeyUsageFailed?.(team.team_id) ?? false}
             canManage={canManage}
             onEditTeam={onEditTeam}
             canManageMembers={canManageMembers?.(team)}

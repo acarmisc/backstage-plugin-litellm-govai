@@ -10,6 +10,12 @@ commit/PR that bumps the version in `package.json`. Format follows the
 Earlier history: `git log -- packages/plugin-litellm` or the
  [GitHub tags](https://github.com/acarmisc/backstage-plugin-litellm-govai/tags).
 
+## 0.45.0
+
+### Minor Changes
+
+- feat: the Teams card shows "Could not load per-member/per-key usage" on real failures; 403/404 still hide the sections.
+
 ## 0.44.0
 
 Requires `@acarmisc/backstage-plugin-litellm-backend` `0.27.0` or later for
