@@ -114,9 +114,11 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
 
   if (provisioningEnabled) {
     logger.info(
-      `LiteLLM auto-provisioning enabled — defaults: budget=$${
-        provisioningDefaults.maxBudget
-      }/${provisioningDefaults.budgetDuration}, models=${
+      `LiteLLM auto-provisioning enabled — defaults: budget=${
+        provisioningDefaults.maxBudget === undefined
+          ? 'gateway default'
+          : `$${provisioningDefaults.maxBudget}`
+      }/${provisioningDefaults.budgetDuration ?? 'gateway default'}, models=${
         provisioningDefaults.models.length
           ? provisioningDefaults.models.join(',')
           : 'all'

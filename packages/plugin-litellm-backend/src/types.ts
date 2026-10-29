@@ -85,8 +85,18 @@ export interface LiteLLMConfig {
 }
 
 export interface ProvisioningDefaults {
-  maxBudget: number;
-  budgetDuration: string;
+  /**
+   * max_budget sent on /user/new. Undefined (only possible with
+   * litellm.provisioning.defaults.useGatewayBudgetDefaults) leaves it out, so
+   * LiteLLM's max_internal_user_budget applies.
+   */
+  maxBudget?: number;
+  /**
+   * budget_duration sent on /user/new. Undefined (only possible with
+   * litellm.provisioning.defaults.useGatewayBudgetDefaults) leaves it out, so
+   * LiteLLM's internal_user_budget_duration applies.
+   */
+  budgetDuration?: string;
   models: string[];
   teams: string[];
   tpmLimit?: number;
