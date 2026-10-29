@@ -98,6 +98,10 @@ litellm:
     # Set to false to allow personal, team-less keys.
     teamRequired: true   # default
 
+    # Put every key in this LiteLLM team (a team_id). The form preselects it
+    # and locks the team picker; the backend rejects any other team.
+    # fixedTeam: 1f0c6a52-3d7e-4b9a-8c21-5e4f7a9b0d13   # default: unset
+
   # Optional — hide real team budget dollars while still showing the level
   # of consumption (percent of cap, ok/near/over status, reset window).
   # The two flags are independent and enforced server-side (the backend
@@ -191,6 +195,7 @@ litellm:
 | `litellm.provisioning.roles[].metadata` | object | no | — | Merged over default metadata |
 | `litellm.keyGeneration.allowUnlimitedBudget` | boolean | no | `false` | Show the "Unlimited budget" checkbox in the Generate New Key form |
 | `litellm.keyGeneration.teamRequired` | boolean | no | `true` | Require a team to be selected before a key can be generated |
+| `litellm.keyGeneration.fixedTeam` | string | no | — | LiteLLM `team_id` every generated key must use. The form locks the team picker to it, and `POST /keys/generate` and `POST /bridge/keys` reject any other `team_id`, or none, with `400`. Users outside the team cannot generate keys. The OpenCode connect flow is not affected |
 | `litellm.keys.maxBudget` | number | no | `100` | Server-side ceiling (USD) for a key's `max_budget` on generate/update |
 | `litellm.keys.maxTpm` | number | no | `100000` | Server-side ceiling for a key's tokens-per-minute limit |
 | `litellm.keys.maxRpm` | number | no | `1000` | Server-side ceiling for a key's requests-per-minute limit |

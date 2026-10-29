@@ -12,14 +12,14 @@ const generateDefaultAlias = (username?: string): string => {
   return `${base}-${hash}`;
 };
 
-export const createForm = (username?: string): GenerateKeyRequest => ({
+export const createForm = (username?: string, teamId?: string): GenerateKeyRequest => ({
   alias: generateDefaultAlias(username),
   models: [],
   duration: '30d',
   max_budget: 100,
   tpm_limit: undefined,
   rpm_limit: undefined,
-  team_id: undefined,
+  team_id: teamId,
   key_type: 'llm_api',
 });
 
@@ -47,7 +47,8 @@ export function aliasHelperText(aliasError: boolean, aliasDuplicate: boolean): s
   return undefined;
 }
 
-export function teamHelperText(teamError: boolean, teamRequired: boolean): string {
+export function teamHelperText(teamError: boolean, teamRequired: boolean, fixedTeam = false): string {
+  if (fixedTeam) return 'Every key belongs to this team';
   if (teamError) return 'Team is required';
   if (teamRequired) return 'Bind this key to a team for scoped access';
   return 'Optional: bind this key to a specific team for scoped access';
