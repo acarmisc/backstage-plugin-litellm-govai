@@ -194,7 +194,7 @@ litellm:
 | `litellm.keys.maxBudget` | number | no | `100` | Server-side ceiling (USD) for a key's `max_budget` on generate/update |
 | `litellm.keys.maxTpm` | number | no | `100000` | Server-side ceiling for a key's tokens-per-minute limit |
 | `litellm.keys.maxRpm` | number | no | `1000` | Server-side ceiling for a key's requests-per-minute limit |
-| `litellm.keys.allowedDurations` | string[] | no | `['1d','7d','30d','90d']` | Durations a key may be generated with (an empty list allows any `<n><s/m/h/d/w/y>`) |
+| `litellm.keys.allowedDurations` | string[] | no | `['1d','7d','30d','90d']` | Durations a key may be generated with, also the Duration options in the Generate New Key form (an empty list allows any `<n><s/m/h/d/w/y>`; the form then shows the defaults). Add `never` (e.g. `['30d','90d','never']`) to offer keys that never expire: LiteLLM then gets no `duration`. `never` is only accepted when listed and is never the default |
 | `litellm.keys.allowedBudgetDurations` | string[] | no | `['1d','7d','30d','1mo']` | `budget_duration` values (budget reset period) a key may be generated with (an empty list allows any `<n><s/m/h/d/mo>`). Keys sent without one never reset |
 | `litellm.keys.allowOwnerResetSpend` | boolean | no | `false` | Let key owners reset their own key's spend (still needs the `litellm.key.resetSpend` permission). Fails closed even under an allow-all policy |
 | `litellm.cache.userInfoTtlSeconds` | number | no | `10` | TTL of the per-user LiteLLM profile cache (`0` disables) |

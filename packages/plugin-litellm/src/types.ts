@@ -52,6 +52,8 @@ export interface LiteLlmConfig {
   supportContact?: string;
   /** Controls for the "Generate New Key" form, set via litellm.keyGeneration in app-config.yaml. */
   keyGeneration?: {
+    /** Durations offered in the form (litellm.keys.allowedDurations); "never" means the key never expires. */
+    allowedDurations?: string[];
     /** When false (default), the "Unlimited budget" checkbox is hidden and a budget is always required. */
     allowUnlimitedBudget: boolean;
     /** When true (default), a team must be selected before a key can be generated. */

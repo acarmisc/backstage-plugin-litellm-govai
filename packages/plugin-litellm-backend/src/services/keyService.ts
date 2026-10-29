@@ -18,6 +18,7 @@ import {
   resolveUserProfile,
 } from '../provisioning';
 import {
+  NEVER_KEY_DURATION,
   type KeyValidationConfig,
   type GenerateKeyInput,
 } from '@acarmisc/backstage-plugin-litellm-common';
@@ -207,11 +208,20 @@ export async function createKeyForUser(
     upstreamRequest.models = input.models;
   }
   // Never mint a non-expiring key by omission: default to 30d, or the first
-  // allowed duration when 30d isn't offered.
+  // allowed duration other than "never" when 30d isn't offered.
   const durations = ctx.keyValidationConfig.allowedDurations;
   const defaultDuration =
-    durations.length === 0 || durations.includes('30d') ? '30d' : durations[0];
-  upstreamRequest.duration = input.duration ?? defaultDuration;
+    durations.length === 0 || durations.includes('30d')
+      ? '30d'
+      : durations.find(d => d !== NEVER_KEY_DURATION);
+  const duration = input.duration ?? defaultDuration;
+  if (duration === undefined) {
+    throw new KeyServiceError(400, { error: 'duration is required' });
+  }
+  // LiteLLM treats a missing duration as "never expires".
+  if (duration !== NEVER_KEY_DURATION) {
+    upstreamRequest.duration = duration;
+  }
   if (input.max_budget !== undefined) {
     // max_budget from input can be null (unlimited) or a number
     upstreamRequest.max_budget = input.max_budget ?? undefined;
