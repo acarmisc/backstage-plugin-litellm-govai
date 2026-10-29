@@ -19,7 +19,7 @@ export function registerConfigRoutes(router: Router, ctx: RouterContext): void {
     res.json({
       baseUrl: ctx.publicBaseUrl,
       supportContact: ctx.supportContact,
-      keyGeneration: { allowUnlimitedBudget: ctx.allowUnlimitedBudget, teamRequired: ctx.teamRequired },
+      keyGeneration: { allowUnlimitedBudget: ctx.allowUnlimitedBudget, teamRequired: ctx.teamRequired, fixedTeam: ctx.fixedTeam },
       keyActions: { allowOwnerResetSpend: ctx.allowOwnerResetSpend },
       opencode: { enabled: ctx.opencodeCfg.enabled },
       teamManagement: {

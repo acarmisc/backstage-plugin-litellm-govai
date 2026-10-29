@@ -88,6 +88,7 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
   const auditGroup = config.getOptionalString('litellm.audit.group');
   const allowUnlimitedBudget = config.getOptionalBoolean('litellm.keyGeneration.allowUnlimitedBudget') ?? false;
   const teamRequired = config.getOptionalBoolean('litellm.keyGeneration.teamRequired') ?? true;
+  const fixedTeam = config.getOptionalString('litellm.keyGeneration.fixedTeam');
   const allowOwnerResetSpend = config.getOptionalBoolean('litellm.keys.allowOwnerResetSpend') ?? false;
   // Key validation ceilings (PR-2)
   const keyMaxBudget = config.getOptionalNumber('litellm.keys.maxBudget') ?? 100;
@@ -165,6 +166,7 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
     auditGroup,
     allowUnlimitedBudget,
     teamRequired,
+    fixedTeam,
     allowOwnerResetSpend,
     keyValidationConfig,
     teamMgmtEnabled,

@@ -214,6 +214,99 @@ describe('KeyFormDialog', () => {
     });
   });
 
+  describe('fixed team (litellm.keyGeneration.fixedTeam)', () => {
+    const teams: TeamInfo[] = [
+      ...mockTeams,
+      { team_id: 'team-2', team_alias: 'Team B', models: ['gpt-4'], spend: 0 },
+    ];
+    const fixed = (fixedTeam: string) => ({ allowUnlimitedBudget: false, teamRequired: true, fixedTeam });
+    const teamInput = () => screen.getByLabelText(/^Team/) as HTMLInputElement;
+    const recordRequests = () => {
+      const requests: any[] = [];
+      const onCreateKey = async (r: any) => {
+        requests.push(r);
+        return { key: `sk-${requests.length}` } as GenerateKeyResponse;
+      };
+      return { requests, onCreateKey };
+    };
+
+    test('prefills the fixed team, disables the picker and filters models by it', async () => {
+      const { requests, onCreateKey } = recordRequests();
+      renderDialog({ teams, keyGenerationSettings: fixed('team-2'), onCreateKey });
+
+      assert.strictEqual(teamInput().value, 'Team B');
+      assert.strictEqual(teamInput().disabled, true);
+      assert.ok(screen.getByText('Every key belongs to this team'));
+
+      await userEvent.click(screen.getByLabelText(/^Models/));
+      const options = [...document.querySelectorAll('[role="option"]')].map(o => o.textContent ?? '');
+      assert.ok(options.some(o => o.startsWith('gpt-4')), options.join(' | '));
+      assert.ok(!options.some(o => o.startsWith('gpt-3.5-turbo')), options.join(' | '));
+      await userEvent.keyboard('{Escape}');
+
+      await userEvent.click(button('Generate'));
+      await waitFor(() => assert.strictEqual(requests.length, 1));
+      assert.strictEqual(requests[0].team_id, 'team-2');
+    });
+
+    test('a user outside the fixed team sees an error instead of the picker and cannot generate', async () => {
+      const { requests, onCreateKey } = recordRequests();
+      renderDialog({ teams, keyGenerationSettings: fixed('team-budget'), onCreateKey });
+
+      assert.ok(screen.getByText(/team-budget, and you are not in that team yet\. Contact your administrator\./));
+      assert.strictEqual(screen.queryByLabelText(/^Team/), null);
+
+      await userEvent.click(button('Generate'));
+      await new Promise(r => setTimeout(r, 50));
+      assert.strictEqual(requests.length, 0);
+      assert.strictEqual(screen.queryByText('Copy this key now. It will never be shown again.'), null);
+    });
+
+    test('the fixed team is prefilled again after a key is generated', async () => {
+      const written = stubClipboard();
+      const { requests, onCreateKey } = recordRequests();
+      renderDialog({ teams, keyGenerationSettings: fixed('team-2'), onCreateKey });
+
+      await userEvent.click(button('Generate'));
+      await screen.findByText('Copy this key now. It will never be shown again.');
+      await userEvent.click(screen.getByLabelText('Copy API key'));
+      await waitFor(() => assert.deepStrictEqual(written, ['sk-1']));
+      // onClose is a no-op here, so Done brings back the reset form.
+      await userEvent.click(button('Done'));
+
+      await waitFor(() => assert.strictEqual(teamInput().value, 'Team B'));
+      assert.strictEqual(teamInput().disabled, true);
+      await userEvent.click(button('Generate'));
+      await waitFor(() => assert.strictEqual(requests.length, 2));
+      assert.strictEqual(requests[1].team_id, 'team-2');
+    });
+
+    test('without fixedTeam the picker starts empty and stays editable', async () => {
+      const { requests, onCreateKey } = recordRequests();
+      renderDialog({ teams, onCreateKey });
+
+      assert.strictEqual(teamInput().value, '');
+      assert.strictEqual(teamInput().disabled, false);
+      assert.ok(screen.getByText('Optional: bind this key to a specific team for scoped access'));
+      assert.strictEqual(screen.queryByText('Every key belongs to this team'), null);
+
+      await userEvent.click(button('Generate'));
+      await waitFor(() => assert.strictEqual(requests.length, 1));
+      assert.strictEqual(requests[0].team_id, undefined);
+    });
+
+    test('edit mode ignores fixedTeam', () => {
+      renderDialog({
+        mode: 'edit',
+        keyToEdit: { token: 'tok-1234567890', key: 'tok-1234567890', key_alias: 'old', team_id: 'team-1', max_budget: 10 } as any,
+        teams,
+        keyGenerationSettings: fixed('team-budget'),
+      });
+      assert.strictEqual(screen.queryByText(/you are not in that team yet/), null);
+      assert.ok(screen.getByText(/Team binding is fixed after creation/));
+    });
+  });
+
   describe('one-time secret', () => {
     const createAndShowSecret = async (onClose: () => void) => {
       renderDialog({ onClose, onCreateKey: async () => ({ key: 'sk-secret-value-1' } as GenerateKeyResponse) });

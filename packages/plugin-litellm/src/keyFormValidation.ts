@@ -13,6 +13,8 @@ export interface ValidationOptions {
   /** True when the user has ticked the 'Unlimited budget' checkbox. */
   unlimitedBudget?: boolean;
   isCreate?: boolean;
+  /** True when litellm.keyGeneration.fixedTeam is set and the user is not in that team. */
+  notInFixedTeam?: boolean;
 }
 
 /**
@@ -28,6 +30,7 @@ export function validateKeyForm(
     teamRequired = true,
     unlimitedBudget = false,
     isCreate = true,
+    notInFixedTeam = false,
   } = options;
 
   const errors: ValidationErrors = {};
@@ -42,7 +45,9 @@ export function validateKeyForm(
   // Team validation (create mode only)
   if (isCreate) {
     const teamId = (formData as GenerateKeyRequest).team_id;
-    if (teamRequired && !teamId) {
+    if (notInFixedTeam) {
+      errors.team = 'You are not in the team every key belongs to';
+    } else if (teamRequired && !teamId) {
       errors.team = 'Team is required';
     }
   }

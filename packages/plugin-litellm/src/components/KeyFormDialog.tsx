@@ -78,7 +78,7 @@ export interface KeyFormDialogProps {
   /** Current user's LiteLLM user id, used to pre-fill a default key alias. */
   username?: string;
   /** Controls for the key form; see litellm.keyGeneration in app-config.yaml. */
-  keyGenerationSettings?: { allowUnlimitedBudget: boolean; teamRequired: boolean };
+  keyGenerationSettings?: { allowUnlimitedBudget: boolean; teamRequired: boolean; fixedTeam?: string };
   onCreateKey: (request: GenerateKeyRequest) => Promise<GenerateKeyResponse>;
   onUpdateKey: (keyId: string, request: UpdateKeyRequest) => Promise<void>;
   onResetKeySpend?: (keyId: string) => Promise<void>;
@@ -103,7 +103,8 @@ export const KeyFormDialog: FC<KeyFormDialogProps> = ({
   onGetConfig,
 }) => {
   const isCreate = mode === 'create';
-  const [generateForm, setGenerateForm] = useState<GenerateKeyRequest>(createForm(username));
+  const fixedTeam = isCreate ? keyGenerationSettings?.fixedTeam : undefined;
+  const [generateForm, setGenerateForm] = useState<GenerateKeyRequest>(createForm(username, fixedTeam));
   const [editFormState, setEditFormState] = useState<UpdateKeyRequest>({});
   const [unlimitedBudget, setUnlimitedBudget] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -139,7 +140,7 @@ export const KeyFormDialog: FC<KeyFormDialogProps> = ({
   useEffect(() => {
     if (open) {
       if (isCreate) {
-        setGenerateForm(createForm(username));
+        setGenerateForm(createForm(username, fixedTeam));
       } else if (keyToEdit) {
         setEditFormState(editForm(keyToEdit));
         setUnlimitedBudget(
@@ -161,7 +162,7 @@ export const KeyFormDialog: FC<KeyFormDialogProps> = ({
       setTouched({});
       setSubmitAttempted(false);
     }
-  }, [open, isCreate, keyToEdit, username, keyGenerationSettings?.allowUnlimitedBudget]);
+  }, [open, isCreate, keyToEdit, username, keyGenerationSettings?.allowUnlimitedBudget, fixedTeam]);
 
   // Fetch config to check key action capabilities. Kept separate from the
   // reset effect above and reading `onGetConfig` through a ref: parents often
@@ -200,6 +201,7 @@ export const KeyFormDialog: FC<KeyFormDialogProps> = ({
   };
 
   const selectedTeam = teams.find(t => t.team_id === (isCreate ? generateForm.team_id : undefined)) ?? null;
+  const notInFixedTeam = !!fixedTeam && !teams.some(t => t.team_id === fixedTeam);
 
   // In edit mode, filter models by the key's team_id (fixed after creation).
   // In create mode, filter by the currently selected team.
@@ -221,6 +223,7 @@ export const KeyFormDialog: FC<KeyFormDialogProps> = ({
     teamRequired,
     unlimitedBudget,
     isCreate,
+    notInFixedTeam,
   });
 
   // Show errors only if the field was touched or submit was attempted
@@ -247,6 +250,7 @@ export const KeyFormDialog: FC<KeyFormDialogProps> = ({
       teamRequired,
       unlimitedBudget,
       isCreate: true,
+      notInFixedTeam,
     });
 
     if (Object.keys(errors).length > 0) {
@@ -286,7 +290,7 @@ export const KeyFormDialog: FC<KeyFormDialogProps> = ({
       } catch {
         // Snippets are a nice-to-have; the raw key is still shown.
       }
-      setGenerateForm(createForm(username));
+      setGenerateForm(createForm(username, fixedTeam));
       setUnlimitedBudget(false);
     } catch (error: any) {
       setGenerateError(error?.message ?? 'Failed to generate key');
@@ -354,7 +358,7 @@ export const KeyFormDialog: FC<KeyFormDialogProps> = ({
     setEditError(null);
     setNewKeyValue(null);
     setNewKeySnippets(null);
-    setGenerateForm(createForm(username));
+    setGenerateForm(createForm(username, fixedTeam));
     setEditFormState({});
     setUnlimitedBudget(false);
     setResetSpendConfirm(false);
@@ -412,6 +416,13 @@ export const KeyFormDialog: FC<KeyFormDialogProps> = ({
   };
 
   const renderTeamField = () => {
+    if (notInFixedTeam) {
+      return (
+        <Typography variant="body2" color="error">
+          Keys must belong to team {fixedTeam}, and you are not in that team yet. Contact your administrator.
+        </Typography>
+      );
+    }
     if (teams.length > 0) {
       return (
         <Autocomplete
@@ -425,7 +436,7 @@ export const KeyFormDialog: FC<KeyFormDialogProps> = ({
             });
             setFormData({ team_id: team?.team_id, models: restrictedModels });
           }}
-          disabled={!isCreate}
+          disabled={!isCreate || !!fixedTeam}
           onBlur={() => setTouched(prev => ({ ...prev, team: true }))}
           renderInput={params => (
             <TextField
@@ -435,7 +446,7 @@ export const KeyFormDialog: FC<KeyFormDialogProps> = ({
               error={teamError}
               helperText={
                 isCreate
-                  ? teamHelperText(teamError, teamRequired)
+                  ? teamHelperText(teamError, teamRequired, !!fixedTeam)
                   : 'Team binding is fixed after creation — delete and recreate the key to change it'
               }
               required={isCreate && teamRequired}
