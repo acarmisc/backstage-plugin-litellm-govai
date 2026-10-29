@@ -65,39 +65,52 @@ function budgetStatValue(hidden: boolean, budget: number): string {
 
 const monoSx = { fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 11 };
 
+const fmtShare = (pct: number) => `${pct.toFixed(pct > 0 && pct < 1 ? 1 : 0)}%`;
+
 /**
- * Per-member usage for the period, sorted by spend. Dollars are replaced by
- * the share of team spend when the backend hides them.
+ * Per-member usage for the period as mini-cards, sorted by spend (the order
+ * the backend sends). Dollars are replaced by the share of team spend when the
+ * backend hides them.
  */
-export const MemberUsageTable: FC<{ usage: TeamMemberUsage }> = ({ usage }) => {
+export const MemberUsageCards: FC<{ usage: TeamMemberUsage }> = ({ usage }) => {
   const hidden = usage.budget_hidden === true;
   if (!usage.members.length) {
     return <Typography variant="body2" color="text.secondary">No members or activity in this period.</Typography>;
   }
+  const people = usage.members.filter(m => m.user_id !== null).length;
   return (
-    <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 1.5 }}>
-      <Table size="small" sx={dataTableSx} aria-label="Usage by member">
-        <TableHead>
-          <TableRow>
-            <TableCell>Member</TableCell>
-            {!hidden && <TableCell align="right">Spend</TableCell>}
-            <TableCell align="right">Share</TableCell>
-            <TableCell align="right">Tokens</TableCell>
-            <TableCell align="right">Requests</TableCell>
-            <TableCell align="right">Success</TableCell>
-            <TableCell align="right">Keys</TableCell>
-          </TableRow>
-        </TableHead>
-        <TableBody>
-          {usage.members.map(m => {
-            const name = m.display_name ?? m.user_email ?? m.user_id;
-            // Second line: whichever identifier the first line does not show.
-            let sub: string | null = null;
-            if (m.display_name) sub = m.user_email ?? m.user_id;
-            else if (m.user_email && m.user_id !== m.user_email) sub = m.user_id;
-            return (
-              <TableRow key={m.user_id ?? '__unattributed'}>
-                <TableCell>
+    <Box>
+      {!hidden && people > 0 && (
+        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+          {`Team spend ${fmtUsd2(usage.total_spend)} · avg ${fmtUsd2(usage.total_spend / people)} per member`}
+        </Typography>
+      )}
+      <Box
+        role="list"
+        aria-label="Usage by member"
+        sx={{ display: 'grid', gap: 1.5, gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))' }}
+      >
+        {usage.members.map(m => {
+          const name = m.display_name ?? m.user_email ?? m.user_id;
+          // Second line: whichever identifier the first line does not show.
+          let sub: string | null = null;
+          if (m.display_name) sub = m.user_email ?? m.user_id;
+          else if (m.user_email && m.user_id !== m.user_email) sub = m.user_id;
+          const stats: [string, string][] = [
+            ['Tokens', fmtCompact(m.total_tokens)],
+            ['Requests', m.api_requests.toLocaleString()],
+            ['Success', m.success_rate === null ? '—' : `${m.success_rate.toFixed(0)}%`],
+            ['Keys', m.user_id === null ? '—' : String(m.key_count)],
+          ];
+          return (
+            <Paper
+              key={m.user_id ?? '__unattributed'}
+              role="listitem"
+              variant="outlined"
+              sx={{ borderRadius: 1.5, p: 1.5, minWidth: 0 }}
+            >
+              <Box display="flex" justifyContent="space-between" alignItems="flex-start" gap={1}>
+                <Box minWidth={0}>
                   {m.user_id === null ? (
                     <MuiTooltip title="Activity of keys that were deleted or have no owner">
                       <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>
@@ -106,27 +119,41 @@ export const MemberUsageTable: FC<{ usage: TeamMemberUsage }> = ({ usage }) => {
                     </MuiTooltip>
                   ) : (
                     <>
-                      <Typography variant="body2">{name}</Typography>
+                      <Typography variant="body2" fontWeight={600} noWrap>{name}</Typography>
                       {sub && (
-                        <Typography variant="caption" color="text.secondary" sx={monoSx}>
+                        <Typography variant="caption" color="text.secondary" noWrap sx={{ ...monoSx, display: 'block' }}>
                           {sub}
                         </Typography>
                       )}
                     </>
                   )}
-                </TableCell>
-                {!hidden && <TableCell align="right">{fmtUsd2(m.spend)}</TableCell>}
-                <TableCell align="right">{`${m.spend_share_pct.toFixed(m.spend_share_pct > 0 && m.spend_share_pct < 1 ? 1 : 0)}%`}</TableCell>
-                <TableCell align="right">{fmtCompact(m.total_tokens)}</TableCell>
-                <TableCell align="right">{m.api_requests.toLocaleString()}</TableCell>
-                <TableCell align="right">{m.success_rate === null ? '—' : `${m.success_rate.toFixed(0)}%`}</TableCell>
-                <TableCell align="right">{m.user_id === null ? '—' : m.key_count}</TableCell>
-              </TableRow>
-            );
-          })}
-        </TableBody>
-      </Table>
-    </TableContainer>
+                </Box>
+                {m.role && <StatusPill label={m.role} tone={m.role === 'admin' ? 'accent' : 'neutral'} dot={false} />}
+              </Box>
+              <Box mt={1.5} display="flex" alignItems="baseline" justifyContent="space-between">
+                <Typography variant="h6" component="span" sx={{ lineHeight: 1.2 }}>
+                  {hidden ? fmtShare(m.spend_share_pct) : fmtUsd2(m.spend)}
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  {hidden ? 'of team usage' : `${fmtShare(m.spend_share_pct)} of team`}
+                </Typography>
+              </Box>
+              <Box mt={0.75}>
+                <Meter value={m.spend_share_pct} ariaLabel={`${name ?? 'Unattributed'} share of team spend`} />
+              </Box>
+              <Box mt={1.5} display="grid" gridTemplateColumns="repeat(4, 1fr)" gap={0.5}>
+                {stats.map(([label, value]) => (
+                  <Box key={label}>
+                    <Typography variant="caption" color="text.secondary" display="block">{label}</Typography>
+                    <Typography variant="body2">{value}</Typography>
+                  </Box>
+                ))}
+              </Box>
+            </Paper>
+          );
+        })}
+      </Box>
+    </Box>
   );
 };
 
@@ -468,7 +495,7 @@ const TeamCard: FC<TeamCardProps> = ({ team, usage, usageLoading, memberUsage, m
         {(memberUsageLoading || memberUsage || memberUsageFailed) && (
           <Box mb={2.5}>
             {sectionLabel('Usage by member')}
-            {memberUsage && <MemberUsageTable usage={memberUsage} />}
+            {memberUsage && <MemberUsageCards usage={memberUsage} />}
             {!memberUsage && memberUsageFailed && (
               <Typography variant="caption" color="text.secondary">Could not load per-member usage</Typography>
             )}
@@ -495,6 +522,7 @@ const TeamCard: FC<TeamCardProps> = ({ team, usage, usageLoading, memberUsage, m
           </Box>
         )}
 
+        {!memberUsage && (
         <Box>
           {sectionLabel('Members')}
           {team.members_with_roles?.length ? (
@@ -550,6 +578,7 @@ const TeamCard: FC<TeamCardProps> = ({ team, usage, usageLoading, memberUsage, m
             <Typography variant="body2" color="text.secondary">No members assigned.</Typography>
           )}
         </Box>
+        )}
       </Collapse>
     </Paper>
   );

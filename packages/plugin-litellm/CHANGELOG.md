@@ -10,6 +10,12 @@ commit/PR that bumps the version in `package.json`. Format follows the
 Earlier history: `git log -- packages/plugin-litellm` or the
  [GitHub tags](https://github.com/acarmisc/backstage-plugin-litellm-govai/tags).
 
+## 0.46.0
+
+### Minor Changes
+
+- feat: the per-member usage on the Teams card is a grid of mini-cards (spend, share of team, tokens, requests, success, keys) with the team's average spend per member; the plain roster table shows only when the breakdown is unavailable.
+
 ## 0.45.0
 
 ### Minor Changes

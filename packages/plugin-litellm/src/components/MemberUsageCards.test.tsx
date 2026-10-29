@@ -3,7 +3,7 @@ import { TestTheme } from '../testing/TestTheme';
 import { describe, test, afterEach } from 'node:test';
 import assert from 'node:assert';
 import { render, cleanup, screen, within } from '@testing-library/react';
-import { MemberUsageTable } from './TeamUsage';
+import { MemberUsageCards } from './TeamUsage';
 import { TeamMemberUsage, TeamMemberUsageRow } from '../types';
 
 afterEach(() => cleanup());
@@ -36,22 +36,27 @@ const usage: TeamMemberUsage = {
 const renderTable = (u: TeamMemberUsage) =>
   render(
     <TestTheme>
-      <MemberUsageTable usage={u} />
+      <MemberUsageCards usage={u} />
     </TestTheme>,
   );
 
-describe('MemberUsageTable', () => {
+describe('MemberUsageCards', () => {
   test('shows each member with spend, share and success rate', () => {
     renderTable(usage);
-    const table = screen.getByRole('table', { name: 'Usage by member' });
-    const alice = within(table).getByText('Alice A.').closest('tr')!;
+    const table = screen.getByRole('list', { name: 'Usage by member' });
+    const alice = within(table).getByText('Alice A.').closest('[role=listitem]') as HTMLElement;
     assert.ok(within(alice).getByText('alice@corp.it'));
     assert.ok(within(alice).getByText('$7.50'));
-    assert.ok(within(alice).getByText('75%'));
+    assert.ok(within(alice).getByText('75% of team'));
     assert.ok(within(alice).getByText('90%'));
     assert.ok(within(table).getByText('Unattributed'));
     // An email id is shown once, not repeated as a subtitle.
     assert.strictEqual(within(table).getAllByText('bob@corp.it').length, 1);
+  });
+
+  test('shows team average per member', () => {
+    renderTable(usage);
+    assert.ok(screen.getByText('Team spend $10.00 · avg $5.00 per member'));
   });
 
   test('drops the spend column when dollars are hidden', () => {
@@ -61,8 +66,8 @@ describe('MemberUsageTable', () => {
       total_spend: 0,
       members: usage.members.map(m => ({ ...m, spend: 0 })),
     });
-    assert.strictEqual(screen.queryByText('Spend'), null);
     assert.strictEqual(screen.queryByText('$0.00'), null);
+    assert.strictEqual(screen.queryByText(/avg/), null);
     assert.ok(screen.getByText('75%'));
   });
 
