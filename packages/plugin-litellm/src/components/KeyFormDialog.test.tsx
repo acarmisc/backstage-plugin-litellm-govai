@@ -172,6 +172,66 @@ describe('KeyFormDialog', () => {
     assert.strictEqual(requests[0].duration, '30d');
   });
 
+  describe('duration options', () => {
+    const settings = (allowedDurations?: string[]) => ({
+      keyGenerationSettings: { allowUnlimitedBudget: false, teamRequired: false, allowedDurations },
+    });
+    const durationSelect = () =>
+      screen.getByText('Duration', { selector: 'label' }).parentElement!.querySelector('[role="combobox"]') as HTMLElement;
+    const openOptions = async () => {
+      fireEvent.mouseDown(durationSelect());
+      await waitFor(() => assert.ok(document.querySelector('[role="option"]')));
+      return [...document.querySelectorAll('[role="option"]')].map(o => o.textContent);
+    };
+
+    test('offers the configured durations and labels "never" as Never', async () => {
+      renderDialog(settings(['7d', '30d', 'never']));
+      assert.strictEqual(durationSelect().textContent, '30 Days');
+      assert.deepStrictEqual(await openOptions(), ['7 Days', '30 Days', 'Never']);
+    });
+
+    test('falls back to the default durations when none are configured', async () => {
+      for (const allowedDurations of [undefined, []]) {
+        renderDialog(settings(allowedDurations));
+        assert.deepStrictEqual(await openOptions(), ['1 Day', '7 Days', '30 Days', '90 Days']);
+        cleanup();
+      }
+    });
+
+    test('picking Never shows "Never expires" and submits duration "never"', async () => {
+      const requests: any[] = [];
+      renderDialog({
+        ...settings(['30d', 'never']),
+        onCreateKey: async r => { requests.push(r); return { key: 'sk-ok' } as GenerateKeyResponse; },
+      });
+      await openOptions();
+      await userEvent.click(screen.getByText('Never', { selector: '[role="option"]' }));
+      assert.ok(await screen.findByText('Never expires'));
+      await userEvent.click(button('Generate'));
+      await waitFor(() => assert.strictEqual(requests.length, 1));
+      assert.strictEqual(requests[0].duration, 'never');
+    });
+
+    test('without 30d the first option other than "never" is preselected', async () => {
+      const requests: any[] = [];
+      renderDialog({
+        ...settings(['never', '7d', '90d']),
+        onCreateKey: async r => { requests.push(r); return { key: 'sk-ok' } as GenerateKeyResponse; },
+      });
+      assert.strictEqual(durationSelect().textContent, '7 Days');
+      assert.strictEqual(screen.queryByText('Never expires'), null);
+      await userEvent.click(button('Generate'));
+      await waitFor(() => assert.strictEqual(requests.length, 1));
+      assert.strictEqual(requests[0].duration, '7d');
+    });
+
+    test('a list with only "never" preselects nothing', async () => {
+      renderDialog(settings(['never']));
+      assert.strictEqual(screen.queryByText('Never expires'), null);
+      assert.deepStrictEqual(await openOptions(), ['Never']);
+    });
+  });
+
   describe('parent re-renders', () => {
     test('a generated key stays visible when the parent re-renders with a new onGetConfig', async () => {
       const { rerenderWithNewCallbacks } = renderDialog();
