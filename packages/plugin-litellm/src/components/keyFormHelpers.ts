@@ -12,10 +12,10 @@ const generateDefaultAlias = (username?: string): string => {
   return `${base}-${hash}`;
 };
 
-export const createForm = (username?: string): GenerateKeyRequest => ({
+export const createForm = (username?: string, duration?: string): GenerateKeyRequest => ({
   alias: generateDefaultAlias(username),
   models: [],
-  duration: '30d',
+  duration,
   max_budget: 100,
   tpm_limit: undefined,
   rpm_limit: undefined,

@@ -31,7 +31,7 @@ import {
   UpdateKeyRequest,
   LiteLlmConfig,
 } from '../types';
-import { DEFAULT_KEY_DURATIONS, litellmKeyResetSpendPermission, formatDurationLabel } from '@acarmisc/backstage-plugin-litellm-common';
+import { DEFAULT_KEY_DURATIONS, NEVER_KEY_DURATION, litellmKeyResetSpendPermission, formatDurationLabel } from '@acarmisc/backstage-plugin-litellm-common';
 import { estimateTokensFromBudget } from '../format';
 import { useCopyToClipboard } from '../hooks';
 import { validateKeyForm, firstInvalidField, expiryPreview, priciestInputPrice } from '../keyFormValidation';
@@ -77,8 +77,8 @@ export interface KeyFormDialogProps {
   teams: TeamInfo[];
   /** Current user's LiteLLM user id, used to pre-fill a default key alias. */
   username?: string;
-  /** Controls for the key form; see litellm.keyGeneration in app-config.yaml. */
-  keyGenerationSettings?: { allowUnlimitedBudget: boolean; teamRequired: boolean };
+  /** Controls for the key form; see litellm.keyGeneration and litellm.keys.allowedDurations in app-config.yaml. */
+  keyGenerationSettings?: { allowUnlimitedBudget: boolean; teamRequired: boolean; allowedDurations?: string[] };
   onCreateKey: (request: GenerateKeyRequest) => Promise<GenerateKeyResponse>;
   onUpdateKey: (keyId: string, request: UpdateKeyRequest) => Promise<void>;
   onResetKeySpend?: (keyId: string) => Promise<void>;
@@ -103,7 +103,13 @@ export const KeyFormDialog: FC<KeyFormDialogProps> = ({
   onGetConfig,
 }) => {
   const isCreate = mode === 'create';
-  const [generateForm, setGenerateForm] = useState<GenerateKeyRequest>(createForm(username));
+  const configuredDurations = keyGenerationSettings?.allowedDurations;
+  const durationOptions = configuredDurations?.length ? configuredDurations : DEFAULT_KEY_DURATIONS;
+  // "never" can be picked but is never preselected.
+  const defaultDuration = durationOptions.includes('30d')
+    ? '30d'
+    : durationOptions.find(d => d !== NEVER_KEY_DURATION);
+  const [generateForm, setGenerateForm] = useState<GenerateKeyRequest>(createForm(username, defaultDuration));
   const [editFormState, setEditFormState] = useState<UpdateKeyRequest>({});
   const [unlimitedBudget, setUnlimitedBudget] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -139,7 +145,7 @@ export const KeyFormDialog: FC<KeyFormDialogProps> = ({
   useEffect(() => {
     if (open) {
       if (isCreate) {
-        setGenerateForm(createForm(username));
+        setGenerateForm(createForm(username, defaultDuration));
       } else if (keyToEdit) {
         setEditFormState(editForm(keyToEdit));
         setUnlimitedBudget(
@@ -161,7 +167,7 @@ export const KeyFormDialog: FC<KeyFormDialogProps> = ({
       setTouched({});
       setSubmitAttempted(false);
     }
-  }, [open, isCreate, keyToEdit, username, keyGenerationSettings?.allowUnlimitedBudget]);
+  }, [open, isCreate, keyToEdit, username, keyGenerationSettings?.allowUnlimitedBudget, defaultDuration]);
 
   // Fetch config to check key action capabilities. Kept separate from the
   // reset effect above and reading `onGetConfig` through a ref: parents often
@@ -286,7 +292,7 @@ export const KeyFormDialog: FC<KeyFormDialogProps> = ({
       } catch {
         // Snippets are a nice-to-have; the raw key is still shown.
       }
-      setGenerateForm(createForm(username));
+      setGenerateForm(createForm(username, defaultDuration));
       setUnlimitedBudget(false);
     } catch (error: any) {
       setGenerateError(error?.message ?? 'Failed to generate key');
@@ -354,7 +360,7 @@ export const KeyFormDialog: FC<KeyFormDialogProps> = ({
     setEditError(null);
     setNewKeyValue(null);
     setNewKeySnippets(null);
-    setGenerateForm(createForm(username));
+    setGenerateForm(createForm(username, defaultDuration));
     setEditFormState({});
     setUnlimitedBudget(false);
     setResetSpendConfirm(false);
@@ -727,11 +733,11 @@ export const KeyFormDialog: FC<KeyFormDialogProps> = ({
                 <TextField
                   select
                   label="Duration"
-                  value={generateForm.duration || '30d'}
+                  value={generateForm.duration ?? ''}
                   onChange={(e) => setFormData({ duration: e.target.value })}
                   fullWidth
                 >
-                  {DEFAULT_KEY_DURATIONS.map((duration) => (
+                  {durationOptions.map((duration) => (
                     <MenuItem key={duration} value={duration}>
                       {formatDurationLabel(duration)}
                     </MenuItem>

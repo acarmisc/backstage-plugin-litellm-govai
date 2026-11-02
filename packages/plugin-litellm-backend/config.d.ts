@@ -167,6 +167,9 @@ export interface Config {
        * Allowed duration presets for keys (e.g. "1d", "7d", "30d", "90d").
        * Requests with a duration not in this list are rejected with a 400 error.
        * An empty array allows any duration matching the format /^\d+[smhdwy]$/.
+       * List "never" to offer keys that never expire: such a key is sent to
+       * LiteLLM with no duration. "never" is never the default and is only
+       * accepted when listed here.
        * @default ["1d", "7d", "30d", "90d"]
        */
       allowedDurations?: string[];

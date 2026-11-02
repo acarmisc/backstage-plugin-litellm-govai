@@ -8,7 +8,7 @@ instead of maintaining this table by hand.
 | Endpoint | Method | Purpose |
 |----------|--------|---------|
 | `/health` | GET | Health check |
-| `/config` | GET | Public proxy URL (`null` when `publicBaseUrl` isn't set), key-generation and team-management flags, support contact |
+| `/config` | GET | Public proxy URL (`null` when `publicBaseUrl` isn't set), key-generation and team-management flags, allowed key durations (`keyGeneration.allowedDurations`), support contact |
 | `/openapi.json` | GET | OpenAPI 3.1 contract for this backend surface |
 | `/user/info` | GET | Get current user info and quotas |
 | `/keys` | GET | List user's virtual keys |

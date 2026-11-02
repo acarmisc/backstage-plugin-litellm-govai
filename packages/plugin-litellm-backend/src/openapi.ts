@@ -71,6 +71,7 @@ export const openApiSpec: OpenApiSpec = {
             content: { 'application/json': { schema: { type: 'object', properties: {
               baseUrl: { type: 'string' },
               keyGeneration: { type: 'object', properties: {
+                allowedDurations: { type: 'array', items: { type: 'string' }, description: 'Durations a new key may have (litellm.keys.allowedDurations); "never" means no expiry' },
                 allowUnlimitedBudget: { type: 'boolean' },
                 teamRequired: { type: 'boolean' },
               } },

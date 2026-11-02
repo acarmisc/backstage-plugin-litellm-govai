@@ -4159,6 +4159,100 @@ describe('release review: smaller hardening', () => {
   });
 });
 
+describe('"never" key duration', () => {
+  const keyConfig = (allowedDurations?: string[]) => ({
+    'litellm.keyGeneration.teamRequired': false,
+    'litellm.keyGeneration.allowUnlimitedBudget': true,
+    ...(allowedDurations && { 'litellm.keys.allowedDurations': allowedDurations }),
+  });
+  const generate = async (allowedDurations: string[] | undefined, body: Record<string, unknown>) => {
+    const h = await startHarness({ config: keyConfig(allowedDurations) });
+    try {
+      const r = await req(h.baseUrl, 'POST', '/keys/generate', {
+        authRef: 'user:default/alice', body: { alias: 'k', max_budget: 5, ...body },
+      });
+      return { ...r, sent: h.client.calls.generateKey };
+    } finally {
+      h.server.close();
+    }
+  };
+
+  test('a listed "never" sends LiteLLM no duration', async () => {
+    const { status, sent } = await generate(['30d', 'never'], { duration: 'never' });
+    assert.strictEqual(status, 200);
+    assert.strictEqual(sent.length, 1);
+    assert.ok(!('duration' in sent[0]), JSON.stringify(sent[0]));
+  });
+
+  test('a request without a duration never defaults to "never"', async () => {
+    assert.strictEqual((await generate(['never', '30d'], {})).sent[0].duration, '30d');
+    assert.strictEqual((await generate(['never', '7d', '90d'], {})).sent[0].duration, '7d');
+  });
+
+  test('a list with only "never" needs an explicit duration', async () => {
+    const missing = await generate(['never'], {});
+    assert.strictEqual(missing.status, 400);
+    assert.deepStrictEqual(missing.body, { error: 'duration is required' });
+    assert.strictEqual(missing.sent.length, 0);
+    const explicit = await generate(['never'], { duration: 'never' });
+    assert.strictEqual(explicit.status, 200);
+    assert.ok(!('duration' in explicit.sent[0]));
+  });
+
+  test('"never" is rejected when not listed, including the empty-list mode', async () => {
+    for (const allowed of [undefined, ['30d'], []]) {
+      const { status, body, sent } = await generate(allowed, { duration: 'never' });
+      assert.strictEqual(status, 400, JSON.stringify(allowed));
+      assert.match(body.details, /duration/);
+      assert.strictEqual(sent.length, 0);
+    }
+  });
+
+  test('the CLI bridge applies the same rules', async () => {
+    const h = await startHarness({
+      config: {
+        ...keyConfig(['never']),
+        'litellm.bridge.enabled': true,
+        'litellm.bridge.allowedEmailDomains': ['example.com'],
+      },
+      tokenVerifier: {
+        verify: async () => ({
+          sub: 's1', email: 'bob@example.com', email_verified: true, preferred_username: 'bob', azp: 'abby-cli',
+        }),
+      },
+      client: mockClient({ userInfo: { user_id: 'bob', teams: [] } }),
+    });
+    const bearer = { headers: { authorization: 'Bearer any-token' } };
+    try {
+      const missing = await req(h.baseUrl, 'POST', '/bridge/keys', { ...bearer, body: { alias: 'cli', max_budget: 5 } });
+      assert.strictEqual(missing.status, 400);
+      assert.deepStrictEqual(missing.body, { error: 'duration is required' });
+      const never = await req(h.baseUrl, 'POST', '/bridge/keys', {
+        ...bearer, body: { alias: 'cli', max_budget: 5, duration: 'never' },
+      });
+      assert.strictEqual(never.status, 200);
+      assert.strictEqual(h.client.calls.generateKey.length, 1);
+      assert.ok(!('duration' in h.client.calls.generateKey[0]));
+    } finally {
+      h.server.close();
+    }
+  });
+
+  test('GET /config returns the allowed durations, defaulting to DEFAULT_KEY_DURATIONS', async () => {
+    const configured = await startHarness({ config: { 'litellm.keys.allowedDurations': ['30d', 'never'] } });
+    const defaults = await startHarness({});
+    try {
+      const a = await req(configured.baseUrl, 'GET', '/config');
+      assert.deepStrictEqual(a.body.keyGeneration.allowedDurations, ['30d', 'never']);
+      const b = await req(defaults.baseUrl, 'GET', '/config');
+      assert.deepStrictEqual(b.body.keyGeneration.allowedDurations, ['1d', '7d', '30d', '90d']);
+    } finally {
+      configured.server.close();
+      defaults.server.close();
+    }
+  });
+});
+
 describe('teamBudgetVisibility helpers', () => {
   test('redactTeamBudget marks over-budget teams as over', async () => {
     const { redactTeamBudget } = await import('./teamBudgetVisibility');

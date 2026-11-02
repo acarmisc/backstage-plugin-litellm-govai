@@ -1,3 +1,4 @@
+import { NEVER_KEY_DURATION } from '@acarmisc/backstage-plugin-litellm-common';
 import { GenerateKeyRequest, UpdateKeyRequest } from './types';
 
 export interface ValidationErrors {
@@ -78,11 +79,12 @@ export function firstInvalidField(
 
 /**
  * Compute the expiry date from a duration string and the current date.
- * Supported: 'd' (days), 'w' (weeks), 'm' (months), 'y' (years).
+ * Supported: 'd' (days), 'w' (weeks), 'm' (months), 'y' (years), and 'never'.
  * Example: expiryPreview('30d', new Date('2026-09-29')) => 'Expires Oct 29, 2026'
  */
 export function expiryPreview(duration: string | undefined, now: Date = new Date()): string | null {
   if (!duration) return null;
+  if (duration === NEVER_KEY_DURATION) return 'Never expires';
 
   const match = duration.match(/^(\d+)([dwmy])$/);
   if (!match) return null;

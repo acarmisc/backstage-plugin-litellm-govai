@@ -183,6 +183,12 @@ export type UpdateKeyInput = z.infer<
 export const DEFAULT_KEY_DURATIONS = ['1d', '7d', '30d', '90d'];
 
 /**
+ * Duration value for a key that never expires. Only accepted when listed in
+ * `allowedDurations`; the backend then sends LiteLLM no `duration`.
+ */
+export const NEVER_KEY_DURATION = 'never';
+
+/**
  * Default `budget_duration` values a key may be generated with.
  */
 export const DEFAULT_KEY_BUDGET_DURATIONS = ['1d', '7d', '30d', '1mo'];
