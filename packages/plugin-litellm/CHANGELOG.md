@@ -10,6 +10,12 @@ commit/PR that bumps the version in `package.json`. Format follows the
 Earlier history: `git log -- packages/plugin-litellm` or the
  [GitHub tags](https://github.com/acarmisc/backstage-plugin-litellm-govai/tags).
 
+## 0.47.0
+
+### Minor Changes
+
+- feat: the Teams card's per-member breakdown is filterable — a shared search field in each team section filters "Usage by member" and "Keys by member" rows by name, email, user ID, alias or owner. Client-side only; the backend payload and access rules are unchanged.
+
 ## 0.46.0
 
 ### Minor Changes
