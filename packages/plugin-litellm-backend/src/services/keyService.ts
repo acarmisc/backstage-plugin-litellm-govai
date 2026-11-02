@@ -22,6 +22,7 @@ import {
   type GenerateKeyInput,
 } from '@acarmisc/backstage-plugin-litellm-common';
 
+import { PERSONAL_ONLY_TEAM_ID_ERROR } from '../personalOnly';
 import { findDisallowedModels } from './modelAccess';
 import { NO_MCP_SERVERS, findDisallowedMcpServers, teamMcpServers } from './mcpAccess';
 
@@ -41,6 +42,8 @@ export interface KeyCreateContext {
   config: {
     allowUnlimitedBudget: boolean;
     teamRequired: boolean;
+    /** litellm.keyGeneration.personalOnly: refuse any team_id and never forward one. */
+    personalOnly: boolean;
   };
   catalogClient?: CatalogClient;
   auth?: AuthService;
@@ -64,7 +67,7 @@ export class KeyServiceError extends Error {
  *
  * Performs:
  * - Schema validation of the input
- * - Config flag enforcement (allowUnlimitedBudget, teamRequired)
+ * - Config flag enforcement (allowUnlimitedBudget, personalOnly, teamRequired)
  * - Team membership validation
  * - Model subset validation
  * - Metadata stamping
@@ -98,6 +101,10 @@ export async function createKeyForUser(
       400,
       { error: 'max_budget is required when unlimited budgets are not allowed' },
     );
+  }
+
+  if (config.personalOnly && input.team_id) {
+    throw new KeyServiceError(400, { error: PERSONAL_ONLY_TEAM_ID_ERROR });
   }
 
   if (config.teamRequired && !input.team_id) {
@@ -225,7 +232,8 @@ export async function createKeyForUser(
   if (input.rpm_limit !== undefined) {
     upstreamRequest.rpm_limit = input.rpm_limit;
   }
-  if (input.team_id !== undefined) {
+  // Under personalOnly only an empty team_id gets this far: drop it.
+  if (input.team_id !== undefined && !config.personalOnly) {
     upstreamRequest.team_id = input.team_id;
   }
   if (input.key_type !== undefined) {

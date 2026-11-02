@@ -73,6 +73,7 @@ export const openApiSpec: OpenApiSpec = {
               keyGeneration: { type: 'object', properties: {
                 allowUnlimitedBudget: { type: 'boolean' },
                 teamRequired: { type: 'boolean' },
+                personalOnly: { type: 'boolean' },
               } },
               display: { type: 'object', properties: {
                 hideTeamBudgetForMembers: { type: 'boolean' },
@@ -126,7 +127,7 @@ export const openApiSpec: OpenApiSpec = {
         },
         responses: {
           '200': { description: 'Generated key (includes the raw secret — shown once)' },
-          '400': { description: 'Missing required fields' },
+          '400': { description: 'Missing required fields, or a team_id under litellm.keyGeneration.personalOnly' },
         },
       },
     },
@@ -202,7 +203,8 @@ export const openApiSpec: OpenApiSpec = {
         description:
           'When litellm.display.hideTeamBudgetForMembers is set, max_budget/spend ' +
           'are stripped and budget_pct/budget_status/budget_hidden carry the ' +
-          'consumption level instead.',
+          'consumption level instead. Always [] under ' +
+          'litellm.keyGeneration.personalOnly.',
         responses: { '200': { description: 'Array of teams' } },
       },
     },
@@ -239,7 +241,7 @@ export const openApiSpec: OpenApiSpec = {
           '200': { description: 'One row per member, sorted by spend' },
           '400': { description: 'Missing date range' },
           '403': { description: 'Caller may see the team but not its member breakdown' },
-          '404': { description: 'Feature disabled, or team not found / not visible to the caller' },
+          '404': { description: 'Feature disabled (or litellm.keyGeneration.personalOnly), or team not found / not visible to the caller' },
         },
       },
     },

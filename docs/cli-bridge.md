@@ -31,6 +31,9 @@ Request flow for `/api/litellm/bridge/*`:
    `created_via: abby-cli`, `created_by` and `created_at_iso` metadata.
    Backstage permissions are not evaluated: there is no Backstage credential to
    authorize.
+   With `litellm.keyGeneration.personalOnly`, any `team_id` is rejected with
+   `400`, `/bridge/user/info` returns no teams, and `/bridge/mcp` and
+   `/bridge/models?team_id=` return `404`.
 
 Because the user id comes from `preferred_username`, make sure users cannot
 edit their username in the Keycloak realm (the default).

@@ -272,4 +272,46 @@ describe('KeyFormDialog', () => {
       assert.strictEqual(screen.queryByText("You haven't copied the key. Close anyway?"), null);
     });
   });
+
+  describe('personal-only keys (litellm.keyGeneration.personalOnly)', () => {
+    const personalOnly = { allowUnlimitedBudget: false, teamRequired: false, personalOnly: true };
+    const recordRequests = () => {
+      const requests: any[] = [];
+      const onCreateKey = async (r: any) => {
+        requests.push(r);
+        return { key: `sk-${requests.length}` } as GenerateKeyResponse;
+      };
+      return { requests, onCreateKey };
+    };
+
+    test('create mode has no Team field and sends no team_id, even with teams passed in', async () => {
+      const { requests, onCreateKey } = recordRequests();
+      renderDialog({ keyGenerationSettings: personalOnly, onCreateKey });
+
+      assert.ok(!screen.queryByLabelText(/^Team/), 'the Team field is shown');
+      await userEvent.click(button('Generate'));
+      await waitFor(() => assert.strictEqual(requests.length, 1));
+      assert.ok(!('team_id' in requests[0]), JSON.stringify(requests[0]));
+    });
+
+    test('no team-required message and no team error, even with teamRequired: true and no teams', async () => {
+      const { requests, onCreateKey } = recordRequests();
+      renderDialog({ teams: [], keyGenerationSettings: { ...personalOnly, teamRequired: true }, onCreateKey });
+
+      assert.ok(!screen.queryByText(/Team selection is required/), 'the team-required message is shown');
+      await userEvent.click(button('Generate'));
+      await waitFor(() => assert.strictEqual(requests.length, 1));
+      assert.ok(!screen.queryByText('Team is required'), 'a team error is shown');
+    });
+
+    test('edit mode is unchanged', () => {
+      renderDialog({
+        mode: 'edit',
+        keyToEdit: { token: 'tok-1234567890', key: 'tok-1234567890', key_alias: 'old', team_id: 'team-1', max_budget: 10 } as any,
+        keyGenerationSettings: personalOnly,
+      });
+      assert.ok(screen.getByLabelText(/^Team/));
+      assert.ok(screen.getByText(/Team binding is fixed after creation/));
+    });
+  });
 });

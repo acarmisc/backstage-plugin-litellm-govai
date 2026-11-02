@@ -5596,3 +5596,327 @@ describe('GET /teams/:teamId/usage/members', () => {
     });
   });
 });
+
+describe('litellm.keyGeneration.personalOnly', () => {
+  const TEAM_ID_ERROR = 'team_id is not allowed: keys are personal (litellm.keyGeneration.personalOnly)';
+  const TEAMS_DISABLED = { error: 'Teams are disabled (litellm.keyGeneration.personalOnly)' };
+  const alice = () => mockClient({ userInfo: { user_id: 'alice@example.com', teams: ['team-1'] } });
+  const start = (config: Record<string, any> = {}, client: any = alice()) =>
+    startHarness({
+      config: { 'litellm.userIdDomain': 'example.com', 'litellm.keyGeneration.personalOnly': true, ...config },
+      client,
+    });
+  const close = (h: Harness) => new Promise<void>(r => h.server.close(() => r()));
+  const generate = (h: Harness, body: Record<string, any>) =>
+    req(h.baseUrl, 'POST', '/keys/generate', { authRef: 'user:default/alice', body });
+  const noLiteLLMCalls = (h: Harness) =>
+    assert.deepStrictEqual(
+      Object.entries(h.client.calls).filter(([, c]) => (c as any[]).length > 0),
+      [],
+    );
+
+  describe('POST /keys/generate', () => {
+    test('400 for a team the user belongs to, without calling LiteLLM', async () => {
+      const h = await start();
+      try {
+        const { status, body } = await generate(h, { alias: 'k', max_budget: 10, team_id: 'team-1' });
+        assert.strictEqual(status, 400);
+        assert.deepStrictEqual(body, { error: TEAM_ID_ERROR });
+        assert.strictEqual(h.client.calls.generateKey.length, 0);
+        assert.strictEqual(h.client.calls.getTeamInfo.length, 0);
+      } finally {
+        await close(h);
+      }
+    });
+
+    test('a personal key keeps user_id and sends no team_id; teamRequired defaults to false', async () => {
+      const h = await start();
+      try {
+        const { status } = await generate(h, { alias: 'k', max_budget: 10 });
+        assert.strictEqual(status, 200);
+        assert.strictEqual(h.client.calls.generateKey.length, 1);
+        const sent = h.client.calls.generateKey[0];
+        assert.strictEqual(sent.user_id, 'alice@example.com');
+        assert.ok(!('team_id' in sent));
+      } finally {
+        await close(h);
+      }
+    });
+
+    test('an empty team_id is dropped, not forwarded', async () => {
+      const h = await start();
+      try {
+        const { status } = await generate(h, { alias: 'k', max_budget: 10, team_id: '' });
+        assert.strictEqual(status, 200);
+        assert.ok(!('team_id' in h.client.calls.generateKey[0]));
+      } finally {
+        await close(h);
+      }
+    });
+
+    test('unset: a team key still works as before', async () => {
+      const h = await startHarness({ config: { 'litellm.userIdDomain': 'example.com' }, client: alice() });
+      try {
+        const { status } = await generate(h, { alias: 'k', max_budget: 10, team_id: 'team-1' });
+        assert.strictEqual(status, 200);
+        assert.strictEqual(h.client.calls.generateKey[0].team_id, 'team-1');
+      } finally {
+        await close(h);
+      }
+    });
+  });
+
+  describe('team routes', () => {
+    test('GET /teams returns [] without looking up the user or teams', async () => {
+      const h = await start();
+      try {
+        const { status, body } = await req(h.baseUrl, 'GET', '/teams', { authRef: 'user:default/alice' });
+        assert.strictEqual(status, 200);
+        assert.deepStrictEqual(body, []);
+        noLiteLLMCalls(h);
+      } finally {
+        await close(h);
+      }
+    });
+
+    for (const path of ['/teams/team-1/usage', '/teams/team-1/usage/members', '/teams/team-1/usage/keys']) {
+      test(`GET ${path} is 404 without calling LiteLLM`, async () => {
+        const h = await start({ 'litellm.teamUsage.memberBreakdown.enabled': true });
+        try {
+          const { status, body } = await req(h.baseUrl, 'GET', `${path}?start_date=2026-01-01&end_date=2026-01-31`, {
+            authRef: 'user:default/alice',
+          });
+          assert.strictEqual(status, 404);
+          assert.deepStrictEqual(body, TEAMS_DISABLED);
+          noLiteLLMCalls(h);
+        } finally {
+          await close(h);
+        }
+      });
+    }
+
+    test('GET /teams/:teamId/usage still needs a Backstage user', async () => {
+      const h = await start();
+      try {
+        const { status } = await req(h.baseUrl, 'GET', '/teams/team-1/usage?start_date=2026-01-01&end_date=2026-01-31');
+        assert.strictEqual(status, 401);
+      } finally {
+        await close(h);
+      }
+    });
+  });
+
+  describe('GET /config', () => {
+    test('exposes personalOnly and the effective teamRequired', async () => {
+      const on = await start();
+      const off = await startHarness({});
+      try {
+        assert.deepStrictEqual((await req(on.baseUrl, 'GET', '/config')).body.keyGeneration, {
+          allowUnlimitedBudget: false,
+          teamRequired: false,
+          personalOnly: true,
+        });
+        assert.deepStrictEqual((await req(off.baseUrl, 'GET', '/config')).body.keyGeneration, {
+          allowUnlimitedBudget: false,
+          teamRequired: true,
+          personalOnly: false,
+        });
+      } finally {
+        await close(on);
+        await close(off);
+      }
+    });
+  });
+
+  describe('startup check', () => {
+    const conflicts: [string, Record<string, any>][] = [
+      ['litellm.keyGeneration.teamRequired', { 'litellm.keyGeneration.teamRequired': true }],
+      ['litellm.teamAdmin.group', { 'litellm.teamAdmin.group': 'group:default/admins' }],
+      ['litellm.provisioning.defaults.teams', { 'litellm.provisioning.defaults.teams': ['team-1'] }],
+      ['litellm.provisioning.roles[1].teams', {
+        'litellm.provisioning.roles': [{ group: 'group:default/a' }, { group: 'group:default/b', teams: ['team-1'] }],
+      }],
+      ['litellm.opencode.requireTeam', { 'litellm.opencode.requireTeam': true }],
+    ];
+    const message = (keys: string[]) =>
+      `litellm.keyGeneration.personalOnly is true, so remove these team settings: ${keys.join(', ')}`;
+
+    for (const [key, config] of conflicts) {
+      test(`${key} fails startup`, async () => {
+        await assert.rejects(start(config), { message: message([key]) });
+      });
+    }
+
+    test('one error lists every conflict, in order', async () => {
+      const all = Object.assign({}, ...conflicts.map(([, c]) => c));
+      await assert.rejects(start(all), { message: message(conflicts.map(([k]) => k)) });
+    });
+
+    test('team settings that are off or empty do not conflict', async () => {
+      const h = await start({
+        'litellm.keyGeneration.teamRequired': false,
+        'litellm.teamAdmin.group': '',
+        'litellm.provisioning.defaults.teams': [],
+        'litellm.provisioning.roles': [{ group: 'group:default/a', teams: [] }],
+        'litellm.opencode.requireTeam': false,
+      });
+      await close(h);
+    });
+
+    test('logs once that personal-only keys are on', async () => {
+      const infos: string[] = [];
+      await createRouter({
+        config: mockConfig({
+          'litellm.baseUrl': 'http://litellm.local',
+          'litellm.masterKey': 'mk-test',
+          'litellm.keyGeneration.personalOnly': true,
+        }),
+        logger: { ...silentLogger(), info: (m: string) => infos.push(m) },
+        auth: mockAuth(),
+        discovery: mockDiscovery(),
+        permissions: mockPermissions(),
+        client: mockClient({}),
+      });
+      assert.deepStrictEqual(
+        infos.filter(m => m.includes('personal-only')),
+        ['LiteLLM personal-only keys enabled — keys get no team and Backstage shows no teams'],
+      );
+    });
+  });
+
+  describe('bridge', () => {
+    const claims = {
+      sub: 's1', email: 'alice@example.com', email_verified: true,
+      preferred_username: 'alice', azp: 'abby-cli',
+    };
+    const bearer = { headers: { authorization: 'Bearer any-token' } };
+    const startBridge = () =>
+      startHarness({
+        config: {
+          'litellm.userIdDomain': 'example.com',
+          'litellm.bridge.enabled': true,
+          'litellm.keyGeneration.personalOnly': true,
+          'litellm.keyGeneration.allowUnlimitedBudget': true,
+        },
+        tokenVerifier: { verify: async () => claims },
+        client: alice(),
+      });
+
+    test('POST /bridge/keys rejects a team_id and mints personal keys', async () => {
+      const h = await startBridge();
+      try {
+        const team = await req(h.baseUrl, 'POST', '/bridge/keys', {
+          ...bearer, body: { alias: 'cli', max_budget: 5, team_id: 'team-1' },
+        });
+        assert.strictEqual(team.status, 400);
+        assert.deepStrictEqual(team.body, { error: TEAM_ID_ERROR });
+        assert.strictEqual(h.client.calls.generateKey.length, 0);
+
+        const personal = await req(h.baseUrl, 'POST', '/bridge/keys', { ...bearer, body: { alias: 'cli', max_budget: 5 } });
+        assert.strictEqual(personal.status, 200);
+        assert.strictEqual(h.client.calls.generateKey[0].user_id, 'alice@example.com');
+        assert.ok(!('team_id' in h.client.calls.generateKey[0]));
+      } finally {
+        await close(h);
+      }
+    });
+
+    test('GET /bridge/user/info reports no teams and looks none up', async () => {
+      const h = await startBridge();
+      try {
+        const { status, body } = await req(h.baseUrl, 'GET', '/bridge/user/info', bearer);
+        assert.strictEqual(status, 200);
+        assert.deepStrictEqual(body, { user_id: 'alice@example.com', teams: [], team_metadata: [] });
+        assert.strictEqual(h.client.calls.getTeamInfo.length, 0);
+      } finally {
+        await close(h);
+      }
+    });
+
+    test('GET /bridge/models?team_id= and GET /bridge/mcp are 404; /bridge/models without a team is unchanged', async () => {
+      const h = await startBridge();
+      try {
+        for (const path of ['/bridge/models?team_id=team-1', '/bridge/mcp', '/bridge/mcp?team_id=team-1']) {
+          const { status, body } = await req(h.baseUrl, 'GET', path, bearer);
+          assert.strictEqual(status, 404, path);
+          assert.deepStrictEqual(body, TEAMS_DISABLED);
+        }
+        noLiteLLMCalls(h);
+
+        const all = await req(h.baseUrl, 'GET', '/bridge/models', bearer);
+        assert.strictEqual(all.status, 200);
+        assert.strictEqual(h.client.calls.listModels.length, 1);
+      } finally {
+        await close(h);
+      }
+    });
+
+    test('the claims check still comes first', async () => {
+      const h = await startHarness({
+        config: { 'litellm.bridge.enabled': true, 'litellm.keyGeneration.personalOnly': true },
+        tokenVerifier: { verify: async () => claims },
+        client: alice(),
+      });
+      try {
+        assert.strictEqual((await req(h.baseUrl, 'GET', '/bridge/mcp')).status, 401);
+      } finally {
+        await close(h);
+      }
+    });
+  });
+
+  describe('OpenCode connect', () => {
+    const TEAM_PARAM_ERROR = { error: 'team is not allowed: keys are personal (litellm.keyGeneration.personalOnly)' };
+    const startOpencode = () => start({ 'litellm.opencode.enabled': true });
+
+    test('GET and POST with a team are 400, and no key is minted', async () => {
+      const h = await startOpencode();
+      try {
+        const get = await reqNoRedirect(
+          h.baseUrl,
+          '/opencode/connect?redirect_uri=http://localhost:1456/callback&team=team-1',
+          { authRef: 'user:default/alice' },
+        );
+        assert.strictEqual(get.status, 400);
+        assert.deepStrictEqual(get.body, TEAM_PARAM_ERROR);
+
+        const form = await reqPostForm(
+          h.baseUrl,
+          '/opencode/connect',
+          { redirect_uri: 'http://localhost:1456/callback', team: 'team-1' },
+          { authRef: 'user:default/alice' },
+        );
+        assert.strictEqual(form.status, 400);
+        assert.deepStrictEqual(form.body, TEAM_PARAM_ERROR);
+
+        const json = await req(h.baseUrl, 'POST', '/opencode/connect', {
+          body: { redirect_uri: 'http://localhost:1456/callback', team: 'team-1' },
+          authRef: 'user:default/alice',
+        });
+        assert.strictEqual(json.status, 400);
+        assert.deepStrictEqual(json.body, TEAM_PARAM_ERROR);
+
+        assert.strictEqual(h.client.calls.generateKey.length, 0);
+        assert.strictEqual(h.client.calls.regenerateKey.length, 0);
+      } finally {
+        await close(h);
+      }
+    });
+
+    test('without a team it still mints a personal key', async () => {
+      const h = await startOpencode();
+      try {
+        const { status, body } = await req(h.baseUrl, 'POST', '/opencode/connect', {
+          body: { redirect_uri: 'http://localhost:1456/callback' },
+          authRef: 'user:default/alice',
+        });
+        assert.strictEqual(status, 200);
+        assert.deepStrictEqual(body, { key: 'sk-new', team: null });
+        assert.strictEqual(h.client.calls.generateKey[0].team_id, undefined);
+        assert.strictEqual(h.client.calls.generateKey[0].user_id, 'alice@example.com');
+      } finally {
+        await close(h);
+      }
+    });
+  });
+});

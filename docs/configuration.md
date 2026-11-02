@@ -98,6 +98,11 @@ litellm:
     # Set to false to allow personal, team-less keys.
     teamRequired: true   # default
 
+    # Every key is personal and Backstage shows no teams: the form has no
+    # Team field and the backend rejects any team. Defaults teamRequired to
+    # false, and startup fails while team settings are also set.
+    # personalOnly: true   # default: false
+
   # Optional — hide real team budget dollars while still showing the level
   # of consumption (percent of cap, ok/near/over status, reset window).
   # The two flags are independent and enforced server-side (the backend
@@ -190,7 +195,8 @@ litellm:
 | `litellm.provisioning.roles[].rpmLimit` | number | no | — | Overrides default for group |
 | `litellm.provisioning.roles[].metadata` | object | no | — | Merged over default metadata |
 | `litellm.keyGeneration.allowUnlimitedBudget` | boolean | no | `false` | Show the "Unlimited budget" checkbox in the Generate New Key form |
-| `litellm.keyGeneration.teamRequired` | boolean | no | `true` | Require a team to be selected before a key can be generated |
+| `litellm.keyGeneration.teamRequired` | boolean | no | `true` (`false` with `personalOnly`) | Require a team to be selected before a key can be generated |
+| `litellm.keyGeneration.personalOnly` | boolean | no | `false` | Make every key personal and hide teams. Key creation (`POST /keys/generate`, `POST /bridge/keys`, `/opencode/connect`) rejects a team with `400`, `GET /teams` returns `[]`, the team usage routes return `404`, and the UI drops the Teams tab and the Team field. The Models tab lists the models the user may use (no Team dropdown), and the budget widget's full view hides the Team level. The plugin fails to start if `keyGeneration.teamRequired: true`, `teamAdmin.group`, `provisioning.defaults.teams`, `provisioning.roles[].teams` or `opencode.requireTeam: true` is also set |
 | `litellm.keys.maxBudget` | number | no | `100` | Server-side ceiling (USD) for a key's `max_budget` on generate/update |
 | `litellm.keys.maxTpm` | number | no | `100000` | Server-side ceiling for a key's tokens-per-minute limit |
 | `litellm.keys.maxRpm` | number | no | `1000` | Server-side ceiling for a key's requests-per-minute limit |
