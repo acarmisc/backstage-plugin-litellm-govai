@@ -33,10 +33,10 @@ const usage: TeamMemberUsage = {
   ],
 };
 
-const renderTable = (u: TeamMemberUsage) =>
+const renderTable = (u: TeamMemberUsage, filterText?: string) =>
   render(
     <TestTheme>
-      <MemberUsageCards usage={u} />
+      <MemberUsageCards usage={u} filterText={filterText} />
     </TestTheme>,
   );
 
@@ -74,5 +74,22 @@ describe('MemberUsageCards', () => {
   test('says so when there is nothing to show', () => {
     renderTable({ team_id: 't1', total_spend: 0, members: [] });
     assert.ok(screen.getByText('No members or activity in this period.'));
+  });
+
+  test('filters members by name, email or user id', () => {
+    renderTable(usage, 'alice');
+    assert.ok(screen.getByText('Alice A.'));
+    assert.strictEqual(screen.queryByText('bob@corp.it'), null);
+  });
+
+  test('matches unattributed activity by its label', () => {
+    renderTable(usage, 'unattributed');
+    assert.ok(screen.getByText('Unattributed'));
+    assert.strictEqual(screen.queryByText('Alice A.'), null);
+  });
+
+  test('shows a message when the filter matches nobody', () => {
+    renderTable(usage, 'no-one-here');
+    assert.ok(screen.getByText('No members match that filter.'));
   });
 });

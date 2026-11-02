@@ -13,10 +13,12 @@ import TableContainer from '@mui/material/TableContainer';
 import Collapse from '@mui/material/Collapse';
 import IconButton from '@mui/material/IconButton';
 import Button from '@mui/material/Button';
+import TextField from '@mui/material/TextField';
+import InputAdornment from '@mui/material/InputAdornment';
 import CircularProgress from '@mui/material/CircularProgress';
 import { alpha } from '@mui/material/styles';
 import MuiTooltip from '@mui/material/Tooltip';
-import { ExpandMore, Group, Add, LockOutlined, GroupAddOutlined } from '@mui/icons-material';
+import { ExpandMore, Group, Add, LockOutlined, GroupAddOutlined, Search as SearchIcon, Close as CloseIcon } from '@mui/icons-material';
 import {
   AreaChart,
   Area,
@@ -72,11 +74,18 @@ const fmtShare = (pct: number) => `${pct.toFixed(pct > 0 && pct < 1 ? 1 : 0)}%`;
  * the backend sends). Dollars are replaced by the share of team spend when the
  * backend hides them.
  */
-export const MemberUsageCards: FC<{ usage: TeamMemberUsage }> = ({ usage }) => {
+export const MemberUsageCards: FC<{ usage: TeamMemberUsage; filterText?: string }> = ({ usage, filterText }) => {
   const hidden = usage.budget_hidden === true;
   if (!usage.members.length) {
     return <Typography variant="body2" color="text.secondary">No members or activity in this period.</Typography>;
   }
+  const query = (filterText ?? '').trim().toLowerCase();
+  const matches = (m: TeamMemberUsage['members'][number]) => {
+    if (!query) return true;
+    const haystacks = m.user_id === null ? ['Unattributed'] : [m.display_name, m.user_email, m.user_id];
+    return haystacks.some(h => h && h.toLowerCase().includes(query));
+  };
+  const visible = usage.members.filter(matches);
   const people = usage.members.filter(m => m.user_id !== null).length;
   return (
     <Box>
@@ -85,74 +94,80 @@ export const MemberUsageCards: FC<{ usage: TeamMemberUsage }> = ({ usage }) => {
           {`Team spend ${fmtUsd2(usage.total_spend)} · avg ${fmtUsd2(usage.total_spend / people)} per member`}
         </Typography>
       )}
-      <Box
-        role="list"
-        aria-label="Usage by member"
-        sx={{ display: 'grid', gap: 1.5, gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))' }}
-      >
-        {usage.members.map(m => {
-          const name = m.display_name ?? m.user_email ?? m.user_id;
-          // Second line: whichever identifier the first line does not show.
-          let sub: string | null = null;
-          if (m.display_name) sub = m.user_email ?? m.user_id;
-          else if (m.user_email && m.user_id !== m.user_email) sub = m.user_id;
-          const stats: [string, string][] = [
-            ['Tokens', fmtCompact(m.total_tokens)],
-            ['Requests', m.api_requests.toLocaleString()],
-            ['Success', m.success_rate === null ? '—' : `${m.success_rate.toFixed(0)}%`],
-            ['Keys', m.user_id === null ? '—' : String(m.key_count)],
-          ];
-          return (
-            <Paper
-              key={m.user_id ?? '__unattributed'}
-              role="listitem"
-              variant="outlined"
-              sx={{ borderRadius: 1.5, p: 1.5, minWidth: 0 }}
-            >
-              <Box display="flex" justifyContent="space-between" alignItems="flex-start" gap={1}>
-                <Box minWidth={0}>
-                  {m.user_id === null ? (
-                    <MuiTooltip title="Activity of keys that were deleted or have no owner">
-                      <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>
-                        Unattributed
-                      </Typography>
-                    </MuiTooltip>
-                  ) : (
-                    <>
-                      <Typography variant="body2" fontWeight={600} noWrap>{name}</Typography>
-                      {sub && (
-                        <Typography variant="caption" color="text.secondary" noWrap sx={{ ...monoSx, display: 'block' }}>
-                          {sub}
+      {visible.length === 0 ? (
+        <Typography variant="body2" color="text.secondary" sx={{ display: 'block', py: 1 }}>
+          No members match that filter.
+        </Typography>
+      ) : (
+        <Box
+          role="list"
+          aria-label="Usage by member"
+          sx={{ display: 'grid', gap: 1.5, gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))' }}
+        >
+          {visible.map(m => {
+            const name = m.display_name ?? m.user_email ?? m.user_id;
+            // Second line: whichever identifier the first line does not show.
+            let sub: string | null = null;
+            if (m.display_name) sub = m.user_email ?? m.user_id;
+            else if (m.user_email && m.user_id !== m.user_email) sub = m.user_id;
+            const stats: [string, string][] = [
+              ['Tokens', fmtCompact(m.total_tokens)],
+              ['Requests', m.api_requests.toLocaleString()],
+              ['Success', m.success_rate === null ? '—' : `${m.success_rate.toFixed(0)}%`],
+              ['Keys', m.user_id === null ? '—' : String(m.key_count)],
+            ];
+            return (
+              <Paper
+                key={m.user_id ?? '__unattributed'}
+                role="listitem"
+                variant="outlined"
+                sx={{ borderRadius: 1.5, p: 1.5, minWidth: 0 }}
+              >
+                <Box display="flex" justifyContent="space-between" alignItems="flex-start" gap={1}>
+                  <Box minWidth={0}>
+                    {m.user_id === null ? (
+                      <MuiTooltip title="Activity of keys that were deleted or have no owner">
+                        <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>
+                          Unattributed
                         </Typography>
-                      )}
-                    </>
-                  )}
-                </Box>
-                {m.role && <StatusPill label={m.role} tone={m.role === 'admin' ? 'accent' : 'neutral'} dot={false} />}
-              </Box>
-              <Box mt={1.5} display="flex" alignItems="baseline" justifyContent="space-between">
-                <Typography variant="h6" component="span" sx={{ lineHeight: 1.2 }}>
-                  {hidden ? fmtShare(m.spend_share_pct) : fmtUsd2(m.spend)}
-                </Typography>
-                <Typography variant="caption" color="text.secondary">
-                  {hidden ? 'of team usage' : `${fmtShare(m.spend_share_pct)} of team`}
-                </Typography>
-              </Box>
-              <Box mt={0.75}>
-                <Meter value={m.spend_share_pct} ariaLabel={`${name ?? 'Unattributed'} share of team spend`} />
-              </Box>
-              <Box mt={1.5} display="grid" gridTemplateColumns="repeat(4, 1fr)" gap={0.5}>
-                {stats.map(([label, value]) => (
-                  <Box key={label}>
-                    <Typography variant="caption" color="text.secondary" display="block">{label}</Typography>
-                    <Typography variant="body2">{value}</Typography>
+                      </MuiTooltip>
+                    ) : (
+                      <>
+                        <Typography variant="body2" fontWeight={600} noWrap>{name}</Typography>
+                        {sub && (
+                          <Typography variant="caption" color="text.secondary" noWrap sx={{ ...monoSx, display: 'block' }}>
+                            {sub}
+                          </Typography>
+                        )}
+                      </>
+                    )}
                   </Box>
-                ))}
-              </Box>
-            </Paper>
-          );
-        })}
-      </Box>
+                  {m.role && <StatusPill label={m.role} tone={m.role === 'admin' ? 'accent' : 'neutral'} dot={false} />}
+                </Box>
+                <Box mt={1.5} display="flex" alignItems="baseline" justifyContent="space-between">
+                  <Typography variant="h6" component="span" sx={{ lineHeight: 1.2 }}>
+                    {hidden ? fmtShare(m.spend_share_pct) : fmtUsd2(m.spend)}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    {hidden ? 'of team usage' : `${fmtShare(m.spend_share_pct)} of team`}
+                  </Typography>
+                </Box>
+                <Box mt={0.75}>
+                  <Meter value={m.spend_share_pct} ariaLabel={`${name ?? 'Unattributed'} share of team spend`} />
+                </Box>
+                <Box mt={1.5} display="grid" gridTemplateColumns="repeat(4, 1fr)" gap={0.5}>
+                  {stats.map(([label, value]) => (
+                    <Box key={label}>
+                      <Typography variant="caption" color="text.secondary" display="block">{label}</Typography>
+                      <Typography variant="body2">{value}</Typography>
+                    </Box>
+                  ))}
+                </Box>
+              </Paper>
+            );
+          })}
+        </Box>
+      )}
     </Box>
   );
 };
@@ -161,10 +176,19 @@ export const MemberUsageCards: FC<{ usage: TeamMemberUsage }> = ({ usage }) => {
  * A team's keys with the period's usage, for team leads. The backend never
  * sends secrets; dollars are dropped when it hides them.
  */
-export const TeamKeyUsageTable: FC<{ usage: TeamKeyUsage }> = ({ usage }) => {
+export const TeamKeyUsageTable: FC<{ usage: TeamKeyUsage; filterText?: string }> = ({ usage, filterText }) => {
   const hidden = usage.budget_hidden === true;
   if (!usage.keys.length) {
     return <Typography variant="body2" color="text.secondary">This team has no keys.</Typography>;
+  }
+  const query = (filterText ?? '').trim().toLowerCase();
+  const visible = usage.keys.filter(k => {
+    if (!query) return true;
+    const haystacks = [k.key_alias, k.key, k.user_email, k.user_id, k.display_name];
+    return haystacks.some(h => h && h.toLowerCase().includes(query));
+  });
+  if (visible.length === 0) {
+    return <Typography variant="body2" color="text.secondary" sx={{ display: 'block', py: 1 }}>No keys match that filter.</Typography>;
   }
   return (
     <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 1.5 }}>
@@ -182,7 +206,7 @@ export const TeamKeyUsageTable: FC<{ usage: TeamKeyUsage }> = ({ usage }) => {
           </TableRow>
         </TableHead>
         <TableBody>
-          {usage.keys.map(k => {
+          {visible.map(k => {
             const owner = k.display_name ?? k.user_email ?? k.user_id;
             return (
               <TableRow key={k.key}>
@@ -245,7 +269,9 @@ interface TeamCardProps {
 
 const TeamCard: FC<TeamCardProps> = ({ team, usage, usageLoading, memberUsage, memberUsageLoading, memberUsageFailed, keyUsage, keyUsageLoading, keyUsageFailed, canManage, onEditTeam, canManageMembers, onManageMembers, onExpand, vectorStores, mcpServers }) => {
   const [expanded, setExpanded] = useState(false);
+  const [teamSearch, setTeamSearch] = useState('');
   const chart = useChartTheme();
+  const searchValue = teamSearch.trim() ? teamSearch : '';
 
   const handleExpandChange = (newExpanded: boolean) => {
     setExpanded(newExpanded);
@@ -494,8 +520,31 @@ const TeamCard: FC<TeamCardProps> = ({ team, usage, usageLoading, memberUsage, m
 
         {(memberUsageLoading || memberUsage || memberUsageFailed) && (
           <Box mb={2.5}>
-            {sectionLabel('Usage by member')}
-            {memberUsage && <MemberUsageCards usage={memberUsage} />}
+            <Box display="flex" alignItems="center" justifyContent="space-between" gap={1} mb={1}>
+              {sectionLabel('Usage by member')}
+              <TextField
+                size="small"
+                placeholder="Filter members by name or email…"
+                value={teamSearch}
+                onChange={e => setTeamSearch(e.target.value)}
+                sx={{ width: { xs: '100%', sm: 260 } }}
+                InputProps={{
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <SearchIcon fontSize="small" color="disabled" />
+                    </InputAdornment>
+                  ),
+                  endAdornment: searchValue ? (
+                    <InputAdornment position="end">
+                      <IconButton size="small" onClick={() => setTeamSearch('')} aria-label="Clear member filter">
+                        <CloseIcon fontSize="small" />
+                      </IconButton>
+                    </InputAdornment>
+                  ) : undefined,
+                }}
+              />
+            </Box>
+            {memberUsage && <MemberUsageCards usage={memberUsage} filterText={searchValue} />}
             {!memberUsage && memberUsageFailed && (
               <Typography variant="caption" color="text.secondary">Could not load per-member usage</Typography>
             )}
@@ -509,8 +558,13 @@ const TeamCard: FC<TeamCardProps> = ({ team, usage, usageLoading, memberUsage, m
 
         {(keyUsageLoading || keyUsage || keyUsageFailed) && (
           <Box mb={2.5}>
-            {sectionLabel('Keys by member')}
-            {keyUsage && <TeamKeyUsageTable usage={keyUsage} />}
+            <Box display="flex" alignItems="center" justifyContent="space-between" gap={1} mb={1}>
+              {sectionLabel('Keys by member')}
+              <Typography variant="caption" color="text.secondary" noWrap>
+                Filter member keys, owner or alias
+              </Typography>
+            </Box>
+            {keyUsage && <TeamKeyUsageTable usage={keyUsage} filterText={searchValue} />}
             {!keyUsage && keyUsageFailed && (
               <Typography variant="caption" color="text.secondary">Could not load per-key usage</Typography>
             )}

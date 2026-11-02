@@ -31,10 +31,10 @@ const usage: TeamKeyUsage = {
   ],
 };
 
-const renderTable = (u: TeamKeyUsage) =>
+const renderTable = (u: TeamKeyUsage, filterText?: string) =>
   render(
     <TestTheme>
-      <TeamKeyUsageTable usage={u} />
+      <TeamKeyUsageTable usage={u} filterText={filterText} />
     </TestTheme>,
   );
 
@@ -63,5 +63,16 @@ describe('TeamKeyUsageTable', () => {
   test('says so when the team has no keys', () => {
     renderTable({ team_id: 't1', keys: [] });
     assert.ok(screen.getByText('This team has no keys.'));
+  });
+
+  test('filters keys by alias, owner or masked key', () => {
+    renderTable(usage, 'alice');
+    assert.ok(screen.getByText('alice-dev'));
+    assert.strictEqual(screen.queryByText('bob'), null);
+  });
+
+  test('shows a message when the filter matches nothing', () => {
+    renderTable(usage, 'no-such-key');
+    assert.ok(screen.getByText('No keys match that filter.'));
   });
 });
