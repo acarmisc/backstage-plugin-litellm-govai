@@ -78,7 +78,7 @@ export interface KeyFormDialogProps {
   /** Current user's LiteLLM user id, used to pre-fill a default key alias. */
   username?: string;
   /** Controls for the key form; see litellm.keyGeneration in app-config.yaml. */
-  keyGenerationSettings?: { allowUnlimitedBudget: boolean; teamRequired: boolean };
+  keyGenerationSettings?: { allowUnlimitedBudget: boolean; teamRequired: boolean; personalOnly?: boolean };
   onCreateKey: (request: GenerateKeyRequest) => Promise<GenerateKeyResponse>;
   onUpdateKey: (keyId: string, request: UpdateKeyRequest) => Promise<void>;
   onResetKeySpend?: (keyId: string) => Promise<void>;
@@ -180,7 +180,9 @@ export const KeyFormDialog: FC<KeyFormDialogProps> = ({
   }, [open]);
 
   const allowUnlimitedBudget = keyGenerationSettings?.allowUnlimitedBudget ?? false;
-  const teamRequired = keyGenerationSettings?.teamRequired ?? true;
+  // Personal-only keys: in create mode there is no team to pick, require or send.
+  const personalOnly = isCreate && keyGenerationSettings?.personalOnly === true;
+  const teamRequired = !personalOnly && (keyGenerationSettings?.teamRequired ?? true);
 
   const formData = isCreate ? generateForm : editFormState;
   const setFormData = (patch: Partial<GenerateKeyRequest> & Partial<UpdateKeyRequest>) => {
@@ -270,6 +272,7 @@ export const KeyFormDialog: FC<KeyFormDialogProps> = ({
         ...(generateForm as GenerateKeyRequest),
         max_budget: unlimitedBudget ? null : generateForm.max_budget,
       };
+      if (personalOnly) delete request.team_id;
       const response = await onCreateKey(request);
       // When the key allows all models (none explicitly picked), fall back to
       // the first model actually allowed for the chosen team so snippets show
@@ -412,6 +415,7 @@ export const KeyFormDialog: FC<KeyFormDialogProps> = ({
   };
 
   const renderTeamField = () => {
+    if (personalOnly) return null;
     if (teams.length > 0) {
       return (
         <Autocomplete

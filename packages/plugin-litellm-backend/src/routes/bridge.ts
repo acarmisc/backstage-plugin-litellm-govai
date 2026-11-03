@@ -15,6 +15,7 @@ import {
 import { isModelAllowed, ALL_PROXY_MODELS, type GenerateKeyInput } from '@acarmisc/backstage-plugin-litellm-common';
 import { teamMcpServers } from '../services/mcpAccess';
 import { createKeyForUser, KeyServiceError, type KeyCreateContext } from '../services/keyService';
+import { PERSONAL_ONLY_TEAMS_DISABLED_ERROR } from '../personalOnly';
 import { sendError } from '../errors';
 import { createGenerateKeyInputSchema } from '@acarmisc/backstage-plugin-litellm-common';
 import type { RouterContext } from './context';
@@ -27,6 +28,7 @@ export function registerBridgeRoutes(router: Router, ctx: RouterContext, bridgeO
     provisioningEnabled,
     provisioningDefaults,
     allowUnlimitedBudget,
+    personalOnly,
     teamRequired,
     keyValidationConfig,
   } = ctx;
@@ -151,6 +153,7 @@ export function registerBridgeRoutes(router: Router, ctx: RouterContext, bridgeO
           config: {
             allowUnlimitedBudget,
             teamRequired,
+            personalOnly,
           },
           logger,
           keyValidationConfig,
@@ -181,7 +184,8 @@ export function registerBridgeRoutes(router: Router, ctx: RouterContext, bridgeO
         );
 
         // Enrich team list with metadata (display names, etc.) in parallel
-        const teamIds = user.teams ?? [];
+        // Personal-only keys: report no teams, so CLI clients offer none.
+        const teamIds = personalOnly ? [] : (user.teams ?? []);
         const teamMetadata = await Promise.all(
           teamIds.map(async (teamId) => {
             try {
@@ -211,6 +215,10 @@ export function registerBridgeRoutes(router: Router, ctx: RouterContext, bridgeO
       try {
         const claims = await requireClaims(req);
         const teamId = typeof req.query.team_id === 'string' ? req.query.team_id : '';
+        if (personalOnly && teamId) {
+          res.status(404).json({ error: PERSONAL_ONLY_TEAMS_DISABLED_ERROR });
+          return;
+        }
         const models = await client.listModels();
         if (!teamId) {
           res.json(models);
@@ -245,6 +253,10 @@ export function registerBridgeRoutes(router: Router, ctx: RouterContext, bridgeO
     router.get('/bridge/mcp', async (req: Request, res: Response) => {
       try {
         const claims = await requireClaims(req);
+        if (personalOnly) {
+          res.status(404).json({ error: PERSONAL_ONLY_TEAMS_DISABLED_ERROR });
+          return;
+        }
         const teamId = typeof req.query.team_id === 'string' ? req.query.team_id : '';
         if (!teamId) {
           res.status(400).json({ error: 'team_id is required' });

@@ -202,7 +202,11 @@ const HierarchyNote: FC<{ withReset?: boolean }> = ({ withReset }) => (
 );
 
 /** Full body: the numbered key→personal→team→global rail plus the policy footnote. */
-const FullBody: FC<{ summary: BudgetSummary; keysLink?: string }> = ({ summary, keysLink }) => {
+const FullBody: FC<{ summary: BudgetSummary; keysLink?: string; personalOnly: boolean }> = ({
+  summary,
+  keysLink,
+  personalOnly,
+}) => {
   const hasBudgetedKeys = summary.keys.length + summary.hiddenBudgetedKeys > 0;
   return (
     <>
@@ -236,17 +240,19 @@ const FullBody: FC<{ summary: BudgetSummary; keysLink?: string }> = ({ summary, 
         )}
       </LevelFrame>
 
-      <LevelFrame rank={3} name="Team" tagline="shared cap for all keys in a team (if any)">
-        {summary.teams.length > 0
-          ? summary.teams.map(t => (
-              <LimitCard key={t.sublabel ?? t.label} limit={t} />
-            ))
-          : (
-            <EmptyLimitCard>No team you belong to has a budget.</EmptyLimitCard>
-          )}
-      </LevelFrame>
+      {!personalOnly && (
+        <LevelFrame rank={3} name="Team" tagline="shared cap for all keys in a team (if any)">
+          {summary.teams.length > 0
+            ? summary.teams.map(t => (
+                <LimitCard key={t.sublabel ?? t.label} limit={t} />
+              ))
+            : (
+              <EmptyLimitCard>No team you belong to has a budget.</EmptyLimitCard>
+            )}
+        </LevelFrame>
+      )}
 
-      <LevelFrame rank={4} name="Global" tagline="proxy-wide cap set by your admin" isLast>
+      <LevelFrame rank={personalOnly ? 3 : 4} name="Global" tagline="proxy-wide cap set by your admin" isLast>
         <EmptyLimitCard>
           Configured by your admin in the proxy config — it isn't visible from this page. When
           set, it limits spend across every request on the proxy.
@@ -298,7 +304,7 @@ export const LiteLLMBudgetWidget: FC<LiteLLMBudgetWidgetProps> = ({
   teams: propTeams,
   keys: propKeys,
 }) => {
-  const { userInfo: hookUserInfo, teams: hookTeams, keys: hookKeys, loading, error } = useLiteLLMProfile();
+  const { userInfo: hookUserInfo, teams: hookTeams, keys: hookKeys, config, loading, error } = useLiteLLMProfile();
   const moduleRouteRef = useRouteRef(rootRouteRef);
   const keysLink = buildKeysLink(moduleRouteRef?.());
   const [expanded, setExpanded] = useState(defaultExpanded);
@@ -308,6 +314,7 @@ export const LiteLLMBudgetWidget: FC<LiteLLMBudgetWidgetProps> = ({
   const user = propUserInfo !== undefined ? propUserInfo : hookUserInfo;
   const teams = propTeams !== undefined ? propTeams : hookTeams;
   const keys = propKeys !== undefined ? propKeys : hookKeys;
+  const personalOnly = config?.keyGeneration?.personalOnly === true;
 
   const viewState = useMemo(
     () => widgetViewState({
@@ -366,7 +373,7 @@ export const LiteLLMBudgetWidget: FC<LiteLLMBudgetWidgetProps> = ({
       )}
 
       {viewState.kind === 'ready' &&
-        (compact ? <CompactBody summary={summary} keysLink={keysLink} /> : <FullBody summary={summary} keysLink={keysLink} />)}
+        (compact ? <CompactBody summary={summary} keysLink={keysLink} /> : <FullBody summary={summary} keysLink={keysLink} personalOnly={personalOnly} />)}
     </>
   );
 

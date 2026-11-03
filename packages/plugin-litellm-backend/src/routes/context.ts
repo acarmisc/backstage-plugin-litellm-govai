@@ -38,6 +38,7 @@ export interface RouterContext {
   roleConfigs: RoleConfig[];
   auditGroup: string | undefined;
   allowUnlimitedBudget: boolean;
+  personalOnly: boolean;
   teamRequired: boolean;
   allowOwnerResetSpend: boolean;
   keyValidationConfig: KeyValidationConfig;

@@ -32,6 +32,7 @@ import { readTeamBudgetVisibility } from './teamBudgetVisibility';
 import { readOpencodeConfig } from './opencode';
 import { readMemberBreakdownConfig } from './teamMemberUsage';
 import { readLangfuseConfig } from './langfuse';
+import { assertPersonalOnlyConfig } from './personalOnly';
 import { sendError } from './errors';
 import type { RouterContext } from './routes/context';
 import { createRequireUser } from './routes/middleware/withUser';
@@ -87,7 +88,8 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
   const roleConfigs = readRoleConfigs(config);
   const auditGroup = config.getOptionalString('litellm.audit.group');
   const allowUnlimitedBudget = config.getOptionalBoolean('litellm.keyGeneration.allowUnlimitedBudget') ?? false;
-  const teamRequired = config.getOptionalBoolean('litellm.keyGeneration.teamRequired') ?? true;
+  const personalOnly = config.getOptionalBoolean('litellm.keyGeneration.personalOnly') ?? false;
+  const teamRequired = config.getOptionalBoolean('litellm.keyGeneration.teamRequired') ?? !personalOnly;
   const allowOwnerResetSpend = config.getOptionalBoolean('litellm.keys.allowOwnerResetSpend') ?? false;
   // Key validation ceilings (PR-2)
   const keyMaxBudget = config.getOptionalNumber('litellm.keys.maxBudget') ?? 100;
@@ -111,6 +113,11 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
   const memberBreakdownCfg = readMemberBreakdownConfig(config);
   const langfuseCfg = readLangfuseConfig(config);
   const catalogClient = options.catalogClient ?? new CatalogClient({ discoveryApi: discovery });
+
+  if (personalOnly) {
+    assertPersonalOnlyConfig(config);
+    logger.info('LiteLLM personal-only keys enabled — keys get no team and Backstage shows no teams');
+  }
 
   if (provisioningEnabled) {
     logger.info(
@@ -164,6 +171,7 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
     roleConfigs,
     auditGroup,
     allowUnlimitedBudget,
+    personalOnly,
     teamRequired,
     allowOwnerResetSpend,
     keyValidationConfig,

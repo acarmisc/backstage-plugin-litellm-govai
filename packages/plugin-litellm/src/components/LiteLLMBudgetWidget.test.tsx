@@ -218,4 +218,24 @@ describe('LiteLLMBudgetWidget', () => {
       assert.ok(screen.getByText(/Budget Policy/));
     });
   });
+
+  test('personalOnly: the full view has no Team level', async () => {
+    renderWidget({}, {
+      getConfig: async () => ({
+        baseUrl: 'http://localhost',
+        keyGeneration: { allowUnlimitedBudget: false, teamRequired: false, personalOnly: true },
+      }),
+    });
+    assert.ok(await screen.findByText('Global'));
+    assert.ok(screen.getByText('Key'));
+    assert.ok(screen.getByText('User'));
+    assert.ok(!screen.queryByText('Team'), 'the Team level is shown');
+    assert.ok(!screen.queryByText('No team you belong to has a budget.'), 'the team empty state is shown');
+  });
+
+  test('personalOnly unset: the full view shows the Team level', async () => {
+    renderWidget();
+    assert.ok(await screen.findByText('Team'));
+    assert.ok(screen.getByText('No team you belong to has a budget.'));
+  });
 });

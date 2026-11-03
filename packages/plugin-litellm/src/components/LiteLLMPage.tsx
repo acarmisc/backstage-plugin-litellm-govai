@@ -186,12 +186,18 @@ export const LiteLLMPage: FC = () => {
     [api],
   );
 
-  const { value: allTeams, loading: teamsLoading, error: teamsError, retry: refreshTeams } = useAsyncRetry(
+  const { value: teamsFromApi, loading: teamsLoading, error: teamsError, retry: refreshTeams } = useAsyncRetry(
     () => api.getTeams(),
     [api],
   );
 
   const { value: liteLlmConfig } = useAsync(() => api.getConfig(), [api]);
+
+  // Personal-only keys: the page shows no teams anywhere, and no Teams tab;
+  // ?tab=teams lands on Overview.
+  const personalOnly = liteLlmConfig?.keyGeneration?.personalOnly === true;
+  const allTeams = useMemo(() => (personalOnly ? [] : teamsFromApi), [personalOnly, teamsFromApi]);
+  const shownTab: PageTab = personalOnly && activeTab === 'teams' ? 'overview' : activeTab;
 
   // Teams the caller administers by group ownership (not membership). Only
   // fetched when team management is enabled; failures degrade to an empty list.
@@ -496,7 +502,7 @@ export const LiteLLMPage: FC = () => {
 
   const pageTabs = (
     <Tabs
-      value={activeTab}
+      value={shownTab}
       onChange={(_, v) => selectTab(v as PageTab)}
       variant="scrollable"
       scrollButtons="auto"
@@ -510,7 +516,7 @@ export const LiteLLMPage: FC = () => {
     >
       <Tab label="Overview" value="overview" />
       <Tab label="Keys" value="keys" />
-      <Tab label="Teams" value="teams" />
+      {!personalOnly && <Tab label="Teams" value="teams" />}
       <Tab label="Models" value="models" />
       <Tab label="Insights" value="insights" />
     </Tabs>
@@ -532,7 +538,7 @@ export const LiteLLMPage: FC = () => {
       </Box>
 
       <Content>
-        {activeTab === 'overview' && (() => {
+        {shownTab === 'overview' && (() => {
         // Show onboarding when keys have loaded without error and list is empty
         if (!keysLoading && !keysError && keys?.length === 0) {
           return (
@@ -627,7 +633,7 @@ export const LiteLLMPage: FC = () => {
         );
       })()}
 
-      {activeTab === 'teams' && (() => {
+      {shownTab === 'teams' && (() => {
         if (teamsError) {
           return (
             <Alert severity="error">
@@ -699,6 +705,8 @@ export const LiteLLMPage: FC = () => {
             allModels={allModels ?? []}
             teams={teams ?? []}
             loading={modelsLoading}
+            personalOnly={personalOnly}
+            userModels={userInfo?.models}
           />
         );
       })()}
