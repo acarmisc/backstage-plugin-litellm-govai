@@ -76,3 +76,27 @@ describe('filterKeysByStatus', () => {
     assert.strictEqual(result.length, 0);
   });
 });
+
+import { filterServiceKeys, isServiceKey } from './keyFilter';
+
+describe('service key prefixes', () => {
+  const mk = (key_alias?: string) => ({ key: 'k', key_alias } as VirtualKey);
+
+  test('isServiceKey matches prefixes case-insensitively', () => {
+    assert.strictEqual(isServiceKey(mk('SVC-etl'), ['svc-']), true);
+    assert.strictEqual(isServiceKey(mk('team-etl'), ['svc-', 'system-']), false);
+    assert.strictEqual(isServiceKey(mk(undefined), ['svc-']), false);
+  });
+
+  test('empty/blank prefixes never match', () => {
+    assert.strictEqual(isServiceKey(mk('svc-a'), undefined), false);
+    assert.strictEqual(isServiceKey(mk('svc-a'), []), false);
+    assert.strictEqual(isServiceKey(mk('svc-a'), ['  ']), false);
+  });
+
+  test('filterServiceKeys removes only matching keys', () => {
+    const keys = [mk('svc-a'), mk('mine'), mk('system-b')];
+    assert.deepStrictEqual(filterServiceKeys(keys, ['svc-', 'system-']).map(k => k.key_alias), ['mine']);
+    assert.strictEqual(filterServiceKeys(keys, []), keys);
+  });
+});

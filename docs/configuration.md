@@ -109,6 +109,12 @@ litellm:
     # hideTeamBudgetForManagers is also set.
     hideTeamBudgetForMembers: false   # default
 
+    # Optional — alias prefixes of system/service keys. The Keys table hides
+    # matching keys behind a "Hide service keys" toggle that is on by default;
+    # users can switch it off to see every key. Case-insensitive, display-only
+    # (the API still returns these keys; nothing is enforced server-side).
+    # serviceKeyPrefixes: ['svc-', 'system-']
+
     # Hide dollars even from team managers (managed teams, write responses,
     # team usage). The ManageTeamDialog budget field becomes write-only:
     # blank keeps the current value, a new value overwrites it.
@@ -215,6 +221,7 @@ litellm:
 | `litellm.teamUsage.memberBreakdown.enabled` | boolean | no | `false` | Per-member usage breakdown of a team (see [Permissions](permissions.md#per-member-team-usage)) |
 | `litellm.teamUsage.memberBreakdown.viewerRoles` | string[] | no | `[]` | LiteLLM team roles whose holders may see their own team's breakdown |
 | `litellm.teamUsage.memberBreakdown.leadGroupSuffix` | string | no | unset | Members of the catalog group `<team_alias><suffix>` (e.g. `-leads` gives `group:default/abstrid-leads`) may see their team's breakdown; for teams without `metadata.owning_group`. Unset: no lead access. See [Permissions](permissions.md#per-member-team-usage) |
+| `litellm.display.serviceKeyPrefixes` | string[] | no | `[]` | Key-alias prefixes treated as service keys. The Keys table hides them behind a "Hide service keys" toggle (on by default; users can turn it off to see all keys). Case-insensitive, display-only |
 | `litellm.display.hideTeamBudgetForManagers` | boolean | no | `false` | Hide team budget dollars even from managers (budget field becomes write-only) |
 | `litellm.teamAdmin.group` | string | no† | — | Backstage group whose members may manage teams. Setting this + `permission.enabled` enables the feature |
 | `litellm.teamAdmin.allowedModels` | string[] | no | `[]` | Models a team admin may assign to a team |

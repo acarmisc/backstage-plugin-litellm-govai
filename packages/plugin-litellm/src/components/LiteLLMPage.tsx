@@ -623,6 +623,7 @@ export const LiteLLMPage: FC = () => {
             filter={filter}
             onClearFilter={clearFilter}
             teams={allTeams ?? []}
+            serviceKeyPrefixes={liteLlmConfig?.display?.serviceKeyPrefixes}
           />
         );
       })()}

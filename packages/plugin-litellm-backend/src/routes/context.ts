@@ -32,6 +32,8 @@ export interface RouterContext {
   baseUrl: string;
   publicBaseUrl: string | null;
   supportContact: string | undefined;
+  /** Key-alias prefixes treated as service keys by the frontend (display-only). */
+  serviceKeyPrefixes: string[];
   userIdDomain: string | undefined;
   provisioningEnabled: boolean;
   provisioningDefaults: ProvisioningDefaults;

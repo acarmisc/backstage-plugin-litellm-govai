@@ -77,6 +77,7 @@ export const openApiSpec: OpenApiSpec = {
               display: { type: 'object', properties: {
                 hideTeamBudgetForMembers: { type: 'boolean' },
                 hideTeamBudgetForManagers: { type: 'boolean' },
+                serviceKeyPrefixes: { type: 'array', items: { type: 'string' } },
               } },
             } } } },
           },

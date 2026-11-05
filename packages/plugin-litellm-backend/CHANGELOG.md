@@ -9,6 +9,12 @@ commit/PR that bumps the version in `package.json`. Format follows the
 Earlier history: `git log -- packages/plugin-litellm-backend` or the
 [GitHub tags](https://github.com/acarmisc/backstage-plugin-litellm-govai/tags).
 
+## 0.29.0
+
+### Minor Changes
+
+- feat: new optional `litellm.display.serviceKeyPrefixes` (string[]) config, served to the frontend via `GET /config` (`display.serviceKeyPrefixes`) so the Keys table can hide service keys behind a toggle. Display-only; the keys API is unchanged.
+
 ## 0.28.0
 
 ### Minor Changes

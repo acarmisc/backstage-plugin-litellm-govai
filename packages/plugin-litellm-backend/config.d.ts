@@ -450,6 +450,17 @@ export interface Config {
        * @default false
        */
       hideTeamBudgetForManagers?: boolean;
+
+      /**
+       * Key-alias prefixes that identify system / service keys (e.g.
+       * ["svc-", "system-"]). The Keys table hides keys whose alias starts
+       * with one of these prefixes behind a "Hide service keys" toggle that
+       * is on by default; users can switch it off to see every key.
+       * Matching is case-insensitive. Display-only: the keys are still
+       * returned by the API and nothing is enforced server-side.
+       * @default []
+       */
+      serviceKeyPrefixes?: string[];
     };
 
     /**

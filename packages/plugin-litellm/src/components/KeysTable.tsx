@@ -21,6 +21,8 @@ import Skeleton from '@mui/material/Skeleton';
 import InputAdornment from '@mui/material/InputAdornment';
 import Tooltip from '@mui/material/Tooltip';
 import Chip from '@mui/material/Chip';
+import FormControlLabel from '@mui/material/FormControlLabel';
+import Switch from '@mui/material/Switch';
 import { alpha } from '@mui/material/styles';
 import { ContentCopy, Delete, Edit, Autorenew, Search, Lock, LockOpen, Check, Close } from '@mui/icons-material';
 import { usePermission } from '@backstage/plugin-permission-react';
@@ -33,7 +35,7 @@ import { useCopyToClipboard } from '../hooks';
 import { expiryStatus } from '../api';
 import { keyDisplayLabel, keyLast4, pruneCopy, blockButtonState } from '../keyLabels';
 import { fmtUsd, fmtLimits } from '../format';
-import { filterKeysByStatus, type KeyFilterType } from '../keyFilter';
+import { filterKeysByStatus, filterServiceKeys, isServiceKey, type KeyFilterType } from '../keyFilter';
 import { GenerateKeyButton } from './GenerateKeyButton';
 import {
   TeamInfo,
@@ -65,6 +67,8 @@ interface KeysTableProps {
   onClearFilter?: () => void;
   /** Used to show team names instead of raw team ids. */
   teams?: TeamInfo[];
+  /** Alias prefixes of service keys (litellm.display.serviceKeyPrefixes); enables the "Hide service keys" toggle. */
+  serviceKeyPrefixes?: string[];
 }
 
 const shortKeyId = (token: string): string => {
@@ -180,6 +184,7 @@ export const KeysTable: FC<KeysTableProps> = ({
   filter,
   onClearFilter,
   teams,
+  serviceKeyPrefixes,
 }) => {
   // Permission checks
   const managePermission = usePermission({ permission: litellmKeyManagePermission });
@@ -209,6 +214,14 @@ export const KeysTable: FC<KeysTableProps> = ({
   // Filter
   const [filterText, setFilterText] = useState('');
   const [teamFilter, setTeamFilter] = useState('');
+  // On by default; the user can switch it off to see every key.
+  const [hideServiceKeys, setHideServiceKeys] = useState(true);
+  const hasServiceKeyPrefixes = !!serviceKeyPrefixes?.length;
+  const serviceKeyCount = useMemo(
+    () => keys.filter(k => isServiceKey(k, serviceKeyPrefixes)).length,
+    [keys, serviceKeyPrefixes],
+  );
+  const serviceFilterActive = hasServiceKeyPrefixes && hideServiceKeys;
   const [sortKey, setSortKey] = useState<SortKey>('created');
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
 
@@ -234,7 +247,7 @@ export const KeysTable: FC<KeysTableProps> = ({
   );
 
   const filteredKeys = useMemo(() => {
-    let result = keys;
+    let result = serviceFilterActive ? filterServiceKeys(keys, serviceKeyPrefixes) : keys;
     // Apply status filter (expired/expiring)
     result = filterKeysByStatus(result, filter);
     if (teamFilter) {
@@ -252,7 +265,7 @@ export const KeysTable: FC<KeysTableProps> = ({
       const comparison = compareKeys(a, b, sortKey);
       return sortDirection === 'asc' ? comparison : -comparison;
     });
-  }, [keys, filterText, teamFilter, sortKey, sortDirection, filter]);
+  }, [keys, filterText, teamFilter, sortKey, sortDirection, filter, serviceFilterActive, serviceKeyPrefixes]);
 
   const handleOpenEdit = (k: VirtualKey) => {
     onEditKey(k);
@@ -509,7 +522,7 @@ export const KeysTable: FC<KeysTableProps> = ({
         subtitle={
           loading
             ? 'Loading…'
-            : `${filteredKeys.length}${filterText || teamFilter ? ` of ${keys.length}` : ''} key${filteredKeys.length === 1 ? '' : 's'}`
+            : `${filteredKeys.length}${filterText || teamFilter || (serviceFilterActive && serviceKeyCount > 0) ? ` of ${keys.length}` : ''} key${filteredKeys.length === 1 ? '' : 's'}`
         }
         flush
         actions={
@@ -542,6 +555,23 @@ export const KeysTable: FC<KeysTableProps> = ({
                 <MenuItem key={id} value={id}>{teamLabel(id)}</MenuItem>
               ))}
             </TextField>
+            {hasServiceKeyPrefixes && (
+              <Tooltip
+                title={`Hides keys whose alias starts with: ${serviceKeyPrefixes!.join(', ')}${serviceKeyCount ? ` (${serviceKeyCount} hidden)` : ''}`}
+              >
+                <FormControlLabel
+                  label="Hide service keys"
+                  control={
+                    <Switch
+                      size="small"
+                      checked={hideServiceKeys}
+                      onChange={e => setHideServiceKeys(e.target.checked)}
+                      inputProps={{ 'aria-label': 'Hide service keys' }}
+                    />
+                  }
+                />
+              </Tooltip>
+            )}
             {expiredKeys.length > 0 && (
               <Button
                 variant="outlined"

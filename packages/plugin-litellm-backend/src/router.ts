@@ -74,6 +74,12 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
   const publicBaseUrl = config.getOptionalString('litellm.publicBaseUrl') ?? null;
   // Support contact for unprovisioned users (optional).
   const supportContact = config.getOptionalString('litellm.supportContact');
+  // Alias prefixes of system/service keys the frontend hides by default.
+  const serviceKeyPrefixes = (
+    config.getOptionalStringArray('litellm.display.serviceKeyPrefixes') ?? []
+  )
+    .map(p => p.trim())
+    .filter(p => p.length > 0);
   const baseClient = options.client ?? new LiteLLMClient({ baseUrl, masterKey });
 
   // Wrap client with userInfoCache. TTL is configurable (default 10s, 0 disables).
@@ -158,6 +164,7 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
     baseUrl,
     publicBaseUrl,
     supportContact,
+    serviceKeyPrefixes,
     userIdDomain,
     provisioningEnabled,
     provisioningDefaults,

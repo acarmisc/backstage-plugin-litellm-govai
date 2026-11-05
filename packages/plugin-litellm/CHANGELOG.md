@@ -10,6 +10,12 @@ commit/PR that bumps the version in `package.json`. Format follows the
 Earlier history: `git log -- packages/plugin-litellm` or the
  [GitHub tags](https://github.com/acarmisc/backstage-plugin-litellm-govai/tags).
 
+## 0.48.0
+
+### Minor Changes
+
+- feat: the Keys table has a "Hide service keys" toggle (on by default) that hides keys whose alias starts with a prefix from `litellm.display.serviceKeyPrefixes`; switching it off shows every key. The toggle only appears when prefixes are configured. Needs backend 0.29.0.
+
 ## 0.47.0
 
 ### Minor Changes
