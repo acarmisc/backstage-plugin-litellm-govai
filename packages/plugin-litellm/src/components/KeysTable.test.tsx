@@ -169,4 +169,29 @@ describe('KeysTable', () => {
     assert.ok(screen.getByText('other-alias'));
     assert.ok(screen.getByText('1 of 2 key'));
   });
+
+  describe('service keys toggle', () => {
+    const svcKey: VirtualKey = { ...mockKey, token: 'hash-svc', key: 'sk-...svc', key_alias: 'SVC-pipeline' };
+
+    test('hides keys matching the configured prefixes by default', () => {
+      renderTable({ keys: [mockKey, svcKey], serviceKeyPrefixes: ['svc-'] });
+      assert.ok(screen.getByText('test-alias'));
+      assert.strictEqual(screen.queryByText('SVC-pipeline'), null);
+    });
+
+    test('toggle off reveals every key', async () => {
+      renderTable({ keys: [mockKey, svcKey], serviceKeyPrefixes: ['svc-'] });
+      const toggle = screen.getByRole('checkbox', { name: 'Hide service keys' }) as HTMLInputElement;
+      assert.strictEqual(toggle.checked, true);
+      await userEvent.click(toggle);
+      assert.ok(await screen.findByText('SVC-pipeline'));
+      assert.ok(screen.getByText('test-alias'));
+    });
+
+    test('no toggle and no filtering without configured prefixes', () => {
+      renderTable({ keys: [mockKey, svcKey] });
+      assert.ok(screen.getByText('SVC-pipeline'));
+      assert.strictEqual(screen.queryByRole('checkbox', { name: 'Hide service keys' }), null);
+    });
+  });
 });

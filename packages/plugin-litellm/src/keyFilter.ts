@@ -23,3 +23,20 @@ export function filterKeysByStatus(keys: VirtualKey[], filter: KeyFilterType): V
     return true;
   });
 }
+
+/**
+ * True when the key's alias starts with one of the configured service-key
+ * prefixes (case-insensitive). Keys without an alias never match.
+ */
+export function isServiceKey(key: VirtualKey, prefixes: string[] | undefined): boolean {
+  if (!prefixes?.length) return false;
+  const alias = (key.key_alias ?? '').toLowerCase();
+  if (!alias) return false;
+  return prefixes.some(p => p.trim() !== '' && alias.startsWith(p.trim().toLowerCase()));
+}
+
+/** Drops service keys (see {@link isServiceKey}); a no-op without prefixes. */
+export function filterServiceKeys(keys: VirtualKey[], prefixes: string[] | undefined): VirtualKey[] {
+  if (!prefixes?.length) return keys;
+  return keys.filter(k => !isServiceKey(k, prefixes));
+}

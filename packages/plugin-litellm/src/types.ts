@@ -88,6 +88,8 @@ export interface LiteLlmConfig {
     hideTeamBudgetForMembers?: boolean;
     /** Dollars hidden even from team managers (budget field becomes write-only). */
     hideTeamBudgetForManagers?: boolean;
+    /** Key-alias prefixes of service keys hidden by default in the Keys table (litellm.display.serviceKeyPrefixes). */
+    serviceKeyPrefixes?: string[];
   };
 }
 

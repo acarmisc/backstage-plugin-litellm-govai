@@ -29,6 +29,12 @@ and per-request cost, retry waste, a practice score (idle/uncapped keys),
 cache-hit savings and failed-request waste from spend logs, and a
 per-model opportunities table (failure outliers, downgrade candidates).
 
+**Service keys.** When `litellm.display.serviceKeyPrefixes` is set (for
+example `['svc-', 'system-']`), the Keys tab hides keys whose alias starts with
+one of those prefixes. A **Hide service keys** switch in the table header
+controls it: it starts on, and turning it off shows every key. The filter is
+display-only.
+
 ### Dialogs
 
 | Generate New Key | Key generated |
