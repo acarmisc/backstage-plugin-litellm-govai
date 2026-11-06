@@ -21,8 +21,22 @@ export function teamMcpServers(
   return [...new Set(listed)].filter(n => MCP_SERVER_NAME_RE.test(n));
 }
 
-/** Requested names that are not in `allowed`, de-duplicated. */
-export function findDisallowedMcpServers(requested: string[], allowed: string[]): string[] {
+/**
+ * Requested names that are not granted, de-duplicated. A team's list may hold a
+ * server's id while a caller names it (or the reverse), so a request also counts
+ * as granted when the gateway's listing links its name and id to an allowed entry.
+ * Without `servers` only exact matches count.
+ */
+export function findDisallowedMcpServers(
+  requested: string[],
+  allowed: string[],
+  servers: Array<{ id: string; name?: string }> = [],
+): string[] {
   const ok = new Set(allowed);
-  return [...new Set(requested)].filter(n => !ok.has(n));
+  const granted = (n: string) =>
+    ok.has(n) ||
+    servers.some(
+      s => (s.name === n || s.id === n) && (ok.has(s.id) || (s.name !== undefined && ok.has(s.name))),
+    );
+  return [...new Set(requested)].filter(n => !granted(n));
 }

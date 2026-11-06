@@ -31,4 +31,19 @@ describe('findDisallowedMcpServers', () => {
     assert.deepStrictEqual(findDisallowedMcpServers(['a'], ['a']), []);
     assert.deepStrictEqual(findDisallowedMcpServers(['a'], []), ['a']);
   });
+
+  const servers = [{ id: '333a880b', name: 'abstract_kb' }];
+
+  it('grants a requested name when the team list holds its id', () => {
+    assert.deepStrictEqual(findDisallowedMcpServers(['abstract_kb'], ['333a880b'], servers), []);
+  });
+
+  it('grants a requested id when the team list holds its name', () => {
+    assert.deepStrictEqual(findDisallowedMcpServers(['333a880b'], ['abstract_kb'], servers), []);
+  });
+
+  it('still refuses a name the team does not hold, even with the listing', () => {
+    assert.deepStrictEqual(findDisallowedMcpServers(['abstract_kb'], ['other'], servers), ['abstract_kb']);
+    assert.deepStrictEqual(findDisallowedMcpServers(['abstract_kb'], ['333a880b']), ['abstract_kb']);
+  });
 });
