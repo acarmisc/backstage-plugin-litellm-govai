@@ -187,7 +187,15 @@ export async function createKeyForUser(
     if (!input.team_id) {
       throw new KeyServiceError(400, { error: 'team_id is required when mcp_servers is set' });
     }
-    const disallowed = findDisallowedMcpServers(mcpServers, teamMcpServers(await getTeam(input.team_id)));
+    const allowed = teamMcpServers(await getTeam(input.team_id));
+    let disallowed = findDisallowedMcpServers(mcpServers, allowed);
+    if (disallowed.length > 0) {
+      // LiteLLM stores a team's grant by server id while callers name servers, so
+      // resolve the gateway's listing before refusing. A failed listing keeps the
+      // plain comparison.
+      const servers = await client.listMcpServers().catch(() => []);
+      disallowed = findDisallowedMcpServers(mcpServers, allowed, servers);
+    }
     if (disallowed.length > 0) {
       throw new KeyServiceError(403, {
         error: 'One or more requested MCP servers are not allowed',
