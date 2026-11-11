@@ -25,7 +25,8 @@ litellm:
   baseUrl: ${LITELLM_BASE_URL}
 
   # Optional — publicly reachable LiteLLM proxy URL, used to build
-  # ready-to-paste curl / OpenAI-SDK snippets in the "Key Generated" dialog.
+  # ready-to-paste snippets in the "Key Generated" dialog (opencode, Claude Code,
+  # pi, OpenAI SDK, curl, Office365).
   # Served to the frontend via GET /config. When omitted the UI shows
   # "Endpoint not configured" — the internal baseUrl is never exposed.
   # publicBaseUrl: https://llm-gw.example.com

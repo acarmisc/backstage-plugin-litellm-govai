@@ -40,8 +40,9 @@ import { validateKeyForm, firstInvalidField, expiryPreview, priciestInputPrice }
  * Single form dialog for both key creation (`mode="create"`) and key editing
  * (`mode="edit"`).
  *
- * Create mode: alias (pre-filled), team, models, duration, budget (+unlimited
- * when gated on), TPM/RPM in the Advanced accordion, and the post-generation
+ * Create mode: alias (pre-filled), team, duration, budget (+unlimited when gated
+ * on, defaulting to the team limit), models and TPM/RPM in the Advanced
+ * accordion (models locked until a team is picked), and the post-generation
  * screen with copyable key + starter snippets.
  *
  * Edit mode: the same shared fields but no duration (expiry is immutable after
@@ -215,6 +216,11 @@ export const KeyFormDialog: FC<KeyFormDialogProps> = ({
   }, [models, teamForModels]);
 
   const selectedModels = availableModels.filter(m => (formData.models || []).includes(m.model_name));
+  // Create mode: models can't be picked until a team is chosen (when teams exist).
+  const modelsLocked = isCreate && teams.length > 0 && !selectedTeam;
+  let modelsHelperText = 'Leave empty to allow all models';
+  if (modelsLocked) modelsHelperText = 'Select a team first';
+  else if (teamForModels) modelsHelperText = 'Leave empty to allow all models available to this team';
 
   // ── Validation using the validation module ────────────────────────────────
   const validationErrors = validateKeyForm(formData, {
@@ -423,7 +429,12 @@ export const KeyFormDialog: FC<KeyFormDialogProps> = ({
               const model = models.find(m => m.model_name === name);
               return model ? isModelAllowedByTeam(model, team?.models) : false;
             });
-            setFormData({ team_id: team?.team_id, models: restrictedModels });
+            // Budget defaults to the team's limit; a team without one keeps the current value.
+            setFormData({
+              team_id: team?.team_id,
+              models: team ? restrictedModels : [],
+              ...(team?.max_budget ? { max_budget: team.max_budget } : {}),
+            });
           }}
           disabled={!isCreate}
           onBlur={() => setTouched(prev => ({ ...prev, team: true }))}
@@ -636,51 +647,8 @@ export const KeyFormDialog: FC<KeyFormDialogProps> = ({
               </Alert>
             )}
 
-            {/* Field order: Team → Models → Budget → Duration → Alias → Advanced */}
+            {/* Field order: Team → Budget → Duration → Alias → Advanced (Models, TPM, RPM) */}
             {renderTeamField()}
-
-            {(availableModels.length > 0 || modelsError) && (
-              <>
-                {modelsError ? (
-                  <TextField
-                    label="Models"
-                    disabled
-                    value=""
-                    helperText="Couldn't load models. Retry"
-                    fullWidth
-                  />
-                ) : (
-                  <Autocomplete
-                    multiple
-                    options={availableModels}
-                    groupBy={m => m.mode || 'other'}
-                    getOptionLabel={m => m.model_name}
-                    value={selectedModels}
-                    onChange={(_e, selected) =>
-                      setFormData({ models: selected.map(m => m.model_name) })
-                    }
-                    renderOption={(props, m) => <li {...props}>{modelOption(m)}</li>}
-                    renderInput={params => (
-                      <TextField
-                        {...params}
-                        label="Models"
-                        helperText={
-                          teamForModels
-                            ? 'Leave empty to allow all models available to this team'
-                            : 'Leave empty to allow all models'
-                        }
-                        fullWidth
-                      />
-                    )}
-                  />
-                )}
-                {modelsError && onRetryModels && (
-                  <Button size="small" onClick={onRetryModels}>
-                    Retry
-                  </Button>
-                )}
-              </>
-            )}
 
             {allowUnlimitedBudget && (
               <FormControlLabel
@@ -767,6 +735,45 @@ export const KeyFormDialog: FC<KeyFormDialogProps> = ({
                 <Typography variant="body2" fontWeight={600}>Advanced</Typography>
               </AccordionSummary>
               <AccordionDetails sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                {(availableModels.length > 0 || modelsError) && (
+                  <>
+                    {modelsError ? (
+                      <TextField
+                        label="Models"
+                        disabled
+                        value=""
+                        helperText="Couldn't load models. Retry"
+                        fullWidth
+                      />
+                    ) : (
+                      <Autocomplete
+                        multiple
+                        disabled={modelsLocked}
+                        options={availableModels}
+                        groupBy={m => m.mode || 'other'}
+                        getOptionLabel={m => m.model_name}
+                        value={selectedModels}
+                        onChange={(_e, selected) =>
+                          setFormData({ models: selected.map(m => m.model_name) })
+                        }
+                        renderOption={(props, m) => <li {...props}>{modelOption(m)}</li>}
+                        renderInput={params => (
+                          <TextField
+                            {...params}
+                            label="Models"
+                            helperText={modelsHelperText}
+                            fullWidth
+                          />
+                        )}
+                      />
+                    )}
+                    {modelsError && onRetryModels && (
+                      <Button size="small" onClick={onRetryModels}>
+                        Retry
+                      </Button>
+                    )}
+                  </>
+                )}
                 <TextField
                   label="TPM Limit"
                   type="number"

@@ -41,6 +41,17 @@ display-only.
 | --- | --- |
 | ![Generate New Key dialog filled in](images/generate-key-dialog.png) | ![Generated key with copy-paste snippets](images/key-generated-dialog.png) |
 
+In create mode, **Max Budget** defaults to the selected team's max budget. A
+team without a limit leaves the current value (default `$100`). The **Models**
+selector and the TPM / RPM limits are in the **Advanced** section. When teams
+exist, Models stays disabled until you pick a team; clearing the team empties the
+selected models.
+
+After a key is generated, the starter snippets are tabs, in this order:
+opencode, Claude Code, pi, OpenAI SDK, curl and Office365. The Office365 tab
+shows two click-to-copy values: **Endpoint URL** (the gateway root, without the
+trailing `/v1`) and **API key**.
+
 Team admins edit a team's models, budget, members, knowledge bases and MCP
 servers in one dialog:
 

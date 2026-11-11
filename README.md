@@ -14,7 +14,7 @@ set budgets, models and key lifetimes, and decide who manages teams, with the
 Backstage identity, catalog groups and permissions they already run.
 
 - **Keys** — generate, edit, block and revoke scoped keys, with ready-to-paste
-  snippets for curl, the OpenAI SDK, opencode and Claude Code.
+  snippets for opencode, Claude Code, pi, the OpenAI SDK, curl and Office365.
 - **Usage and budgets** — spend, tokens and requests per model and per key;
   every budget that applies (key, personal, team) and how close it is.
 - **Teams** — team budgets and usage for members; delegated team administration
