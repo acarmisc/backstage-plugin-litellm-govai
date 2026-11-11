@@ -179,40 +179,40 @@ export const SnippetTabs: FC<SnippetTabsProps> = ({ snippets, model, copyState }
           <CopyField label="API key" value={snippets.apiKey} />
         </Box>
       ) : (
-      <Box
-        position="relative"
-        p={1.5}
-        sx={{ backgroundColor: 'action.hover', border: '1px solid', borderColor: 'divider', borderRadius: 1 }}
-      >
-        <Tooltip title={copyState.copied ? 'Copied' : 'Copy snippet'} placement="top">
-          <IconButton
-            size="small"
-            onClick={() => copyState.copy(code)}
-            aria-label="Copy snippet"
-            sx={{ position: 'absolute', top: 4, right: 4 }}
-          >
-            {copyState.copied ? <Check fontSize="small" /> : <ContentCopy fontSize="small" />}
-          </IconButton>
-        </Tooltip>
-        <Typography
-          component="pre"
-          sx={{
-            fontFamily: 'monospace',
-            fontSize: 12,
-            whiteSpace: 'pre-wrap',
-            wordBreak: 'break-all',
-            mb: 0,
-            pr: 4,
-          }}
+        <Box
+          position="relative"
+          p={1.5}
+          sx={{ backgroundColor: 'action.hover', border: '1px solid', borderColor: 'divider', borderRadius: 1 }}
         >
-          {code}
-        </Typography>
-        {model && (
-          <Typography variant="caption" color="text.secondary" display="block" mt={1}>
-            Using model “{model}” — swap it for any model you have access to.
+          <Tooltip title={copyState.copied ? 'Copied' : 'Copy snippet'} placement="top">
+            <IconButton
+              size="small"
+              onClick={() => copyState.copy(code)}
+              aria-label="Copy snippet"
+              sx={{ position: 'absolute', top: 4, right: 4 }}
+            >
+              {copyState.copied ? <Check fontSize="small" /> : <ContentCopy fontSize="small" />}
+            </IconButton>
+          </Tooltip>
+          <Typography
+            component="pre"
+            sx={{
+              fontFamily: 'monospace',
+              fontSize: 12,
+              whiteSpace: 'pre-wrap',
+              wordBreak: 'break-all',
+              mb: 0,
+              pr: 4,
+            }}
+          >
+            {code}
           </Typography>
-        )}
-      </Box>
+          {model && (
+            <Typography variant="caption" color="text.secondary" display="block" mt={1}>
+              Using model “{model}” — swap it for any model you have access to.
+            </Typography>
+          )}
+        </Box>
       )}
     </Box>
   );
