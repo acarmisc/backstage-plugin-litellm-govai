@@ -90,6 +90,8 @@ export interface LiteLlmConfig {
     hideTeamBudgetForManagers?: boolean;
     /** Key-alias prefixes of service keys hidden by default in the Keys table (litellm.display.serviceKeyPrefixes). */
     serviceKeyPrefixes?: string[];
+    /** Starter-snippet tabs after key generation, in order (litellm.display.keySnippets). Absent means the default set. */
+    keySnippets?: string[];
   };
 }
 

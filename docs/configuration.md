@@ -25,8 +25,8 @@ litellm:
   baseUrl: ${LITELLM_BASE_URL}
 
   # Optional — publicly reachable LiteLLM proxy URL, used to build
-  # ready-to-paste snippets in the "Key Generated" dialog (opencode, Claude Code,
-  # pi, OpenAI SDK, curl, Office365).
+  # ready-to-paste snippets in the "Key Generated" dialog (tabs chosen and
+  # ordered by litellm.display.keySnippets).
   # Served to the frontend via GET /config. When omitted the UI shows
   # "Endpoint not configured" — the internal baseUrl is never exposed.
   # publicBaseUrl: https://llm-gw.example.com
@@ -115,6 +115,11 @@ litellm:
     # users can switch it off to see every key. Case-insensitive, display-only
     # (the API still returns these keys; nothing is enforced server-side).
     # serviceKeyPrefixes: ['svc-', 'system-']
+
+    # Optional — starter-snippet tabs shown after a key is generated, in this
+    # order. Allowed: office365, opencode, claude-code, pi, openai, curl. Omit
+    # to show all six, Office365 first. Must not be empty, unknown or repeated.
+    # keySnippets: [office365, opencode, claude-code, pi, openai, curl]
 
     # Hide dollars even from team managers (managed teams, write responses,
     # team usage). The ManageTeamDialog budget field becomes write-only:
@@ -223,6 +228,7 @@ litellm:
 | `litellm.teamUsage.memberBreakdown.viewerRoles` | string[] | no | `[]` | LiteLLM team roles whose holders may see their own team's breakdown |
 | `litellm.teamUsage.memberBreakdown.leadGroupSuffix` | string | no | unset | Members of the catalog group `<team_alias><suffix>` (e.g. `-leads` gives `group:default/abstrid-leads`) may see their team's breakdown; for teams without `metadata.owning_group`. Unset: no lead access. See [Permissions](permissions.md#per-member-team-usage) |
 | `litellm.display.serviceKeyPrefixes` | string[] | no | `[]` | Key-alias prefixes treated as service keys. The Keys table hides them behind a "Hide service keys" toggle (on by default; users can turn it off to see all keys). Case-insensitive, display-only |
+| `litellm.display.keySnippets` | string[] | no | all six, Office365 first | Starter-snippet tabs shown after a key is generated, in this order. Allowed: `office365`, `opencode`, `claude-code`, `pi`, `openai`, `curl`. Must not be empty, unknown or repeated (startup fails). Display-only |
 | `litellm.display.hideTeamBudgetForManagers` | boolean | no | `false` | Hide team budget dollars even from managers (budget field becomes write-only) |
 | `litellm.teamAdmin.group` | string | no† | — | Backstage group whose members may manage teams. Setting this + `permission.enabled` enables the feature |
 | `litellm.teamAdmin.allowedModels` | string[] | no | `[]` | Models a team admin may assign to a team |

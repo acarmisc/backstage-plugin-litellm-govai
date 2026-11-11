@@ -39,6 +39,7 @@ export function registerConfigRoutes(router: Router, ctx: RouterContext): void {
         hideTeamBudgetForManagers:
           ctx.teamBudgetVisibility.hideTeamBudgetForManagers,
         serviceKeyPrefixes: ctx.serviceKeyPrefixes,
+        keySnippets: ctx.keySnippets,
       },
     });
   });

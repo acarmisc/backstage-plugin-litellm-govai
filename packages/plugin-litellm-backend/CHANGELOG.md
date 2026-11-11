@@ -9,6 +9,12 @@ commit/PR that bumps the version in `package.json`. Format follows the
 Earlier history: `git log -- packages/plugin-litellm-backend` or the
 [GitHub tags](https://github.com/acarmisc/backstage-plugin-litellm-govai/tags).
 
+## 0.30.0
+
+### Minor Changes
+
+- feat: new optional `litellm.display.keySnippets` (string[]) config, served via `GET /config` (`display.keySnippets`), chooses and orders the starter-snippet tabs shown after a key is generated. Allowed: `office365`, `opencode`, `claude-code`, `pi`, `openai`, `curl`. Omitted: all six, Office365 first. Startup fails on an empty, unknown or duplicated list. Display-only.
+
 ## 0.29.0
 
 ### Minor Changes

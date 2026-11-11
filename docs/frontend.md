@@ -47,10 +47,11 @@ selector and the TPM / RPM limits are in the **Advanced** section. When teams
 exist, Models stays disabled until you pick a team; clearing the team empties the
 selected models.
 
-After a key is generated, the starter snippets are tabs, in this order:
-opencode, Claude Code, pi, OpenAI SDK, curl and Office365. The Office365 tab
-shows two click-to-copy values: **Endpoint URL** (the gateway root, without the
-trailing `/v1`) and **API key**.
+After a key is generated, the starter snippets are tabs. Which tabs appear and
+their order come from `litellm.display.keySnippets`. Without it, the default is
+Office365, opencode, Claude Code, pi, OpenAI SDK, curl, and the first tab opens
+by default. The Office365 tab shows two click-to-copy values: **Endpoint URL**
+(the gateway root, without the trailing `/v1`) and **API key**.
 
 Team admins edit a team's models, budget, members, knowledge bases and MCP
 servers in one dialog:

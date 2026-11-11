@@ -78,6 +78,7 @@ export const openApiSpec: OpenApiSpec = {
                 hideTeamBudgetForMembers: { type: 'boolean' },
                 hideTeamBudgetForManagers: { type: 'boolean' },
                 serviceKeyPrefixes: { type: 'array', items: { type: 'string' } },
+                keySnippets: { type: 'array', items: { type: 'string', enum: ['office365', 'opencode', 'claude-code', 'pi', 'openai', 'curl'] } },
               } },
             } } } },
           },

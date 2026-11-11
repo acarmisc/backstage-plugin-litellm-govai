@@ -17,6 +17,7 @@ import {
   effectiveUserId,
 } from './provisioning';
 import { TokenVerifier } from './bridge';
+import { parseKeySnippetTabs } from './keySnippets';
 import {
   type KeyValidationConfig,
   DEFAULT_KEY_BUDGET_DURATIONS,
@@ -80,6 +81,8 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
   )
     .map(p => p.trim())
     .filter(p => p.length > 0);
+  // Starter-snippet tabs shown after key generation, in order (display-only).
+  const keySnippets = parseKeySnippetTabs(config.getOptionalStringArray('litellm.display.keySnippets'));
   const baseClient = options.client ?? new LiteLLMClient({ baseUrl, masterKey });
 
   // Wrap client with userInfoCache. TTL is configurable (default 10s, 0 disables).
@@ -165,6 +168,7 @@ export async function createRouter(options: RouterOptions): Promise<Router> {
     publicBaseUrl,
     supportContact,
     serviceKeyPrefixes,
+    keySnippets,
     userIdDomain,
     provisioningEnabled,
     provisioningDefaults,
