@@ -5,7 +5,9 @@ import IconButton from '@mui/material/IconButton';
 import Tabs from '@mui/material/Tabs';
 import Tab from '@mui/material/Tab';
 import Tooltip from '@mui/material/Tooltip';
+import ButtonBase from '@mui/material/ButtonBase';
 import { ContentCopy, Check } from '@mui/icons-material';
+import { useCopyToClipboard } from '../hooks';
 
 function trimSlash(url: string): string {
   return url.replace(/\/+$/, '');
@@ -18,6 +20,9 @@ export interface Snippets {
   pi: string;
   claudeCode: string;
   publicEndpoint: string;
+  /** Gateway root without `/v1`, for connectors that append the path themselves. */
+  gatewayUrl: string;
+  apiKey: string;
 }
 
 export function buildSnippets(baseUrl: string | null, key: string, model: string): Snippets {
@@ -28,6 +33,8 @@ export function buildSnippets(baseUrl: string | null, key: string, model: string
   const apiBase = `${base}/v1`;
   return {
     publicEndpoint: apiBase,
+    gatewayUrl: base,
+    apiKey: key,
     curl: `curl ${apiBase}/chat/completions \\
   -H "Authorization: Bearer ${key}" \\
   -H "Content-Type: application/json" \\
@@ -103,67 +110,110 @@ interface SnippetTabsProps {
   copyState: { copy: (text: string) => Promise<boolean>; copied: boolean };
 }
 
-type SnippetTab = 'curl' | 'openai' | 'opencode' | 'pi' | 'claude-code';
+type SnippetTab = 'opencode' | 'claude-code' | 'pi' | 'openai' | 'curl' | 'office365';
 
 const SNIPPET_FILE_HINTS: Partial<Record<SnippetTab, string>> = {
   opencode: 'Add to ~/.config/opencode/opencode.json',
   pi: 'Add to ~/.pi/agent/models.json',
   'claude-code': 'Store the key in your OS keychain and point apiKeyHelper at it in ~/.claude/settings.json',
+  office365: 'Enter these two values in the Office 365 connector',
+};
+
+/** A labelled value that copies itself on click. */
+const CopyField: FC<{ label: string; value: string }> = ({ label, value }) => {
+  const clipboard = useCopyToClipboard();
+  return (
+    <Box>
+      <Typography variant="caption" color="text.secondary" display="block" mb={0.5}>
+        {label}
+      </Typography>
+      <ButtonBase
+        onClick={() => clipboard.copy(value)}
+        aria-label={`Copy ${label}`}
+        sx={{
+          display: 'flex',
+          width: '100%',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          gap: 1,
+          p: 1.5,
+          textAlign: 'left',
+          backgroundColor: 'action.hover',
+          border: '1px solid',
+          borderColor: 'divider',
+          borderRadius: 1,
+        }}
+      >
+        <Typography component="code" sx={{ fontFamily: 'monospace', fontSize: 12, wordBreak: 'break-all' }}>
+          {value}
+        </Typography>
+        {clipboard.copied ? <Check fontSize="small" /> : <ContentCopy fontSize="small" />}
+      </ButtonBase>
+    </Box>
+  );
 };
 
 export const SnippetTabs: FC<SnippetTabsProps> = ({ snippets, model, copyState }) => {
-  const [tab, setTab] = useState<SnippetTab>('curl');
+  const [tab, setTab] = useState<SnippetTab>('opencode');
   const snippetKey = tab === 'claude-code' ? 'claudeCode' : tab;
   const code = snippets[snippetKey as keyof Snippets];
   const fileHint = SNIPPET_FILE_HINTS[tab];
   return (
     <Box>
       <Tabs value={tab} onChange={(_, v) => setTab(v as SnippetTab)} sx={{ mb: 1 }} variant="scrollable">
-        <Tab label="curl" value="curl" />
-        <Tab label="OpenAI SDK" value="openai" />
         <Tab label="opencode" value="opencode" />
-        <Tab label="pi" value="pi" />
         <Tab label="Claude Code" value="claude-code" />
+        <Tab label="pi" value="pi" />
+        <Tab label="OpenAI SDK" value="openai" />
+        <Tab label="curl" value="curl" />
+        <Tab label="Office365" value="office365" />
       </Tabs>
       {fileHint && (
         <Typography variant="caption" color="text.secondary" display="block" mb={0.5}>
           {fileHint}
         </Typography>
       )}
-      <Box
-        position="relative"
-        p={1.5}
-        sx={{ backgroundColor: 'action.hover', border: '1px solid', borderColor: 'divider', borderRadius: 1 }}
-      >
-        <Tooltip title={copyState.copied ? 'Copied' : 'Copy snippet'} placement="top">
-          <IconButton
-            size="small"
-            onClick={() => copyState.copy(code)}
-            aria-label="Copy snippet"
-            sx={{ position: 'absolute', top: 4, right: 4 }}
-          >
-            {copyState.copied ? <Check fontSize="small" /> : <ContentCopy fontSize="small" />}
-          </IconButton>
-        </Tooltip>
-        <Typography
-          component="pre"
-          sx={{
-            fontFamily: 'monospace',
-            fontSize: 12,
-            whiteSpace: 'pre-wrap',
-            wordBreak: 'break-all',
-            mb: 0,
-            pr: 4,
-          }}
+      {tab === 'office365' ? (
+        <Box display="flex" flexDirection="column" gap={2}>
+          <CopyField label="Endpoint URL" value={snippets.gatewayUrl} />
+          <CopyField label="API key" value={snippets.apiKey} />
+        </Box>
+      ) : (
+        <Box
+          position="relative"
+          p={1.5}
+          sx={{ backgroundColor: 'action.hover', border: '1px solid', borderColor: 'divider', borderRadius: 1 }}
         >
-          {code}
-        </Typography>
-        {model && (
-          <Typography variant="caption" color="text.secondary" display="block" mt={1}>
-            Using model “{model}” — swap it for any model you have access to.
+          <Tooltip title={copyState.copied ? 'Copied' : 'Copy snippet'} placement="top">
+            <IconButton
+              size="small"
+              onClick={() => copyState.copy(code)}
+              aria-label="Copy snippet"
+              sx={{ position: 'absolute', top: 4, right: 4 }}
+            >
+              {copyState.copied ? <Check fontSize="small" /> : <ContentCopy fontSize="small" />}
+            </IconButton>
+          </Tooltip>
+          <Typography
+            component="pre"
+            sx={{
+              fontFamily: 'monospace',
+              fontSize: 12,
+              whiteSpace: 'pre-wrap',
+              wordBreak: 'break-all',
+              mb: 0,
+              pr: 4,
+            }}
+          >
+            {code}
           </Typography>
-        )}
-      </Box>
+          {model && (
+            <Typography variant="caption" color="text.secondary" display="block" mt={1}>
+              Using model “{model}” — swap it for any model you have access to.
+            </Typography>
+          )}
+        </Box>
+      )}
     </Box>
   );
 };

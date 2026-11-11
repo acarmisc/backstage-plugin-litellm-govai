@@ -109,24 +109,41 @@ describe('KeyFormDialog', () => {
     return { ...result, rerenderWithNewCallbacks };
   };
 
-  test('field order in create mode: Team, Models, Budget, Duration, Alias, then Advanced', () => {
+  test('field order in create mode: Team, Budget, Duration, Alias, then Advanced holding Models', () => {
     renderDialog();
 
     const labels = [...document.querySelectorAll('label')].map(l => (l.textContent ?? '').replace(/\s*\*$/, '').trim());
-    const order = ['Team', 'Models', 'Max Budget', 'Duration', 'Alias'];
+    const order = ['Team', 'Max Budget', 'Duration', 'Alias'];
     const positions = order.map(name => labels.findIndex(l => l.startsWith(name)));
     positions.forEach((pos, i) => assert.ok(pos >= 0, `${order[i]} field is present (labels: ${labels.join(' | ')})`));
     for (let i = 1; i < positions.length; i++) {
       assert.ok(positions[i - 1] < positions[i], `${order[i - 1]} should come before ${order[i]}`);
     }
 
-    // Advanced (accordion) comes after Alias in the DOM.
+    // Advanced (accordion) comes after Alias in the DOM, and Models sits inside it.
     const alias = screen.getByLabelText(/^Alias/);
     const advanced = screen.getByText('Advanced');
     assert.ok(
       alias.compareDocumentPosition(advanced) & Node.DOCUMENT_POSITION_FOLLOWING,
       'Advanced should come after Alias',
     );
+    const models = screen.getByLabelText(/^Models/);
+    assert.ok(
+      advanced.compareDocumentPosition(models) & Node.DOCUMENT_POSITION_FOLLOWING,
+      'Models should be inside Advanced',
+    );
+  });
+
+  test('models are locked until a team is selected in create mode', () => {
+    renderDialog();
+    assert.strictEqual((screen.getByLabelText(/^Models/) as HTMLInputElement).disabled, true);
+  });
+
+  test('selecting a team with a budget limit defaults Max Budget to that limit', async () => {
+    renderDialog({ teams: [{ ...mockTeams[0], max_budget: 250 }] });
+    await userEvent.click(screen.getByLabelText(/^Team/));
+    await userEvent.click(screen.getByRole('option', { name: 'Team A' }));
+    assert.strictEqual((screen.getByLabelText(/^Max Budget/) as HTMLInputElement).value, '250');
   });
 
   test('shows no validation errors before blur or submit', () => {

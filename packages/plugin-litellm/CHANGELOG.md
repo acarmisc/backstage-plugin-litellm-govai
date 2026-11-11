@@ -10,6 +10,12 @@ commit/PR that bumps the version in `package.json`. Format follows the
 Earlier history: `git log -- packages/plugin-litellm` or the
  [GitHub tags](https://github.com/acarmisc/backstage-plugin-litellm-govai/tags).
 
+## 0.49.0
+
+### Minor Changes
+
+- feat: the starter snippets after key generation are ordered opencode, Claude Code, pi, OpenAI SDK, curl, and gain an Office365 tab with two click-to-copy values: the endpoint URL (gateway without `/v1`) and the API key. In the create form, Max Budget defaults to the selected team's limit when the team has one. Models moved into the Advanced section and stay disabled until a team is selected.
+
 ## 0.48.0
 
 ### Minor Changes
