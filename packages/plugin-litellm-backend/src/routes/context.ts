@@ -10,6 +10,7 @@ import {
   TeamInfo,
 } from '../types';
 import { TeamAdminConfig } from '../teamAdmin';
+import type { KeySnippetTab } from '../keySnippets';
 import type { KeyValidationConfig } from '@acarmisc/backstage-plugin-litellm-common';
 import { TeamBudgetVisibility } from '../teamBudgetVisibility';
 import { OpencodeConfig } from '../opencode';
@@ -34,6 +35,8 @@ export interface RouterContext {
   supportContact: string | undefined;
   /** Key-alias prefixes treated as service keys by the frontend (display-only). */
   serviceKeyPrefixes: string[];
+  /** Starter-snippet tabs the key dialog shows, in order (display-only). */
+  keySnippets: KeySnippetTab[];
   userIdDomain: string | undefined;
   provisioningEnabled: boolean;
   provisioningDefaults: ProvisioningDefaults;

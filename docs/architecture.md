@@ -42,8 +42,9 @@ URL (`litellm.publicBaseUrl`) only to build copy-paste snippets.
    duration must be within `litellm.keys.*`.
 6. It calls LiteLLM `POST /key/generate` with an explicitly built body and
    server-owned metadata (`created_by_backstage_user`, `created_via`, …).
-7. The key is shown once, with ready-made snippets (opencode, Claude Code, pi,
-   OpenAI SDK, curl and Office365).
+7. The key is shown once, with ready-made snippets. The tabs and their order
+   come from `litellm.display.keySnippets` (default: Office365 first, then
+   opencode, Claude Code, pi, OpenAI SDK and curl).
 
 Updating, blocking, unblocking, resetting spend and deleting a key follow the
 same pattern, plus an ownership check: the key must belong to the caller.

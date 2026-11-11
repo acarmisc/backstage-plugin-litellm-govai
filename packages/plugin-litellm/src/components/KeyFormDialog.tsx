@@ -287,7 +287,9 @@ export const KeyFormDialog: FC<KeyFormDialogProps> = ({
       try {
         const fetchedConfig = await onGetConfig();
         if (fetchedConfig.baseUrl) {
-          setNewKeySnippets(buildSnippets(fetchedConfig.baseUrl, response.key, model));
+          setNewKeySnippets(
+            buildSnippets(fetchedConfig.baseUrl, response.key, model, fetchedConfig.display?.keySnippets),
+          );
         }
       } catch {
         // Snippets are a nice-to-have; the raw key is still shown.

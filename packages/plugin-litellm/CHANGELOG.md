@@ -10,6 +10,12 @@ commit/PR that bumps the version in `package.json`. Format follows the
 Earlier history: `git log -- packages/plugin-litellm` or the
  [GitHub tags](https://github.com/acarmisc/backstage-plugin-litellm-govai/tags).
 
+## 0.50.0
+
+### Minor Changes
+
+- feat: the starter-snippet tabs follow `litellm.display.keySnippets` (needs backend 0.30.0). The default order is Office365 first, then opencode, Claude Code, pi, OpenAI SDK, curl, and the first tab is selected on open. Without backend 0.30.0 the default set is used. The Office365 copy fields are labelled per field.
+
 ## 0.49.0
 
 ### Minor Changes

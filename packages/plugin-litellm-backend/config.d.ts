@@ -461,6 +461,14 @@ export interface Config {
        * @default []
        */
       serviceKeyPrefixes?: string[];
+      /**
+       * Starter-snippet tabs shown after a key is generated, in this order.
+       * Allowed: office365, opencode, claude-code, pi, openai, curl. Omit to
+       * show all of them in that order (Office365 first). Must not be empty,
+       * contain unknown names, or repeat a tab. Display-only.
+       * @visibility frontend
+       */
+      keySnippets?: Array<'office365' | 'opencode' | 'claude-code' | 'pi' | 'openai' | 'curl'>;
     };
 
     /**

@@ -13,6 +13,26 @@ function trimSlash(url: string): string {
   return url.replace(/\/+$/, '');
 }
 
+export type SnippetTab = 'office365' | 'opencode' | 'claude-code' | 'pi' | 'openai' | 'curl';
+
+/** Default tab order; Office365 first. Mirrors the backend's litellm.display.keySnippets default. */
+export const DEFAULT_SNIPPET_TABS: SnippetTab[] = ['office365', 'opencode', 'claude-code', 'pi', 'openai', 'curl'];
+
+const SNIPPET_TAB_LABELS: Record<SnippetTab, string> = {
+  office365: 'Office365',
+  opencode: 'opencode',
+  'claude-code': 'Claude Code',
+  pi: 'pi',
+  openai: 'OpenAI SDK',
+  curl: 'curl',
+};
+
+/** Keeps the configured tabs that exist, in the configured order; falls back to the default set. */
+export function resolveSnippetTabs(configured?: string[] | null): SnippetTab[] {
+  const known = (configured ?? []).filter((t): t is SnippetTab => DEFAULT_SNIPPET_TABS.includes(t as SnippetTab));
+  return known.length > 0 ? known : DEFAULT_SNIPPET_TABS;
+}
+
 export interface Snippets {
   curl: string;
   openai: string;
@@ -23,9 +43,16 @@ export interface Snippets {
   /** Gateway root without `/v1`, for connectors that append the path themselves. */
   gatewayUrl: string;
   apiKey: string;
+  /** Tabs to render, in order. */
+  tabs: SnippetTab[];
 }
 
-export function buildSnippets(baseUrl: string | null, key: string, model: string): Snippets {
+export function buildSnippets(
+  baseUrl: string | null,
+  key: string,
+  model: string,
+  configuredTabs?: string[] | null,
+): Snippets {
   if (!baseUrl) {
     throw new Error('baseUrl not configured');
   }
@@ -35,6 +62,7 @@ export function buildSnippets(baseUrl: string | null, key: string, model: string
     publicEndpoint: apiBase,
     gatewayUrl: base,
     apiKey: key,
+    tabs: resolveSnippetTabs(configuredTabs),
     curl: `curl ${apiBase}/chat/completions \\
   -H "Authorization: Bearer ${key}" \\
   -H "Content-Type: application/json" \\
@@ -110,8 +138,6 @@ interface SnippetTabsProps {
   copyState: { copy: (text: string) => Promise<boolean>; copied: boolean };
 }
 
-type SnippetTab = 'opencode' | 'claude-code' | 'pi' | 'openai' | 'curl' | 'office365';
-
 const SNIPPET_FILE_HINTS: Partial<Record<SnippetTab, string>> = {
   opencode: 'Add to ~/.config/opencode/opencode.json',
   pi: 'Add to ~/.pi/agent/models.json',
@@ -129,7 +155,7 @@ const CopyField: FC<{ label: string; value: string }> = ({ label, value }) => {
       </Typography>
       <ButtonBase
         onClick={() => clipboard.copy(value)}
-        aria-label={`Copy ${label}`}
+        aria-label={`Copy Office365 ${label}`}
         sx={{
           display: 'flex',
           width: '100%',
@@ -154,19 +180,16 @@ const CopyField: FC<{ label: string; value: string }> = ({ label, value }) => {
 };
 
 export const SnippetTabs: FC<SnippetTabsProps> = ({ snippets, model, copyState }) => {
-  const [tab, setTab] = useState<SnippetTab>('opencode');
+  const [tab, setTab] = useState<SnippetTab>(snippets.tabs[0]);
   const snippetKey = tab === 'claude-code' ? 'claudeCode' : tab;
-  const code = snippets[snippetKey as keyof Snippets];
+  const code = snippets[snippetKey as keyof Omit<Snippets, "tabs">];
   const fileHint = SNIPPET_FILE_HINTS[tab];
   return (
     <Box>
       <Tabs value={tab} onChange={(_, v) => setTab(v as SnippetTab)} sx={{ mb: 1 }} variant="scrollable">
-        <Tab label="opencode" value="opencode" />
-        <Tab label="Claude Code" value="claude-code" />
-        <Tab label="pi" value="pi" />
-        <Tab label="OpenAI SDK" value="openai" />
-        <Tab label="curl" value="curl" />
-        <Tab label="Office365" value="office365" />
+        {snippets.tabs.map(t => (
+          <Tab key={t} label={SNIPPET_TAB_LABELS[t]} value={t} />
+        ))}
       </Tabs>
       {fileHint && (
         <Typography variant="caption" color="text.secondary" display="block" mb={0.5}>
