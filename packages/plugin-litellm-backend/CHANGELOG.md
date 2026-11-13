@@ -9,6 +9,12 @@ commit/PR that bumps the version in `package.json`. Format follows the
 Earlier history: `git log -- packages/plugin-litellm-backend` or the
 [GitHub tags](https://github.com/acarmisc/backstage-plugin-litellm-govai/tags).
 
+## 0.30.1
+
+### Patch Changes
+
+- fix: minting a key with `mcp_servers` no longer fails with 403 when the team's grant is stored by server id and the caller names the server (or the reverse). The gateway's server list is consulted only when the plain comparison would refuse.
+
 ## 0.30.0
 
 ### Minor Changes
