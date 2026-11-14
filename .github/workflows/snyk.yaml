@@ -7,6 +7,7 @@ on:
     branches: [main]
   schedule:
     - cron: "0 6 * * 1"
+  workflow_call:
 
 permissions:
   contents: read
@@ -14,8 +15,9 @@ permissions:
 jobs:
   snyk:
     runs-on: ubuntu-latest
-    env:
-      SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+    permissions:
+      contents: read
+      security-events: write
     steps:
       - uses: actions/checkout@v4
 
@@ -28,13 +30,41 @@ jobs:
       - name: Install dependencies
         run: npm ci --no-audit --no-fund --legacy-peer-deps
 
-      - uses: snyk/actions/setup@master
+      - name: Check SNYK_TOKEN is configured
+        id: has_token
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        run: echo "set=$([ -n "$SNYK_TOKEN" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
 
-      # Fork PRs don't receive secrets, so skip rather than fail.
-      - name: Snyk test
-        if: ${{ env.SNYK_TOKEN != '' }}
-        run: >
-          snyk test
-          --all-projects
-          --org=701fed0d-3b87-43f5-99f9-4399b6ad5481
-          --severity-threshold=high
+      - name: Check token availability
+        if: steps.has_token.outputs.set != 'true'
+        run: |
+          if [ "${{ github.event_name }}" = pull_request ] && { [ "${{ github.event.pull_request.head.repo.fork }}" = true ] || [ "${{ github.actor }}" = 'dependabot[bot]' ]; }; then
+            echo "::warning::Snyk is skipped because this pull request cannot access repository secrets."
+          else
+            echo "::error::SNYK_TOKEN is missing."
+            exit 1
+          fi
+
+      - name: Install Snyk CLI
+        if: steps.has_token.outputs.set == 'true'
+        run: npm install -g snyk@1
+
+      # Findings are reported in code scanning; operational errors fail CI.
+      - name: Snyk open source scan
+        if: steps.has_token.outputs.set == 'true'
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        run: snyk test --all-projects --fail-fast --org=701fed0d-3b87-43f5-99f9-4399b6ad5481 --severity-threshold=high --sarif-file-output=snyk-oss.sarif || [ "$?" -eq 1 ]
+
+      - name: Snyk code scan
+        if: steps.has_token.outputs.set == 'true'
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        run: snyk code test --org=701fed0d-3b87-43f5-99f9-4399b6ad5481 --sarif-file-output=snyk-code.sarif || [ "$?" -eq 1 ]
+
+      - name: Upload Snyk results to code scanning
+        if: ${{ always() && steps.has_token.outputs.set == 'true' && github.ref_type != 'tag' && hashFiles('snyk-*.sarif') != '' }}
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: .
