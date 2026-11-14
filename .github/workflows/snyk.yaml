@@ -57,6 +57,13 @@ jobs:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         run: snyk test --all-projects --fail-fast --org=701fed0d-3b87-43f5-99f9-4399b6ad5481 --severity-threshold=high --sarif-file-output=snyk-oss.sarif || [ "$?" -eq 1 ]
 
+      - name: Monitor dependencies in Snyk
+        if: ${{ steps.has_token.outputs.set == 'true' && github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'schedule') }}
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+          REPO_URL: ${{ github.server_url }}/${{ github.repository }}
+        run: snyk monitor --all-projects --fail-fast --org=701fed0d-3b87-43f5-99f9-4399b6ad5481 --remote-repo-url="$REPO_URL" --target-reference=main
+
       - name: Snyk code scan
         if: steps.has_token.outputs.set == 'true'
         env:
