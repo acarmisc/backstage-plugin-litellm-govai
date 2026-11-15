@@ -27,6 +27,8 @@ interface ModelsTableProps {
   allModels: ModelInfo[];
   teams: TeamInfo[];
   loading: boolean;
+  personalOnly?: boolean;
+  userModels?: string[];
 }
 
 const ALL_PROXY_MODELS = 'all-proxy-models';
@@ -52,7 +54,7 @@ function fmtTokens(n?: number): string {
   return String(n);
 }
 
-export const ModelsTable: FC<ModelsTableProps> = ({ allModels, teams, loading }) => {
+export const ModelsTable: FC<ModelsTableProps> = ({ allModels, teams, loading, personalOnly = false, userModels }) => {
   const theme = useTheme();
   const [selectedTeamId, setSelectedTeamId] = useState<string>('');
   const [filterText, setFilterText] = useState<string>('');
@@ -66,9 +68,10 @@ export const ModelsTable: FC<ModelsTableProps> = ({ allModels, teams, loading })
   );
 
   const teamModels = useMemo(() => {
+    if (personalOnly) return allModels.filter(model => isModelAllowedByTeam(model, userModels));
     if (!selectedTeam) return [];
     return allModels.filter(model => isModelAllowedByTeam(model, selectedTeam.models));
-  }, [allModels, selectedTeam]);
+  }, [allModels, selectedTeam, personalOnly, userModels]);
 
   const filteredModels = useMemo(() => {
     const q = filterText.trim().toLowerCase();
@@ -146,33 +149,35 @@ export const ModelsTable: FC<ModelsTableProps> = ({ allModels, teams, loading })
     <SectionCard
       title="Available Models"
       subtitle={
-        selectedTeam
+        selectedTeam || personalOnly
           ? `${filteredModels.length}${filterText.trim() ? ` of ${teamModels.length}` : ''} model${filteredModels.length === 1 ? '' : 's'}`
           : 'Select a team to view its models'
       }
     >
       <Box sx={{ px: 2.5, pb: 2.5, pt: 1, display: 'flex', gap: 2, flexWrap: 'wrap' }}>
-        <FormControl size="small" sx={{ minWidth: 240, mb: 2 }}>
-          <InputLabel id="team-select-label">Team</InputLabel>
-          <Select
-            labelId="team-select-label"
-            value={selectedTeamId}
-            label="Team"
-            onChange={e => setSelectedTeamId(e.target.value)}
-          >
-            {teams.map(t => (
-              <MenuItem key={t.team_id} value={t.team_id}>
-                {t.team_alias ?? t.team_id}
-              </MenuItem>
-            ))}
-          </Select>
-        </FormControl>
+        {!personalOnly && (
+          <FormControl size="small" sx={{ minWidth: 240, mb: 2 }}>
+            <InputLabel id="team-select-label">Team</InputLabel>
+            <Select
+              labelId="team-select-label"
+              value={selectedTeamId}
+              label="Team"
+              onChange={e => setSelectedTeamId(e.target.value)}
+            >
+              {teams.map(t => (
+                <MenuItem key={t.team_id} value={t.team_id}>
+                  {t.team_alias ?? t.team_id}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+        )}
         <TextField
           label="Filter Models"
           size="small"
           value={filterText}
           onChange={e => setFilterText(e.target.value)}
-          disabled={!selectedTeamId}
+          disabled={!personalOnly && !selectedTeamId}
           sx={{ minWidth: 240, mb: 2 }}
           InputProps={{
             startAdornment: (
@@ -188,7 +193,7 @@ export const ModelsTable: FC<ModelsTableProps> = ({ allModels, teams, loading })
         <EmptyState message="Loading models…" />
       )}
 
-      {!loading && !selectedTeamId && (
+      {!loading && !personalOnly && !selectedTeamId && (
         <EmptyState
           message="Select a team to see available models"
           hint="Each team may have a different set of models assigned"
@@ -202,7 +207,14 @@ export const ModelsTable: FC<ModelsTableProps> = ({ allModels, teams, loading })
         />
       )}
 
-      {!loading && selectedTeamId && teamModels.length > 0 && filteredModels.length === 0 && (
+      {!loading && personalOnly && teamModels.length === 0 && !filterText.trim() && (
+        <EmptyState
+          message="No models are available to your account"
+          hint="Ask an admin to give your LiteLLM user access to models"
+        />
+      )}
+
+      {!loading && (personalOnly ? !!filterText.trim() : selectedTeamId && teamModels.length > 0) && filteredModels.length === 0 && (
         <EmptyState
           message="No models match your search"
           hint="Try a different search term"

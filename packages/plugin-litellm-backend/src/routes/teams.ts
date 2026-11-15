@@ -40,6 +40,11 @@ export function registerTeamsRoutes(router: Router, ctx: RouterContext): void {
   const requireUser = createRequireUser(ctx);
 
   router.get('/teams', requireUser, async (_req: Request, res: Response) => {
+    // Personal-only keys: Backstage shows no teams, so don't look them up.
+    if (ctx.personalOnly) {
+      res.json([]);
+      return;
+    }
     try {
       const userInfo = await getProvisionedUser(ctx, res);
 

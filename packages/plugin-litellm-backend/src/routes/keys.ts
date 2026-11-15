@@ -37,6 +37,7 @@ export function registerKeysRoutes(router: Router, ctx: RouterContext): void {
     logger,
     auditGroup,
     allowUnlimitedBudget,
+    personalOnly,
     teamRequired,
     allowOwnerResetSpend,
     keyValidationConfig,
@@ -188,6 +189,7 @@ export function registerKeysRoutes(router: Router, ctx: RouterContext): void {
         config: {
           allowUnlimitedBudget,
           teamRequired,
+          personalOnly,
         },
         catalogClient,
         auth,

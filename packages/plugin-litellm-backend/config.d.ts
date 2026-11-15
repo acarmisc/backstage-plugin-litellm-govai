@@ -306,6 +306,18 @@ export interface Config {
        * @default true
        */
       teamRequired?: boolean;
+
+      /**
+       * When true, every key is personal and Backstage shows no teams. Key
+       * creation (UI, CLI bridge and OpenCode connect) rejects a team with a
+       * 400 error, GET /teams returns [] and the team usage routes return
+       * 404. teamRequired then defaults to false. The plugin fails to start
+       * while team settings are also set: keyGeneration.teamRequired: true,
+       * teamAdmin.group, provisioning.defaults.teams,
+       * provisioning.roles[].teams or opencode.requireTeam: true.
+       * @default false
+       */
+      personalOnly?: boolean;
     };
 
     /**

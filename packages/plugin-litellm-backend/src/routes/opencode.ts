@@ -11,6 +11,7 @@ import {
 import { litellmKeyCreatePermission } from '@acarmisc/backstage-plugin-litellm-common';
 import { LiteLLMUpstreamError } from '../client';
 import { sendError } from '../errors';
+import { PERSONAL_ONLY_TEAM_PARAM_ERROR } from '../personalOnly';
 import type { RouterContext } from './context';
 
 /**
@@ -44,6 +45,7 @@ export function registerOpencodeRoutes(router: Router, ctx: RouterContext): void
     provisioningDefaults,
     roleConfigs,
     opencodeCfg,
+    personalOnly,
     assertPermission,
     sendPermissionDenied,
   } = ctx;
@@ -116,6 +118,10 @@ export function registerOpencodeRoutes(router: Router, ctx: RouterContext): void
 
       // Optional team binding: must be one of the user's own teams.
       const teamId = (req.query.team || req.body.team) as string | undefined;
+      if (teamId && personalOnly) {
+        res.status(400).json({ error: PERSONAL_ONLY_TEAM_PARAM_ERROR });
+        return null;
+      }
       if (teamId) {
         const userTeams = userInfo?.teams ?? [];
         if (!userTeams.includes(teamId)) {

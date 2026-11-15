@@ -136,6 +136,7 @@ export interface KeyFormDialogProps {
     keyGenerationSettings?: {
         allowUnlimitedBudget: boolean;
         teamRequired: boolean;
+        personalOnly?: boolean;
     };
     // (undocumented)
     keys: VirtualKey[];
@@ -386,6 +387,7 @@ export interface LiteLlmConfig {
     keyGeneration?: {
         allowUnlimitedBudget: boolean;
         teamRequired: boolean;
+        personalOnly?: boolean;
     };
     supportContact?: string;
     teamManagement?: {

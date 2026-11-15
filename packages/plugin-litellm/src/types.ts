@@ -56,6 +56,8 @@ export interface LiteLlmConfig {
     allowUnlimitedBudget: boolean;
     /** When true (default), a team must be selected before a key can be generated. */
     teamRequired: boolean;
+    /** When true, every key is personal: the page shows no teams, the form has no Team field, the Models tab lists the user's own models and the budget widget has no Team level. */
+    personalOnly?: boolean;
   };
   /** Controls for key actions, set via litellm.keyActions in app-config.yaml. */
   keyActions?: {

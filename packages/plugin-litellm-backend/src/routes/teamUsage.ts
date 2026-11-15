@@ -1,4 +1,4 @@
-import { Router, Request, Response } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 import { litellmTeamUsageReadPermission } from '@acarmisc/backstage-plugin-litellm-common';
 import { LiteLLMUpstreamError } from '../client';
 import { TeamInfo, UsageMetrics } from '../types';
@@ -13,6 +13,7 @@ import {
   redactTeamMemberUsage,
 } from '../teamMemberUsage';
 import { sendError } from '../errors';
+import { PERSONAL_ONLY_TEAMS_DISABLED_ERROR } from '../personalOnly';
 import { withTeamFetchRetry } from '../http/teamFetch';
 import type { RouterContext } from './context';
 import { createRequireUser, getProvisionedUser } from './middleware/withUser';
@@ -26,6 +27,14 @@ export function registerTeamUsageRoutes(router: Router, ctx: RouterContext): voi
     teamBudgetVisibility,
   } = ctx;
   const requireUser = createRequireUser(ctx);
+  // Personal-only keys: teams are hidden, and so is their usage.
+  const requireTeams = (_req: Request, res: Response, next: NextFunction) => {
+    if (ctx.personalOnly) {
+      res.status(404).json({ error: PERSONAL_ONLY_TEAMS_DISABLED_ERROR });
+      return;
+    }
+    next();
+  };
 
   // A team manager: a member of the team's owning group (team management
   // enabled), or a member of the catalog lead group `<alias><leadGroupSuffix>`
@@ -53,7 +62,7 @@ export function registerTeamUsageRoutes(router: Router, ctx: RouterContext): voi
     );
   }
 
-  router.get('/teams/:teamId/usage', requireUser, async (req: Request, res: Response) => {
+  router.get('/teams/:teamId/usage', requireUser, requireTeams, async (req: Request, res: Response) => {
     try {
       const { teamId } = req.params;
       const { start_date, end_date } = req.query;
@@ -203,7 +212,7 @@ export function registerTeamUsageRoutes(router: Router, ctx: RouterContext): voi
       : teamBudgetVisibility.hideTeamBudgetForMembers;
 
   // Per-member breakdown of a team's usage.
-  router.get('/teams/:teamId/usage/members', requireUser, async (req: Request, res: Response) => {
+  router.get('/teams/:teamId/usage/members', requireUser, requireTeams, async (req: Request, res: Response) => {
     try {
       const gate = await authorizeMemberView(req, res);
       if (!gate) return;
@@ -234,7 +243,7 @@ export function registerTeamUsageRoutes(router: Router, ctx: RouterContext): voi
   // The team's keys (alias, owner, status, budget) with per-key usage, so a
   // team lead sees the members' keys and their consumption. Same gate and
   // redaction as the per-member breakdown.
-  router.get('/teams/:teamId/usage/keys', requireUser, async (req: Request, res: Response) => {
+  router.get('/teams/:teamId/usage/keys', requireUser, requireTeams, async (req: Request, res: Response) => {
     try {
       const gate = await authorizeMemberView(req, res);
       if (!gate) return;
