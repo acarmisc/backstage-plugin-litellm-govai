@@ -38,6 +38,7 @@ export function registerKeysRoutes(router: Router, ctx: RouterContext): void {
     auditGroup,
     allowUnlimitedBudget,
     teamRequired,
+    fixedTeam,
     allowOwnerResetSpend,
     keyValidationConfig,
     authorizeKeyAction,
@@ -188,6 +189,7 @@ export function registerKeysRoutes(router: Router, ctx: RouterContext): void {
         config: {
           allowUnlimitedBudget,
           teamRequired,
+          fixedTeam,
         },
         catalogClient,
         auth,

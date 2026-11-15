@@ -31,6 +31,8 @@ Request flow for `/api/litellm/bridge/*`:
    `created_via: abby-cli`, `created_by` and `created_at_iso` metadata.
    Backstage permissions are not evaluated: there is no Backstage credential to
    authorize.
+   With `litellm.keyGeneration.fixedTeam` set, `team_id` must be that team. Any
+   other value, or none, is rejected with `400` and an error that names the team.
 
 Because the user id comes from `preferred_username`, make sure users cannot
 edit their username in the Keycloak realm (the default).

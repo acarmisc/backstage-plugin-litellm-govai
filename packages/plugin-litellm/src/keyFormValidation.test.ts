@@ -28,6 +28,11 @@ describe('validateKeyForm', () => {
     assert.strictEqual(errors.team, undefined);
   });
 
+  test('a user outside the fixed team gets a team error even though team_id is set', () => {
+    const errors = validateKeyForm({ alias: 'test', team_id: 'team-budget', max_budget: 5 }, { isCreate: true, notInFixedTeam: true });
+    assert.strictEqual(errors.team, 'You are not in the team every key belongs to');
+  });
+
   test('requires budget when unlimited is not ticked', () => {
     const errors = validateKeyForm({ alias: 'test', max_budget: undefined }, { isCreate: true, unlimitedBudget: false });
     assert.ok(errors.budget);

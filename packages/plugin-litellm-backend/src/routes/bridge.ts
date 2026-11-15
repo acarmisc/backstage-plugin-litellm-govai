@@ -28,6 +28,7 @@ export function registerBridgeRoutes(router: Router, ctx: RouterContext, bridgeO
     provisioningDefaults,
     allowUnlimitedBudget,
     teamRequired,
+    fixedTeam,
     keyValidationConfig,
   } = ctx;
   const { config } = bridgeOpts;
@@ -151,6 +152,7 @@ export function registerBridgeRoutes(router: Router, ctx: RouterContext, bridgeO
           config: {
             allowUnlimitedBudget,
             teamRequired,
+            fixedTeam,
           },
           logger,
           keyValidationConfig,

@@ -73,6 +73,7 @@ export const openApiSpec: OpenApiSpec = {
               keyGeneration: { type: 'object', properties: {
                 allowUnlimitedBudget: { type: 'boolean' },
                 teamRequired: { type: 'boolean' },
+                fixedTeam: { type: 'string' },
               } },
               display: { type: 'object', properties: {
                 hideTeamBudgetForMembers: { type: 'boolean' },

@@ -56,6 +56,8 @@ export interface LiteLlmConfig {
     allowUnlimitedBudget: boolean;
     /** When true (default), a team must be selected before a key can be generated. */
     teamRequired: boolean;
+    /** When set, every key must use this LiteLLM team_id (litellm.keyGeneration.fixedTeam). */
+    fixedTeam?: string;
   };
   /** Controls for key actions, set via litellm.keyActions in app-config.yaml. */
   keyActions?: {

@@ -41,6 +41,7 @@ export interface KeyCreateContext {
   config: {
     allowUnlimitedBudget: boolean;
     teamRequired: boolean;
+    fixedTeam: string | undefined;
   };
   catalogClient?: CatalogClient;
   auth?: AuthService;
@@ -64,7 +65,7 @@ export class KeyServiceError extends Error {
  *
  * Performs:
  * - Schema validation of the input
- * - Config flag enforcement (allowUnlimitedBudget, teamRequired)
+ * - Config flag enforcement (allowUnlimitedBudget, fixedTeam, teamRequired)
  * - Team membership validation
  * - Model subset validation
  * - Metadata stamping
@@ -97,6 +98,13 @@ export async function createKeyForUser(
     throw new KeyServiceError(
       400,
       { error: 'max_budget is required when unlimited budgets are not allowed' },
+    );
+  }
+
+  if (config.fixedTeam && input.team_id !== config.fixedTeam) {
+    throw new KeyServiceError(
+      400,
+      { error: `team_id must be "${config.fixedTeam}"` },
     );
   }
 

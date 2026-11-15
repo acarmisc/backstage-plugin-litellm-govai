@@ -306,6 +306,16 @@ export interface Config {
        * @default true
        */
       teamRequired?: boolean;
+
+      /**
+       * LiteLLM team_id that every generated key must belong to. The form
+       * preselects this team and locks the picker, and key creation (UI and
+       * CLI bridge) rejects any other team_id, or none, with a 400 error.
+       * Users who are not in this team cannot generate keys. Keys from the
+       * OpenCode connect flow (litellm.opencode) are not covered.
+       * When omitted, users pick any of their own teams.
+       */
+      fixedTeam?: string;
     };
 
     /**

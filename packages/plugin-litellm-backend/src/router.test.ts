@@ -510,6 +510,18 @@ describe('router /config', () => {
     }
   });
 
+  test('keyGeneration.fixedTeam is exposed when set and omitted when unset', async () => {
+    const { body } = await req(h.baseUrl, 'GET', '/config');
+    assert.ok(!('fixedTeam' in body.keyGeneration));
+    const h2 = await startHarness({ config: { 'litellm.keyGeneration.fixedTeam': 'team-budget' } });
+    try {
+      const { body: fixed } = await req(h2.baseUrl, 'GET', '/config');
+      assert.strictEqual(fixed.keyGeneration.fixedTeam, 'team-budget');
+    } finally {
+      await new Promise<void>(r => h2.server.close(() => r()));
+    }
+  });
+
   test('team-management is disabled by default', async () => {
     const { body } = await req(h.baseUrl, 'GET', '/config');
     assert.strictEqual(body.teamManagement.enabled, false);
@@ -993,6 +1005,85 @@ describe('router /keys/generate — PR-2 validation', () => {
     // Ensure no extra fields leaked from body spread
     assert.strictEqual(last.unknown_field, undefined);
     assert.strictEqual(last.rpm_limit, undefined);
+  });
+});
+
+describe('router /keys/generate — fixedTeam', () => {
+  const alice = (teams: string[]) => mockClient({ userInfo: { user_id: 'alice@example.com', teams } });
+  const start = (client: any, config: Record<string, any> = {}) =>
+    startHarness({
+      config: {
+        'litellm.userIdDomain': 'example.com',
+        'litellm.keyGeneration.fixedTeam': 'team-budget',
+        ...config,
+      },
+      client,
+    });
+  const generate = (h: Harness, body: Record<string, any>) =>
+    req(h.baseUrl, 'POST', '/keys/generate', { authRef: 'user:default/alice', body });
+
+  test('400 for another of the user\'s teams, without calling LiteLLM', async () => {
+    const h = await start(alice(['team-budget', 'team-other']));
+    try {
+      const { status, body } = await generate(h, { alias: 'k', max_budget: 10, team_id: 'team-other' });
+      assert.strictEqual(status, 400);
+      assert.deepStrictEqual(body, { error: 'team_id must be "team-budget"' });
+      assert.strictEqual(h.client.calls.generateKey.length, 0);
+      assert.strictEqual(h.client.calls.getTeamInfo.length, 0);
+    } finally {
+      h.server.close();
+    }
+  });
+
+  test('400 when team_id is missing, even with teamRequired=false', async () => {
+    const h = await start(alice(['team-budget']), { 'litellm.keyGeneration.teamRequired': false });
+    try {
+      const { status, body } = await generate(h, { alias: 'k', max_budget: 10 });
+      assert.strictEqual(status, 400);
+      assert.deepStrictEqual(body, { error: 'team_id must be "team-budget"' });
+      assert.strictEqual(h.client.calls.generateKey.length, 0);
+    } finally {
+      h.server.close();
+    }
+  });
+
+  test('the fixed team passes through to LiteLLM', async () => {
+    const h = await start(alice(['team-budget', 'team-other']));
+    try {
+      const { status } = await generate(h, { alias: 'k', max_budget: 10, team_id: 'team-budget' });
+      assert.strictEqual(status, 200);
+      assert.strictEqual(h.client.calls.generateKey.length, 1);
+      assert.strictEqual(h.client.calls.generateKey[0].team_id, 'team-budget');
+    } finally {
+      h.server.close();
+    }
+  });
+
+  test('membership is still checked: 403 when the user is not in the fixed team', async () => {
+    const h = await start(alice(['team-other']));
+    try {
+      const { status, body } = await generate(h, { alias: 'k', max_budget: 10, team_id: 'team-budget' });
+      assert.strictEqual(status, 403);
+      assert.match(body.error, /not one of your teams/);
+      assert.strictEqual(h.client.calls.generateKey.length, 0);
+    } finally {
+      h.server.close();
+    }
+  });
+
+  test('unset: any of the user\'s teams, or none, is accepted as before', async () => {
+    const h = await startHarness({
+      config: { 'litellm.userIdDomain': 'example.com', 'litellm.keyGeneration.teamRequired': false },
+      client: alice(['team-budget', 'team-other']),
+    });
+    try {
+      assert.strictEqual((await generate(h, { alias: 'k1', max_budget: 10, team_id: 'team-other' })).status, 200);
+      assert.strictEqual((await generate(h, { alias: 'k2', max_budget: 10 })).status, 200);
+      assert.strictEqual(h.client.calls.generateKey[0].team_id, 'team-other');
+      assert.ok(!('team_id' in h.client.calls.generateKey[1]));
+    } finally {
+      h.server.close();
+    }
   });
 });
 
@@ -5098,6 +5189,37 @@ describe('bridge routes: identity matches the UI', () => {
         ...bearer, body: { alias: 'cli', max_budget: 5, budget_duration: '7d' },
       });
       assert.strictEqual(ok.status, 200);
+    } finally {
+      h.server.close();
+    }
+  });
+
+  test('POST /bridge/keys enforces litellm.keyGeneration.fixedTeam', async () => {
+    const h = await startHarness({
+      config: bridgeConfig({
+        'litellm.bridge.allowedEmailDomains': ['abstract.it'],
+        'litellm.keyGeneration.fixedTeam': 'team-budget',
+      }),
+      tokenVerifier: verifier,
+      client: mockClient({ userInfo: { user_id: 'degiorgis', teams: ['team-budget', 'team-other'] } }),
+    });
+    try {
+      const other = await req(h.baseUrl, 'POST', '/bridge/keys', {
+        ...bearer, body: { alias: 'cli', max_budget: 5, team_id: 'team-other' },
+      });
+      assert.strictEqual(other.status, 400);
+      assert.deepStrictEqual(other.body, { error: 'team_id must be "team-budget"' });
+      const none = await req(h.baseUrl, 'POST', '/bridge/keys', { ...bearer, body: { alias: 'cli', max_budget: 5 } });
+      assert.strictEqual(none.status, 400);
+      assert.strictEqual(h.client.calls.generateKey.length, 0);
+
+      const ok = await req(h.baseUrl, 'POST', '/bridge/keys', {
+        ...bearer, body: { alias: 'cli', max_budget: 5, team_id: 'team-budget' },
+      });
+      assert.strictEqual(ok.status, 200);
+      assert.strictEqual(h.client.calls.generateKey.length, 1);
+      assert.strictEqual(h.client.calls.generateKey[0].team_id, 'team-budget');
+      assert.strictEqual(h.client.calls.generateKey[0].metadata.created_via, 'abby-cli');
     } finally {
       h.server.close();
     }

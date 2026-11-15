@@ -44,6 +44,7 @@ export interface RouterContext {
   auditGroup: string | undefined;
   allowUnlimitedBudget: boolean;
   teamRequired: boolean;
+  fixedTeam: string | undefined;
   allowOwnerResetSpend: boolean;
   keyValidationConfig: KeyValidationConfig;
   teamMgmtEnabled: boolean;
