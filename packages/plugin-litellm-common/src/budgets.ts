@@ -1,3 +1,5 @@
+import { NEVER_KEY_DURATION } from './keySchemas';
+
 /** Budget warning threshold (percent of cap). */
 export const BUDGET_WARNING_PCT = 80;
 
@@ -19,9 +21,10 @@ export function budgetStatusForPct(pct: number): BudgetStatus {
 
 /**
  * Format a duration string to a human-readable label.
- * E.g., "1d" → "1 Day", "7d" → "7 Days".
+ * E.g., "1d" → "1 Day", "7d" → "7 Days", "never" → "Never".
  */
 export function formatDurationLabel(duration: string): string {
+  if (duration === NEVER_KEY_DURATION) return 'Never';
   const match = /^(\d+)([smhdwy])$/.exec(duration);
   if (!match) return duration;
 

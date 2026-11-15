@@ -75,6 +75,8 @@ source of truth.
   `created_*` / `updated_*`) metadata can't be set by clients, so the audit
   record can't be overwritten or pre-seeded.
 - A key generated without a duration gets `30d` (never a non-expiring key).
+  A key that never expires needs `never` in `litellm.keys.allowedDurations`
+  and an explicit `duration: "never"` in the request.
 
 **Errors** never pass raw upstream text through: LiteLLM `401`/`403` become `502`
 (so an upstream auth failure can't log the Backstage session out), upstream

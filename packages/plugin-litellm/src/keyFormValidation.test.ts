@@ -118,6 +118,10 @@ describe('expiryPreview', () => {
     assert.strictEqual(result, null);
   });
 
+  test('says a never-expiring key never expires', () => {
+    assert.strictEqual(expiryPreview('never', new Date()), 'Never expires');
+  });
+
   test('returns null for undefined duration', () => {
     const result = expiryPreview(undefined, new Date());
     assert.strictEqual(result, null);

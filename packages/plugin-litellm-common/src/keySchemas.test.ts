@@ -1,8 +1,30 @@
 import { describe, test } from 'node:test';
 import assert from 'node:assert';
-import { createGenerateKeyInputSchema } from './keySchemas';
+import { createGenerateKeyInputSchema, NEVER_KEY_DURATION } from './keySchemas';
 
 const base = { maxBudget: 100, maxTpm: 1000, maxRpm: 100, allowedDurations: [] };
+
+describe('createGenerateKeyInputSchema duration "never"', () => {
+  test('is accepted only when listed', () => {
+    const listed = createGenerateKeyInputSchema({ ...base, allowedDurations: ['30d', NEVER_KEY_DURATION] });
+    const r = listed.safeParse({ alias: 'k', duration: 'never' });
+    assert.ok(r.success);
+    assert.strictEqual(r.data.duration, 'never');
+    const unlisted = createGenerateKeyInputSchema({ ...base, allowedDurations: ['30d'] });
+    assert.ok(!unlisted.safeParse({ alias: 'k', duration: 'never' }).success);
+  });
+
+  test('is rejected when the empty list allows any well-formed duration', () => {
+    const schema = createGenerateKeyInputSchema(base);
+    assert.ok(schema.safeParse({ alias: 'k', duration: '12h' }).success);
+    assert.ok(!schema.safeParse({ alias: 'k', duration: 'never' }).success);
+  });
+
+  test('null is still rejected', () => {
+    const schema = createGenerateKeyInputSchema({ ...base, allowedDurations: [NEVER_KEY_DURATION] });
+    assert.ok(!schema.safeParse({ alias: 'k', duration: null }).success);
+  });
+});
 
 describe('createGenerateKeyInputSchema budget_duration', () => {
   test('accepts a default budget duration', () => {

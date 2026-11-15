@@ -63,5 +63,9 @@ describe('budgets', () => {
       assert.strictEqual(formatDurationLabel(''), '');
       assert.strictEqual(formatDurationLabel('d7'), 'd7');
     });
+
+    test('labels the never-expiring duration', () => {
+      assert.strictEqual(formatDurationLabel('never'), 'Never');
+    });
   });
 });
