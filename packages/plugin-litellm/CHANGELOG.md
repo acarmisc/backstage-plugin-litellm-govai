@@ -10,6 +10,13 @@ commit/PR that bumps the version in `package.json`. Format follows the
 Earlier history: `git log -- packages/plugin-litellm` or the
  [GitHub tags](https://github.com/acarmisc/backstage-plugin-litellm-govai/tags).
 
+## 0.51.0
+
+### Minor Changes
+
+- fix(security): clear Snyk audit. Bump `@backstage/plugin-catalog-react` to `^3.3.0` (resolves the `uuid@3` instance inside `@material-table/core`). Root-level overrides force patched transitive versions, resolving the remaining medium/low reports: `@octokit/auth-app` 6.1.4 → `@octokit/request` 8.4.1, `@octokit/request-error` 5.1.1, `uuid` 8.3.2, `prismjs` 1.30.0. Breaking change: none — verified by the existing test suite.
+
+
 ## 0.50.0
 
 ### Minor Changes

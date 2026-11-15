@@ -9,6 +9,13 @@ commit/PR that bumps the version in `package.json`. Format follows the
 Earlier history: `git log -- packages/plugin-litellm-backend` or the
 [GitHub tags](https://github.com/acarmisc/backstage-plugin-litellm-govai/tags).
 
+## 0.31.0
+
+### Minor Changes
+
+- fix(security): clear the Snyk audit (highs included). Bump `@backstage/backend-plugin-api` to `^1.11.0` (resolves the high-risk Azure identity / `fast-xml-parser@4.5.1` chain — replaced by patched `@backstage/plugin-auth-node` + `@azure/identity` 4.14.1). Medium fixes come from root-level overrides forcing patched transitive versions: `@octokit/auth-app` 6.1.4 → `@octokit/request` 8.4.1, `@octokit/request-error` 5.1.1, `uuid` 8.3.2. Low: `prismjs` 1.30.0.
+
+
 ## 0.30.1
 
 ### Patch Changes
