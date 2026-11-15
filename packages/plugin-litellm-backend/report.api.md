@@ -389,10 +389,8 @@ export { PaginatedSpendLogs }
 
 // @public (undocumented)
 export interface ProvisioningDefaults {
-    // (undocumented)
-    budgetDuration: string;
-    // (undocumented)
-    maxBudget: number;
+    budgetDuration?: string;
+    maxBudget?: number;
     // (undocumented)
     metadata: Record<string, string>;
     // (undocumented)

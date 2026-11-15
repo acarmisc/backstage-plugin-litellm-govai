@@ -8,7 +8,9 @@ import {
   ProvisioningError,
   getOrProvisionUser,
   effectiveUserId,
+  provisionUser,
 } from './provisioning';
+import { RoleConfig } from './types';
 
 // ---------------------------------------------------------------------------
 // Minimal mock factories — avoid heavy frameworks, keep dependencies minimal
@@ -115,6 +117,103 @@ describe('readProvisioningDefaults', () => {
     assert.deepStrictEqual(result.defaults.teams, ['team-1']);
     assert.strictEqual(result.defaults.tpmLimit, 100);
     assert.strictEqual(result.defaults.rpmLimit, 200);
+  });
+
+  test('useGatewayBudgetDefaults leaves unset budget fields undefined', () => {
+    const config = mockConfig({
+      'litellm.provisioning.defaults.useGatewayBudgetDefaults': true,
+    });
+    const result = readProvisioningDefaults(config);
+    assert.strictEqual(result.defaults.maxBudget, undefined);
+    assert.strictEqual(result.defaults.budgetDuration, undefined);
+  });
+
+  test('useGatewayBudgetDefaults decides each budget field on its own', () => {
+    const config = mockConfig({
+      'litellm.provisioning.defaults.useGatewayBudgetDefaults': true,
+      'litellm.provisioning.defaults.maxBudget': 42,
+    });
+    const result = readProvisioningDefaults(config);
+    assert.strictEqual(result.defaults.maxBudget, 42);
+    assert.strictEqual(result.defaults.budgetDuration, undefined);
+  });
+
+  test('useGatewayBudgetDefaults: false keeps the built-in fallbacks', () => {
+    const config = mockConfig({
+      'litellm.provisioning.defaults.useGatewayBudgetDefaults': false,
+    });
+    const result = readProvisioningDefaults(config);
+    assert.strictEqual(result.defaults.maxBudget, 10);
+    assert.strictEqual(result.defaults.budgetDuration, '30d');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// provisionUser — budget fields on the /user/new payload
+// ---------------------------------------------------------------------------
+
+describe('provisionUser budget fields', () => {
+  async function createUserPayload(
+    configValues: Record<string, any>,
+    role?: RoleConfig,
+  ): Promise<Record<string, any>> {
+    const base = readProvisioningDefaults(mockConfig(configValues)).defaults;
+    const defaults = role ? applyRoleOverrides(base, role) : base;
+    let payload: Record<string, any> | undefined;
+    const client: any = {
+      createUser: async (p: any) => {
+        payload = p;
+        return {};
+      },
+      updateUser: async () => ({}),
+      getUserInfo: async () => ({ user_id: 'dana' }),
+    };
+    await provisionUser(client, 'dana', defaults, {}, undefined, silentLogger());
+    assert.ok(payload, 'createUser was not called');
+    return payload;
+  }
+
+  test('flag off: payload keeps the same fields in the same order', async () => {
+    const payload = await createUserPayload({});
+    assert.deepStrictEqual(Object.keys(payload), [
+      'user_id',
+      'max_budget',
+      'budget_duration',
+      'models',
+      'teams',
+      'user_role',
+      'auto_create_key',
+      'metadata',
+    ]);
+    assert.strictEqual(payload.max_budget, 10);
+    assert.strictEqual(payload.budget_duration, '30d');
+  });
+
+  test('flag on with nothing set: no max_budget or budget_duration', async () => {
+    const payload = await createUserPayload({
+      'litellm.provisioning.defaults.useGatewayBudgetDefaults': true,
+    });
+    assert.strictEqual('max_budget' in payload, false);
+    assert.strictEqual('budget_duration' in payload, false);
+    assert.strictEqual(payload.user_role, 'internal_user');
+  });
+
+  test('flag on with only maxBudget: sends max_budget, leaves the duration to LiteLLM', async () => {
+    const payload = await createUserPayload({
+      'litellm.provisioning.defaults.useGatewayBudgetDefaults': true,
+      'litellm.provisioning.defaults.maxBudget': 25,
+    });
+    assert.strictEqual(payload.max_budget, 25);
+    assert.strictEqual('budget_duration' in payload, false);
+  });
+
+  test('flag on: a role override still supplies the budget', async () => {
+    const payload = await createUserPayload(
+      { 'litellm.provisioning.defaults.useGatewayBudgetDefaults': true },
+      { group: 'group:default/power', budgetDuration: '7d' },
+    );
+    assert.strictEqual('max_budget' in payload, false);
+    assert.strictEqual(payload.budget_duration, '7d');
   });
 });
 

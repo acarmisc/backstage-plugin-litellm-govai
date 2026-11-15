@@ -45,15 +45,28 @@ export interface Config {
 
       defaults?: {
         /**
+         * Leave first-visit user budgets to LiteLLM. When true, maxBudget and
+         * budgetDuration have no built-in fallback: each is sent on /user/new
+         * only if set here or on the matching roles[] entry. Otherwise LiteLLM's
+         * litellm_settings.max_internal_user_budget /
+         * internal_user_budget_duration apply (LiteLLM applies those to
+         * user_role internal_user only).
+         * @default false
+         */
+        useGatewayBudgetDefaults?: boolean;
+
+        /**
          * Max lifetime spend in USD before the account is blocked.
-         * Set a conservative value; null means no hard cap.
+         * Set a conservative value. When unset, 10 is used unless
+         * useGatewayBudgetDefaults is true (a YAML null counts as unset).
          * @default 10
          */
         maxBudget?: number;
 
         /**
          * Spend-reset period for maxBudget (e.g. "30d", "7d", "1h").
-         * After this period the spend counter resets.
+         * After this period the spend counter resets. When unset, "30d" is
+         * used unless useGatewayBudgetDefaults is true.
          * @default "30d"
          */
         budgetDuration?: string;
