@@ -3,6 +3,12 @@
 Shared, dependency-light code for the LiteLLM Backstage plugin packages. This
 changelog is maintained by hand.
 
+## 0.7.0
+
+### Minor Changes
+
+- feat: `NEVER_KEY_DURATION` constant; `"never"` is accepted in `allowedDurations` and `formatDurationLabel('never')` returns "Never". Thanks @jozsefurak-seon (#96).
+
 ## 0.6.0
 
 ### Minor Changes

@@ -9,6 +9,13 @@ commit/PR that bumps the version in `package.json`. Format follows the
 Earlier history: `git log -- packages/plugin-litellm-backend` or the
 [GitHub tags](https://github.com/acarmisc/backstage-plugin-litellm-govai/tags).
 
+## 0.32.0
+
+### Minor Changes
+
+- feat: `litellm.provisioning.defaults.useGatewayBudgetDefaults` (default `false`) leaves first-visit user budgets to LiteLLM's internal-user defaults. Thanks @jozsefurak-seon (#95).
+- feat: `litellm.keys.allowedDurations` may list `"never"` to offer keys that never expire; `GET /config` returns `keyGeneration.allowedDurations`. Requires common 0.7.0. Thanks @jozsefurak-seon (#96).
+
 ## 0.31.0
 
 ### Minor Changes

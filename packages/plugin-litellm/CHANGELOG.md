@@ -10,6 +10,12 @@ commit/PR that bumps the version in `package.json`. Format follows the
 Earlier history: `git log -- packages/plugin-litellm` or the
  [GitHub tags](https://github.com/acarmisc/backstage-plugin-litellm-govai/tags).
 
+## 0.52.0
+
+### Minor Changes
+
+- feat: the Duration select follows `keyGeneration.allowedDurations` and can offer "Never" (needs backend 0.32.0 and common 0.7.0). Thanks @jozsefurak-seon (#96).
+
 ## 0.51.0
 
 ### Minor Changes
