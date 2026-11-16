@@ -346,7 +346,18 @@ export interface SpendLogEntry {
   userId?: string;
   teamId?: string;
   keyHash?: string;
+  /** Client / User-Agent that issued the request, when LiteLLM logged it. */
+  userAgent?: string;
+  /** `request_tags` / `metadata.tags` attached to the request, when present. */
+  tags?: string[];
   timestamp: string;
+}
+
+/** Response of `/insights/users-monitoring` (audit-group only). */
+export interface UsersMonitoringLogs {
+  data: SpendLogEntry[];
+  /** True when the row cap was hit: aggregates cover only part of the range. */
+  truncated: boolean;
 }
 
 export interface SpendLogsParams {

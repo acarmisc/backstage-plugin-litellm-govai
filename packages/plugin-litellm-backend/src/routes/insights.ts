@@ -52,6 +52,33 @@ export function registerInsightsRoutes(router: Router, ctx: RouterContext): void
     }
   });
 
+  // Users Monitoring: all users' spend rows, audit-group members only.
+  router.get('/insights/users-monitoring', requireUser, async (req: Request, res: Response) => {
+    try {
+      const { start_date, end_date, teamId } = req.query as Record<string, string | undefined>;
+      if (!start_date || !end_date) {
+        res.status(400).json({ error: 'start_date and end_date are required' });
+        return;
+      }
+      const isAudit = auditGroup
+        ? await isUserMemberOfGroup(
+            res.locals.tokenEntityRef as string,
+            auditGroup,
+            catalogClient,
+            auth,
+            logger,
+          )
+        : false;
+      if (!isAudit) {
+        res.status(403).json({ error: 'Access denied: not a member of the audit group' });
+        return;
+      }
+      res.json(await client.getAllSpendLogs({ startDate: start_date, endDate: end_date, teamId }));
+    } catch (error: unknown) {
+      sendError(res, error, logger, 'fetch users monitoring logs');
+    }
+  });
+
   router.get('/insights/quality', requireUser, async (req: Request, res: Response) => {
     try {
       const { start_date, end_date, userId } =

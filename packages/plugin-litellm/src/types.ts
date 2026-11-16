@@ -24,6 +24,7 @@ export {
   type SpendLogEntry,
   type SpendLogsParams,
   type PaginatedSpendLogs,
+  type UsersMonitoringLogs,
   type CreateTeamResponse,
   type InsightSummary,
   type PracticeScore,

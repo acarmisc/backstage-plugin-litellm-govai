@@ -809,6 +809,42 @@ export class LiteLLMClient {
     return this.normalizeSpendLogs(raw, page, pageSize);
   }
 
+  /** Best-effort: the field moved between LiteLLM versions; absent is fine. */
+  private parseUserAgent(r: any): { userAgent?: string } {
+    const ua =
+      r?.user_agent ??
+      r?.metadata?.user_agent ??
+      r?.metadata?.requester_metadata?.user_agent ??
+      r?.metadata?.headers?.['user-agent'];
+    return typeof ua === 'string' && ua ? { userAgent: ua } : {};
+  }
+
+  private parseTags(r: any): { tags?: string[] } {
+    const raw = r?.request_tags ?? r?.metadata?.tags ?? r?.tags;
+    const tags = Array.isArray(raw)
+      ? raw.filter((t: unknown): t is string => typeof t === 'string' && t !== '')
+      : [];
+    return tags.length ? { tags } : {};
+  }
+
+  /**
+   * Pages through getSpendLogs until a short page or `maxPages`, so the
+   * per-user aggregates in Users Monitoring are not limited to one page.
+   */
+  async getAllSpendLogs(
+    params: Omit<SpendLogsParams, 'page' | 'pageSize'>,
+    maxPages = 50,
+  ): Promise<{ data: SpendLogEntry[]; truncated: boolean }> {
+    const pageSize = 100;
+    const data: SpendLogEntry[] = [];
+    for (let page = 1; page <= maxPages; page++) {
+      const res = await this.getSpendLogs({ ...params, page, pageSize });
+      data.push(...res.data);
+      if (res.data.length < pageSize) return { data, truncated: false };
+    }
+    return { data, truncated: true };
+  }
+
   private normalizeSpendLogs(
     raw: any,
     page: number,
@@ -855,6 +891,8 @@ export class LiteLLMClient {
         ...(r?.api_key ?? r?.keyHash
           ? { keyHash: String(r.api_key ?? r.keyHash) }
           : {}),
+        ...this.parseUserAgent(r),
+        ...this.parseTags(r),
         timestamp: String(
           r?.timestamp ?? r?.startTime ?? r?.created_at ?? r?.date ?? '',
         ),

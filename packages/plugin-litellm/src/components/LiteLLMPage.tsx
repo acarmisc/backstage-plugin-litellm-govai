@@ -24,6 +24,7 @@ import { LiteLLMBudgetWidget } from './LiteLLMBudgetWidget';
 import { TeamUsage } from './TeamUsage';
 import { ModelsTable } from './ModelsTable';
 import { InsightsTab } from './InsightsTab';
+import { UsersMonitoringTab } from './UsersMonitoringTab';
 import { ApiError, liteLlmApiRef } from '../api';
 import { toLocalDay } from '../dates';
 import {
@@ -46,8 +47,8 @@ import {
 const PERIOD_LS_KEY = 'litellm_usage_period';
 type DatePreset = 'today' | '24h' | '7d' | '30d';
 
-type PageTab = 'overview' | 'keys' | 'teams' | 'models' | 'insights';
-const PAGE_TABS: readonly PageTab[] = ['overview', 'keys', 'teams', 'models', 'insights'];
+type PageTab = 'overview' | 'keys' | 'teams' | 'models' | 'insights' | 'users-monitoring';
+const PAGE_TABS: readonly PageTab[] = ['overview', 'keys', 'teams', 'models', 'insights', 'users-monitoring'];
 const isPageTab = (v: string | null): v is PageTab =>
   !!v && (PAGE_TABS as readonly string[]).includes(v);
 
@@ -513,6 +514,7 @@ export const LiteLLMPage: FC = () => {
       <Tab label="Teams" value="teams" />
       <Tab label="Models" value="models" />
       <Tab label="Insights" value="insights" />
+      {userInfo?.can_view_audit && <Tab label="Users Monitoring" value="users-monitoring" />}
     </Tabs>
   );
 
@@ -713,6 +715,9 @@ export const LiteLLMPage: FC = () => {
           dateRange={dateRange}
           loading={usageLoading}
         />
+      )}
+      {activeTab === 'users-monitoring' && userInfo?.can_view_audit && (
+        <UsersMonitoringTab api={api} />
       )}
       </Content>
 

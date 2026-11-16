@@ -14,6 +14,7 @@ import {
   PaginatedAuditLogs,
   SpendLogsParams,
   PaginatedSpendLogs,
+  UsersMonitoringLogs,
   LiteLlmConfig,
   QualityResponse,
   VectorStoreInfo,
@@ -69,6 +70,7 @@ export interface LiteLlmApiInterface {
   getSpendLogs(params: SpendLogsParams): Promise<PaginatedSpendLogs>;
   /** Langfuse quality summary; `{configured:false}` when Langfuse is off. */
   getQuality(params: SpendLogsParams): Promise<QualityResponse>;
+  getUsersMonitoring(params: { startDate: string; endDate: string; teamId?: string }): Promise<UsersMonitoringLogs>;
   getConfig(): Promise<LiteLlmConfig>;
   createTeam(request: CreateTeamRequest): Promise<CreateTeamResponse>;
   updateTeam(teamId: string, request: UpdateTeamRequest): Promise<TeamInfo>;
@@ -350,6 +352,16 @@ export class LiteLlmApi implements LiteLlmApiInterface {
     if (params.page !== undefined) strParams.page = String(params.page);
     if (params.pageSize !== undefined) strParams.page_size = String(params.pageSize);
     return this.get<PaginatedSpendLogs>('/insights/spend-logs', strParams);
+  }
+
+  async getUsersMonitoring(params: {
+    startDate: string;
+    endDate: string;
+    teamId?: string;
+  }): Promise<UsersMonitoringLogs> {
+    const q: Record<string, string> = { start_date: params.startDate, end_date: params.endDate };
+    if (params.teamId) q.teamId = params.teamId;
+    return this.get<UsersMonitoringLogs>('/insights/users-monitoring', q);
   }
 
   async getQuality(params: SpendLogsParams): Promise<QualityResponse> {
