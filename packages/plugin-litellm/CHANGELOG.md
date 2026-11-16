@@ -10,6 +10,12 @@ commit/PR that bumps the version in `package.json`. Format follows the
 Earlier history: `git log -- packages/plugin-litellm` or the
  [GitHub tags](https://github.com/acarmisc/backstage-plugin-litellm-govai/tags).
 
+## 0.54.0
+
+### Patch Changes
+
+- fix: Users Monitoring shows a loading bar while fetching instead of an empty table.
+
 ## 0.53.0
 
 ### Minor Changes

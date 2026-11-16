@@ -307,6 +307,20 @@ describe('LiteLLMClient.getSpendLogs', () => {
     assert.deepStrictEqual(result, { data: [], total: 0, page: 1, pageSize: 100, truncated: false });
   });
 
+  test('getAllSpendLogs stops when upstream ignores page and repeats rows', async () => {
+    const page = {
+      body: {
+        data: Array.from({ length: 150 }, (_, i) => ({ request_id: `r${i}`, spend: 1 })),
+      },
+    };
+    stubFetchSequence([page, page, page]);
+    const client = new LiteLLMClient(mockClientConfig);
+    const res = await client.getAllSpendLogs({ startDate: '2026-11-01', endDate: '2026-11-08' });
+    assert.strictEqual(fetchCalls.length, 2);
+    assert.strictEqual(res.data.length, 150);
+    assert.strictEqual(res.truncated, false);
+  });
+
   test('truncated is true when a full page is returned', async () => {
     stubFetchSequence([
       {

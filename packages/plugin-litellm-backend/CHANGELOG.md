@@ -9,6 +9,12 @@ commit/PR that bumps the version in `package.json`. Format follows the
 Earlier history: `git log -- packages/plugin-litellm-backend` or the
 [GitHub tags](https://github.com/acarmisc/backstage-plugin-litellm-govai/tags).
 
+## 0.34.0
+
+### Patch Changes
+
+- fix: `getAllSpendLogs` stops when LiteLLM ignores `page` and repeats the same rows (was re-fetching up to 50 times and inflating totals).
+
 ## 0.33.0
 
 ### Minor Changes

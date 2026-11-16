@@ -837,10 +837,17 @@ export class LiteLLMClient {
   ): Promise<{ data: SpendLogEntry[]; truncated: boolean }> {
     const pageSize = 100;
     const data: SpendLogEntry[] = [];
+    const seen = new Set<string>();
     for (let page = 1; page <= maxPages; page++) {
       const res = await this.getSpendLogs({ ...params, page, pageSize });
-      data.push(...res.data);
-      if (res.data.length < pageSize) return { data, truncated: false };
+      // Some LiteLLM versions ignore `page` and return the whole range every
+      // time: stop as soon as a page adds nothing new, or totals get inflated.
+      const fresh = res.data.filter(r => !r.requestId || !seen.has(r.requestId));
+      fresh.forEach(r => r.requestId && seen.add(r.requestId));
+      data.push(...fresh);
+      if (res.data.length < pageSize || fresh.length === 0) {
+        return { data, truncated: false };
+      }
     }
     return { data, truncated: true };
   }

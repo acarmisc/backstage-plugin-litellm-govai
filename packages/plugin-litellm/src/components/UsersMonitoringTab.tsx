@@ -1,6 +1,7 @@
 import { FC, useMemo, useState } from 'react';
 import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
+import LinearProgress from '@mui/material/LinearProgress';
 import Drawer from '@mui/material/Drawer';
 import Grid from '@mui/material/Grid';
 import MenuItem from '@mui/material/MenuItem';
@@ -150,13 +151,17 @@ export const UsersMonitoringTab: FC<{ api: LiteLlmApiInterface }> = ({ api }) =>
         </TextField>
       </Box>
 
+      {loading && <LinearProgress />}
+
       {value?.truncated && (
         <Alert severity="info">Too many requests in this range: figures cover only part of it. Narrow the time range.</Alert>
       )}
 
-      {!loading && users.length === 0 ? (
+      {!loading && users.length === 0 && (
         <EmptyState message="No usage found" hint="No requests match these filters." />
-      ) : (
+      )}
+
+      {users.length > 0 && (
         <TableContainer>
           <Table size="small" sx={dataTableSx}>
             <TableHead>
