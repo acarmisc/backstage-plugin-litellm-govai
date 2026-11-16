@@ -9,6 +9,13 @@ commit/PR that bumps the version in `package.json`. Format follows the
 Earlier history: `git log -- packages/plugin-litellm-backend` or the
 [GitHub tags](https://github.com/acarmisc/backstage-plugin-litellm-govai/tags).
 
+## 0.35.0
+
+### Minor Changes
+
+- feat: `/insights/users-monitoring` reads LiteLLM's pre-aggregated `/user/daily/activity/aggregated/keys` instead of downloading raw spend logs: no more 10k-row cap, ~2s for a week. Returns one row per key with team aliases; keys with zero spend are omitted.
+- Requires a gateway key bound to a user (e.g. `proxy_admin`): LiteLLM answers 403 to service-account keys on these endpoints.
+
 ## 0.34.0
 
 ### Patch Changes

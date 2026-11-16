@@ -1,4 +1,5 @@
 import { Router, Request, Response } from 'express';
+import type { UsersMonitoringLogs } from '@acarmisc/backstage-plugin-litellm-common';
 import { PaginatedSpendLogs } from '../types';
 import { isUserMemberOfGroup, ProvisioningError } from '../provisioning';
 import { sendError } from '../errors';
@@ -7,7 +8,11 @@ import { createRequireUser, getProvisionedUser } from './middleware/withUser';
 import { isLangfuseConfigured } from '../langfuse';
 import { getQualitySummary } from '../langfuseClient';
 
+const MONITORING_TTL_MS = 5 * 60_000;
+
 export function registerInsightsRoutes(router: Router, ctx: RouterContext): void {
+  // shortcut: per-process cache, no invalidation; swap for a persisted rollup if ranges get heavy.
+  const monitoringCache = new Map<string, { at: number; value: unknown }>();
   const { client, catalogClient, auth, logger, auditGroup } = ctx;
   const requireUser = createRequireUser(ctx);
 
@@ -55,7 +60,7 @@ export function registerInsightsRoutes(router: Router, ctx: RouterContext): void
   // Users Monitoring: all users' spend rows, audit-group members only.
   router.get('/insights/users-monitoring', requireUser, async (req: Request, res: Response) => {
     try {
-      const { start_date, end_date, teamId } = req.query as Record<string, string | undefined>;
+      const { start_date, end_date } = req.query as Record<string, string | undefined>;
       if (!start_date || !end_date) {
         res.status(400).json({ error: 'start_date and end_date are required' });
         return;
@@ -73,7 +78,22 @@ export function registerInsightsRoutes(router: Router, ctx: RouterContext): void
         res.status(403).json({ error: 'Access denied: not a member of the audit group' });
         return;
       }
-      res.json(await client.getAllSpendLogs({ startDate: start_date, endDate: end_date, teamId }));
+      const cacheKey = `${start_date}|${end_date}`;
+      const hit = monitoringCache.get(cacheKey);
+      if (hit && Date.now() - hit.at < MONITORING_TTL_MS) {
+        res.json(hit.value);
+        return;
+      }
+      // Team names are best effort: ids still render if the lookup fails.
+      const [{ rows, truncated }, teamList] = await Promise.all([
+        client.getUsersMonitoringRows({ startDate: start_date, endDate: end_date }),
+        client.listTeams().catch(() => []),
+      ]);
+      const teams: Record<string, string> = {};
+      for (const t of teamList) if (t.team_alias) teams[t.team_id] = t.team_alias;
+      const value: UsersMonitoringLogs = { rows, truncated, teams };
+      monitoringCache.set(cacheKey, { at: Date.now(), value });
+      res.json(value);
     } catch (error: unknown) {
       sendError(res, error, logger, 'fetch users monitoring logs');
     }

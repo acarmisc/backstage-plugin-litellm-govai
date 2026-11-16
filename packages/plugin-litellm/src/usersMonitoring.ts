@@ -1,8 +1,16 @@
-import type { SpendLogEntry } from '@acarmisc/backstage-plugin-litellm-common';
+import type { SpendLogEntry, UserKeyUsage } from '@acarmisc/backstage-plugin-litellm-common';
 
 export interface UserAgg {
+  /** Unique user|team|key combination. */
+  id: string;
+  /** Display name: user id, else email, else key alias. */
   userId: string;
-  teams: string[];
+  userEmail?: string;
+  teamId?: string;
+  keyHash: string;
+  keyAlias?: string;
+  /** Key without a user id (service account). */
+  serviceKey: boolean;
   spend: number;
   promptTokens: number;
   completionTokens: number;
@@ -19,33 +27,22 @@ export interface BreakdownRow {
 
 const UNKNOWN = 'unknown';
 
-/** One row per user; rows with no user id are grouped under "unknown". */
-export function aggregateUsers(rows: SpendLogEntry[]): UserAgg[] {
-  const byUser = new Map<string, UserAgg & { teamSet: Set<string> }>();
-  for (const r of rows) {
-    const id = r.userId || UNKNOWN;
-    let u = byUser.get(id);
-    if (!u) {
-      u = {
-        userId: id,
-        teams: [],
-        teamSet: new Set(),
-        spend: 0,
-        promptTokens: 0,
-        completionTokens: 0,
-        totalTokens: 0,
-        requests: 0,
-      };
-      byUser.set(id, u);
-    }
-    if (r.teamId) u.teamSet.add(r.teamId);
-    u.spend += r.spend ?? 0;
-    u.promptTokens += r.promptTokens ?? 0;
-    u.completionTokens += r.completionTokens ?? 0;
-    u.totalTokens += r.totalTokens ?? 0;
-    u.requests += 1;
-  }
-  return [...byUser.values()].map(({ teamSet, ...u }) => ({ ...u, teams: [...teamSet].sort() }));
+/** LiteLLM already aggregates per key, so each row maps to one UserAgg. */
+export function aggregateUsers(rows: UserKeyUsage[]): UserAgg[] {
+  return rows.map(r => ({
+    id: `${r.userId || 'service'}|${r.teamId ?? ''}|${r.keyHash}`,
+    userId: r.userId || r.userEmail || r.keyAlias || UNKNOWN,
+    userEmail: r.userEmail,
+    teamId: r.teamId,
+    keyHash: r.keyHash,
+    keyAlias: r.keyAlias,
+    serviceKey: !r.userId,
+    spend: r.spend ?? 0,
+    promptTokens: r.promptTokens ?? 0,
+    completionTokens: r.completionTokens ?? 0,
+    totalTokens: r.totalTokens ?? 0,
+    requests: r.requests ?? 0,
+  }));
 }
 
 function breakdown(

@@ -10,6 +10,12 @@ commit/PR that bumps the version in `package.json`. Format follows the
 Earlier history: `git log -- packages/plugin-litellm` or the
  [GitHub tags](https://github.com/acarmisc/backstage-plugin-litellm-govai/tags).
 
+## 0.55.0
+
+### Minor Changes
+
+- feat: Users Monitoring lists one row per unique user · team · key with team and key aliases; the Team dropdown shows aliases instead of UUIDs. The drawer loads model / client / tag breakdowns on demand from the user's latest requests.
+
 ## 0.54.0
 
 ### Patch Changes

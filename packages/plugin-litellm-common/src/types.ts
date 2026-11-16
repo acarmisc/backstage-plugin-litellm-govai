@@ -353,11 +353,28 @@ export interface SpendLogEntry {
   timestamp: string;
 }
 
-/** Response of `/insights/users-monitoring` (audit-group only). */
+/** Usage of one key in a date range, already aggregated by LiteLLM (daily-activity tables). */
+export interface UserKeyUsage {
+  keyHash: string;
+  keyAlias?: string;
+  /** Null for service-account keys. */
+  userId?: string;
+  userEmail?: string;
+  teamId?: string;
+  spend: number;
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+  requests: number;
+}
+
+/** Response of `/insights/users-monitoring` (audit-group only). One row per key. */
 export interface UsersMonitoringLogs {
-  data: SpendLogEntry[];
-  /** True when the row cap was hit: aggregates cover only part of the range. */
+  rows: UserKeyUsage[];
+  /** True when the page cap was hit: figures cover only the top-spending keys. */
   truncated: boolean;
+  /** team_id -> team_alias, for display. */
+  teams: Record<string, string>;
 }
 
 export interface SpendLogsParams {

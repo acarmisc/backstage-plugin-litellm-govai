@@ -384,3 +384,85 @@ describe('LiteLLMClient.listTeamKeys', () => {
     assert.strictEqual(params.get('return_full_object'), 'true');
   });
 });
+
+describe('LiteLLMClient.getUsersMonitoringRows', () => {
+  const pageOf = (n: number, spend: number) =>
+    Array.from({ length: n }, (_, i) => ({
+      api_key: `h${i}`,
+      metrics: { spend, prompt_tokens: 1, completion_tokens: 2, total_tokens: 3, api_requests: 5 },
+      metadata: { key_alias: null, team_id: null, user_id: 'u', user_email: null, key_exists: true },
+    }));
+
+  function stubKeyPages(pages: any[][]) {
+    globalThis.fetch = async url => {
+      fetchCalls.push({ url: String(url), init: {} });
+      const offset = Number(new URL(String(url)).searchParams.get('offset'));
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ api_keys: pages[offset / 100] ?? [] }),
+        text: async () => '',
+      } as any;
+    };
+  }
+
+  test('maps one page to UserKeyUsage, nulls become undefined', async () => {
+    stubKeyPages([[
+      {
+        api_key: 'h1',
+        metrics: { spend: 402.5, prompt_tokens: 1, completion_tokens: 2, total_tokens: 3, api_requests: 4494 },
+        metadata: { key_alias: null, team_id: 't1', user_id: null, user_email: 'a@example.com', key_exists: true },
+      },
+      { api_key: 'h2', metrics: { spend: 0.5 } },
+      { api_key: 'h3', metrics: { spend: 0, api_requests: 9 } },
+    ]]);
+
+    const result = await new LiteLLMClient(mockConfig).getUsersMonitoringRows({
+      startDate: '2026-01-01',
+      endDate: '2026-01-31',
+    });
+
+    assert.deepStrictEqual(result, {
+      rows: [
+        { keyHash: 'h1', keyAlias: undefined, userId: undefined, userEmail: 'a@example.com', teamId: 't1',
+          spend: 402.5, promptTokens: 1, completionTokens: 2, totalTokens: 3, requests: 4494 },
+        { keyHash: 'h2', keyAlias: undefined, userId: undefined, userEmail: undefined, teamId: undefined,
+          spend: 0.5, promptTokens: 0, completionTokens: 0, totalTokens: 0, requests: 0 },
+      ],
+      truncated: false,
+    });
+    assert.strictEqual(fetchCalls.length, 1);
+    assert.ok(fetchCalls[0].url.includes('/user/daily/activity/aggregated/keys?'));
+    const params = new URL(fetchCalls[0].url).searchParams;
+    assert.strictEqual(params.get('start_date'), '2026-01-01');
+    assert.strictEqual(params.get('end_date'), '2026-01-31');
+    assert.strictEqual(params.get('limit'), '100');
+    assert.strictEqual(params.get('offset'), '0');
+  });
+
+  test('stops at the first page without spend and drops zero-spend keys', async () => {
+    stubKeyPages([pageOf(100, 5), pageOf(100, 0), pageOf(100, 5)]);
+
+    const result = await new LiteLLMClient(mockConfig).getUsersMonitoringRows({
+      startDate: '2026-01-01',
+      endDate: '2026-01-31',
+    });
+
+    assert.strictEqual(result.rows.length, 100);
+    assert.strictEqual(result.truncated, false);
+    assert.strictEqual(fetchCalls.length, 2);
+  });
+
+  test('truncated is true when maxPages is hit while pages still have spend', async () => {
+    stubKeyPages([pageOf(100, 5), pageOf(100, 5), pageOf(100, 5)]);
+
+    const result = await new LiteLLMClient(mockConfig).getUsersMonitoringRows(
+      { startDate: '2026-01-01', endDate: '2026-01-31' },
+      2,
+    );
+
+    assert.strictEqual(result.rows.length, 200);
+    assert.strictEqual(result.truncated, true);
+    assert.strictEqual(fetchCalls.length, 2);
+  });
+});

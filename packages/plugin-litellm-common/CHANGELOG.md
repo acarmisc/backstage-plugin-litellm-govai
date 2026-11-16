@@ -3,6 +3,12 @@
 Shared, dependency-light code for the LiteLLM Backstage plugin packages. This
 changelog is maintained by hand.
 
+## 0.9.0
+
+### Minor Changes
+
+- feat: `UsersMonitoringLogs` is now `{ rows, truncated, teams }`, one `UserKeyUsage` per key (user, team, key alias, spend, tokens, requests). Breaking for the `data` field of the old shape.
+
 ## 0.8.0
 
 ### Minor Changes

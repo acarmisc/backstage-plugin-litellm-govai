@@ -70,7 +70,7 @@ export interface LiteLlmApiInterface {
   getSpendLogs(params: SpendLogsParams): Promise<PaginatedSpendLogs>;
   /** Langfuse quality summary; `{configured:false}` when Langfuse is off. */
   getQuality(params: SpendLogsParams): Promise<QualityResponse>;
-  getUsersMonitoring(params: { startDate: string; endDate: string; teamId?: string }): Promise<UsersMonitoringLogs>;
+  getUsersMonitoring(params: { startDate: string; endDate: string }): Promise<UsersMonitoringLogs>;
   getConfig(): Promise<LiteLlmConfig>;
   createTeam(request: CreateTeamRequest): Promise<CreateTeamResponse>;
   updateTeam(teamId: string, request: UpdateTeamRequest): Promise<TeamInfo>;
@@ -354,14 +354,11 @@ export class LiteLlmApi implements LiteLlmApiInterface {
     return this.get<PaginatedSpendLogs>('/insights/spend-logs', strParams);
   }
 
-  async getUsersMonitoring(params: {
-    startDate: string;
-    endDate: string;
-    teamId?: string;
-  }): Promise<UsersMonitoringLogs> {
-    const q: Record<string, string> = { start_date: params.startDate, end_date: params.endDate };
-    if (params.teamId) q.teamId = params.teamId;
-    return this.get<UsersMonitoringLogs>('/insights/users-monitoring', q);
+  async getUsersMonitoring(params: { startDate: string; endDate: string }): Promise<UsersMonitoringLogs> {
+    return this.get<UsersMonitoringLogs>('/insights/users-monitoring', {
+      start_date: params.startDate,
+      end_date: params.endDate,
+    });
   }
 
   async getQuality(params: SpendLogsParams): Promise<QualityResponse> {

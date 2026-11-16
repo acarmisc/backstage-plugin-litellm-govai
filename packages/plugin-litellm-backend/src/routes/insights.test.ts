@@ -50,12 +50,17 @@ function mockCatalog(memberOf: string[] = []): any {
 }
 
 function mockClient(): any {
-  const calls: { getSpendLogs: any[] } = { getSpendLogs: [] };
+  const calls: { getSpendLogs: any[]; monitoring: any[] } = { getSpendLogs: [], monitoring: [] };
   return {
     calls,
     getUserInfo: (uid?: string) =>
       Promise.resolve({ user_id: uid ?? 'alice', teams: [] }),
     getUserByEmail: () => Promise.resolve(null),
+    getUsersMonitoringRows: (p: any) => {
+      calls.monitoring.push(p);
+      return Promise.resolve({ rows: [{ keyHash: 'h1', userId: 'bob', teamId: 't1', spend: 2, promptTokens: 1, completionTokens: 1, totalTokens: 2, requests: 3 }], truncated: false });
+    },
+    listTeams: () => Promise.resolve([{ team_id: 't1', team_alias: 'Team One' }, { team_id: 't2' }]),
     getSpendLogs: (p: any) => {
       calls.getSpendLogs.push(p);
       return Promise.resolve({ data: [], total: 0, page: 1, pageSize: 25, truncated: false });
@@ -177,6 +182,36 @@ describe('GET /insights/spend-logs', () => {
     const params = h.client.calls.getSpendLogs[0];
     assert.strictEqual(params.userId, 'bob');
     assert.strictEqual(params.teamId, 'team-x');
+  });
+});
+
+describe('GET /insights/users-monitoring', () => {
+  const harnesses: Harness[] = [];
+  after(() => {
+    for (const h of harnesses) h.server.close();
+  });
+
+  test('non-audit caller gets 403 and nothing is fetched', async () => {
+    const h = await startHarness({});
+    harnesses.push(h);
+    const { status } = await req(h.baseUrl, `/insights/users-monitoring?${DATES}`, { authRef: 'user:default/alice' });
+    assert.strictEqual(status, 403);
+    assert.strictEqual(h.client.calls.monitoring.length, 0);
+  });
+
+  test('audit member gets rows + team aliases, second call is served from cache', async () => {
+    const h = await startHarness({
+      config: { 'litellm.audit.group': 'group:default/auditors' },
+      memberOf: ['group:default/auditors'],
+    });
+    harnesses.push(h);
+    const first = await req(h.baseUrl, `/insights/users-monitoring?${DATES}`, { authRef: 'user:default/alice' });
+    assert.strictEqual(first.status, 200);
+    assert.strictEqual(first.body.rows[0].keyHash, 'h1');
+    assert.deepStrictEqual(first.body.teams, { t1: 'Team One' });
+    assert.strictEqual(first.body.truncated, false);
+    await req(h.baseUrl, `/insights/users-monitoring?${DATES}`, { authRef: 'user:default/alice' });
+    assert.strictEqual(h.client.calls.monitoring.length, 1);
   });
 });
 

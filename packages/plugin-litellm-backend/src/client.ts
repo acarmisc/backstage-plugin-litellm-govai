@@ -1,3 +1,4 @@
+import type { UserKeyUsage } from '@acarmisc/backstage-plugin-litellm-common';
 import {
   LiteLLMConfig,
   UserInfo,
@@ -850,6 +851,53 @@ export class LiteLLMClient {
       }
     }
     return { data, truncated: true };
+  }
+
+  /**
+   * Per-key usage from LiteLLM's pre-aggregated endpoint, keys with spend only.
+   * Rows are spend-sorted and the tail is ~95k zero-cost keys (mostly failed
+   * requests), so a page with no spend means the list is over.
+   */
+  async getUsersMonitoringRows(
+    params: { startDate: string; endDate: string },
+    maxPages = 50,
+  ): Promise<{ rows: UserKeyUsage[]; truncated: boolean }> {
+    // LiteLLM rejects limit > 100 with HTTP 422.
+    const pageSize = 100;
+    const rows: UserKeyUsage[] = [];
+    for (let page = 0; page < maxPages; page++) {
+      const qs = new URLSearchParams({
+        start_date: params.startDate,
+        end_date: params.endDate,
+        limit: String(pageSize),
+        offset: String(page * pageSize),
+      });
+      const raw = await this.request<any>(
+        `/user/daily/activity/aggregated/keys?${qs}`,
+      );
+      const apiKeys: any[] = Array.isArray(raw?.api_keys) ? raw.api_keys : [];
+      const active = apiKeys.filter(k => (k?.metrics?.spend ?? 0) > 0);
+      rows.push(
+        ...active.map(
+          (k): UserKeyUsage => ({
+            keyHash: String(k.api_key ?? ''),
+            keyAlias: k.metadata?.key_alias ?? undefined,
+            userId: k.metadata?.user_id ?? undefined,
+            userEmail: k.metadata?.user_email ?? undefined,
+            teamId: k.metadata?.team_id ?? undefined,
+            spend: k.metrics?.spend ?? 0,
+            promptTokens: k.metrics?.prompt_tokens ?? 0,
+            completionTokens: k.metrics?.completion_tokens ?? 0,
+            totalTokens: k.metrics?.total_tokens ?? 0,
+            requests: k.metrics?.api_requests ?? 0,
+          }),
+        ),
+      );
+      if (apiKeys.length < pageSize || active.length === 0) {
+        return { rows, truncated: false };
+      }
+    }
+    return { rows, truncated: true };
   }
 
   private normalizeSpendLogs(

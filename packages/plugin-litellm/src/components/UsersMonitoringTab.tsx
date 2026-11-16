@@ -20,18 +20,22 @@ import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxi
 import type { LiteLlmApiInterface } from '../api';
 import { localDateRange, monthToDateRange, toLocalDay } from '../dates';
 import { fmtInt, fmtUsd } from '../format';
+import type { SpendLogEntry } from '../types';
 import {
   aggregateUsers, byModel, byTag, byUserAgent, type BreakdownRow, type UserAgg,
 } from '../usersMonitoring';
 import { EmptyState, SectionCard, Stat, dataTableSx } from './ui';
 
 type Preset = 'today' | '7d' | '30d' | 'mtd' | 'custom';
-type SortKey = 'userId' | 'spend' | 'promptTokens' | 'completionTokens' | 'totalTokens' | 'requests';
+type SortKey = 'userId' | 'team' | 'key' | 'spend' | 'promptTokens' | 'completionTokens' | 'totalTokens' | 'requests';
 
 const PRESETS: Array<[Preset, string]> = [
   ['today', 'Today'], ['7d', 'Last 7 Days'], ['30d', 'Last 30 Days'],
   ['mtd', 'Month to Date (MTD)'], ['custom', 'Custom Range'],
 ];
+
+const PAGE_SIZE = 100;
+const MAX_PAGES = 5;
 
 function rangeFor(p: Preset, from: string, to: string) {
   if (p === 'custom') return { startDate: from, endDate: to };
@@ -39,6 +43,10 @@ function rangeFor(p: Preset, from: string, to: string) {
   const r = localDateRange(p);
   return { startDate: r.startDate, endDate: r.endDate };
 }
+
+const teamLabel = (teams: Record<string, string> | undefined, id?: string) =>
+  id ? teams?.[id] ?? id : '—';
+const keyLabel = (u: UserAgg) => u.keyAlias || `${u.keyHash.slice(0, 8)}…`;
 
 const BreakdownChart: FC<{ title: string; rows: BreakdownRow[]; empty: string }> = ({ title, rows, empty }) => (
   <SectionCard title={title}>
@@ -74,7 +82,7 @@ export const UsersMonitoringTab: FC<{ api: LiteLlmApiInterface }> = ({ api }) =>
   const [dir, setDir] = useState<'asc' | 'desc'>('desc');
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(25);
-  const [selected, setSelected] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const { startDate, endDate } = rangeFor(preset, from, to);
   const { value, loading, error } = useAsync(
@@ -82,22 +90,29 @@ export const UsersMonitoringTab: FC<{ api: LiteLlmApiInterface }> = ({ api }) =>
     [api, startDate, endDate],
   );
 
-  const rows = useMemo(
-    () => (team ? (value?.data ?? []).filter(r => r.teamId === team) : value?.data ?? []),
-    [value, team],
-  );
+  const allAggs = useMemo(() => aggregateUsers(value?.rows ?? []), [value]);
+  const aggs = useMemo(() => (team ? allAggs.filter(a => a.teamId === team) : allAggs), [allAggs, team]);
   const teams = useMemo(
-    () => [...new Set((value?.data ?? []).map(r => r.teamId).filter((t): t is string => !!t))].sort(),
+    () => [...new Set((value?.rows ?? []).map(r => r.teamId).filter((t): t is string => !!t))]
+      .map(id => ({ id, name: teamLabel(value?.teams, id) }))
+      .sort((a, b) => a.name.localeCompare(b.name)),
     [value],
   );
   const users = useMemo(() => {
     const q = search.trim().toLowerCase();
-    const list = aggregateUsers(rows).filter(u => !q || u.userId.toLowerCase().includes(q));
     const sign = dir === 'asc' ? 1 : -1;
-    return list.sort((a, b) =>
-      sortKey === 'userId' ? sign * a.userId.localeCompare(b.userId) : sign * (a[sortKey] - b[sortKey]),
+    const text = (u: UserAgg) => {
+      if (sortKey === 'team') return teamLabel(value?.teams, u.teamId);
+      return sortKey === 'key' ? keyLabel(u) : u.userId;
+    };
+    const match = (u: UserAgg) =>
+      !q || [u.userId, u.userEmail, u.keyAlias].some(s => s?.toLowerCase().includes(q));
+    return aggs.filter(match).sort((a, b) =>
+      sortKey === 'userId' || sortKey === 'team' || sortKey === 'key'
+        ? sign * text(a).localeCompare(text(b))
+        : sign * (a[sortKey] - b[sortKey]),
     );
-  }, [rows, search, sortKey, dir]);
+  }, [aggs, search, sortKey, dir, value?.teams]);
 
   const sortBy = (k: SortKey) => {
     setDir(k === sortKey && dir === 'desc' ? 'asc' : 'desc');
@@ -112,11 +127,34 @@ export const UsersMonitoringTab: FC<{ api: LiteLlmApiInterface }> = ({ api }) =>
     </TableCell>
   );
 
-  const detail: UserAgg | undefined = users.find(u => u.userId === selected);
-  const detailRows = useMemo(
-    () => rows.filter(r => (r.userId || 'unknown') === selected),
-    [rows, selected],
+  // Drawer: a user's stats sum all their keys (ignoring the team filter); a service key stands alone.
+  const sel = allAggs.find(a => a.id === selectedId);
+  const sameUser = allAggs.filter(a => !a.serviceKey && a.userId === sel?.userId);
+  const group = sel?.serviceKey ? [sel] : sameUser;
+  const totals = group.reduce(
+    (t, u) => ({
+      spend: t.spend + u.spend,
+      promptTokens: t.promptTokens + u.promptTokens,
+      completionTokens: t.completionTokens + u.completionTokens,
+      totalTokens: t.totalTokens + u.totalTokens,
+      requests: t.requests + u.requests,
+    }),
+    { spend: 0, promptTokens: 0, completionTokens: 0, totalTokens: 0, requests: 0 },
   );
+
+  // Breakdown charts need raw requests, fetched only while a user's drawer is open.
+  const uid = sel && !sel.serviceKey ? sel.userId : undefined;
+  const logs = useAsync(async () => {
+    if (!uid) return undefined;
+    const data: SpendLogEntry[] = [];
+    for (let p = 1; p <= MAX_PAGES; p++) {
+      const res = await api.getSpendLogs({ startDate, endDate, userId: uid, page: p, pageSize: PAGE_SIZE });
+      data.push(...res.data);
+      if (res.data.length < PAGE_SIZE) return { data, partial: false };
+    }
+    return { data, partial: true };
+  }, [api, uid, startDate, endDate]);
+  const logRows = logs.value?.data ?? [];
 
   if (error) {
     const forbidden = /403|denied|audit/i.test(error.message);
@@ -144,17 +182,20 @@ export const UsersMonitoringTab: FC<{ api: LiteLlmApiInterface }> = ({ api }) =>
         )}
         <TextField size="small" label="Search user (name / email / id)" value={search}
           onChange={e => { setSearch(e.target.value); setPage(0); }} sx={{ minWidth: 260 }} />
-        <TextField select size="small" label="Team" value={team} sx={{ minWidth: 190 }}
+        <TextField select size="small" label="Team" value={team} sx={{ minWidth: 240 }}
+          SelectProps={{ displayEmpty: true }} InputLabelProps={{ shrink: true }}
           onChange={e => { setTeam(e.target.value); setPage(0); }}>
           <MenuItem value="">All teams</MenuItem>
-          {teams.map(t => <MenuItem key={t} value={t}>{t}</MenuItem>)}
+          {teams.map(t => <MenuItem key={t.id} value={t.id} title={t.id}>{t.name}</MenuItem>)}
         </TextField>
       </Box>
 
       {loading && <LinearProgress />}
 
       {value?.truncated && (
-        <Alert severity="info">Too many requests in this range: figures cover only part of it. Narrow the time range.</Alert>
+        <Alert severity="info">
+          Too many keys in this range: figures cover only the top-spending keys. Narrow the time range.
+        </Alert>
       )}
 
       {!loading && users.length === 0 && (
@@ -167,7 +208,8 @@ export const UsersMonitoringTab: FC<{ api: LiteLlmApiInterface }> = ({ api }) =>
             <TableHead>
               <TableRow>
                 {head('userId', 'User', false)}
-                <TableCell>Team</TableCell>
+                {head('team', 'Team', false)}
+                {head('key', 'Key', false)}
                 {head('spend', 'Total spend')}
                 {head('promptTokens', 'Input tokens')}
                 {head('completionTokens', 'Output tokens')}
@@ -177,9 +219,15 @@ export const UsersMonitoringTab: FC<{ api: LiteLlmApiInterface }> = ({ api }) =>
             </TableHead>
             <TableBody>
               {users.slice(page * rowsPerPage, (page + 1) * rowsPerPage).map(u => (
-                <TableRow key={u.userId} hover sx={{ cursor: 'pointer' }} onClick={() => setSelected(u.userId)}>
-                  <TableCell>{u.userId}</TableCell>
-                  <TableCell>{u.teams.join(', ') || '—'}</TableCell>
+                <TableRow key={u.id} hover sx={{ cursor: 'pointer' }} onClick={() => setSelectedId(u.id)}>
+                  <TableCell>
+                    {u.userId}
+                    {u.userEmail && u.userEmail !== u.userId && (
+                      <Typography variant="caption" display="block" color="text.secondary">{u.userEmail}</Typography>
+                    )}
+                  </TableCell>
+                  <TableCell title={u.teamId}>{teamLabel(value?.teams, u.teamId)}</TableCell>
+                  <TableCell title={u.keyHash}>{keyLabel(u)}</TableCell>
                   <TableCell align="right">{fmtUsd(u.spend)}</TableCell>
                   <TableCell align="right">{fmtInt(u.promptTokens)}</TableCell>
                   <TableCell align="right">{fmtInt(u.completionTokens)}</TableCell>
@@ -198,23 +246,40 @@ export const UsersMonitoringTab: FC<{ api: LiteLlmApiInterface }> = ({ api }) =>
         </TableContainer>
       )}
 
-      <Drawer anchor="right" open={!!detail} onClose={() => setSelected(null)}
+      <Drawer anchor="right" open={!!sel} onClose={() => setSelectedId(null)}
         PaperProps={{ sx: { width: { xs: '100%', md: 640 }, p: 3 } }}>
-        {detail && (
+        {sel && (
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            <Typography variant="h5">{detail.userId}</Typography>
+            <Box>
+              <Typography variant="h5">{sel.userId}</Typography>
+              {sel.userEmail && <Typography variant="body2" color="text.secondary">{sel.userEmail}</Typography>}
+            </Box>
             <Grid container spacing={2}>
-              <Grid item xs={6} sm={4}><Stat label="Total spend" value={fmtUsd(detail.spend)} /></Grid>
-              <Grid item xs={6} sm={4}><Stat label="Input tokens" value={fmtInt(detail.promptTokens)} /></Grid>
-              <Grid item xs={6} sm={4}><Stat label="Output tokens" value={fmtInt(detail.completionTokens)} /></Grid>
-              <Grid item xs={6} sm={4}><Stat label="Total tokens" value={fmtInt(detail.totalTokens)} /></Grid>
+              <Grid item xs={6} sm={4}><Stat label="Total spend" value={fmtUsd(totals.spend)} /></Grid>
+              <Grid item xs={6} sm={4}><Stat label="Input tokens" value={fmtInt(totals.promptTokens)} /></Grid>
+              <Grid item xs={6} sm={4}><Stat label="Output tokens" value={fmtInt(totals.completionTokens)} /></Grid>
+              <Grid item xs={6} sm={4}><Stat label="Total tokens" value={fmtInt(totals.totalTokens)} /></Grid>
               <Grid item xs={6} sm={4}>
-                <Stat label="Avg cost / request" value={fmtUsd(detail.requests ? detail.spend / detail.requests : 0)} />
+                <Stat label="Avg cost / request" value={fmtUsd(totals.requests ? totals.spend / totals.requests : 0)} />
               </Grid>
             </Grid>
-            <BreakdownChart title="Model distribution" rows={byModel(detailRows)} empty="No model data." />
-            <BreakdownChart title="Client / User-Agent" rows={byUserAgent(detailRows)} empty="No user-agent data." />
-            <BreakdownChart title="Custom tags" rows={byTag(detailRows)} empty="No tags on these requests." />
+            {sel.serviceKey && (
+              <Typography variant="body2" color="text.secondary">
+                Service-account key: no user id, so no model, client or tag breakdown.
+              </Typography>
+            )}
+            {!sel.serviceKey && logs.loading && <LinearProgress />}
+            {!sel.serviceKey && logs.error && <Alert severity="error">{logs.error.message}</Alert>}
+            {!sel.serviceKey && !logs.loading && !logs.error && (
+              <>
+                <Typography variant="caption" color="text.secondary">
+                  Breakdown based on the latest {logRows.length} requests{logs.value?.partial ? ' (partial)' : ''}
+                </Typography>
+                <BreakdownChart title="Model distribution" rows={byModel(logRows)} empty="No model data." />
+                <BreakdownChart title="Client / User-Agent" rows={byUserAgent(logRows)} empty="No user-agent data." />
+                <BreakdownChart title="Custom tags" rows={byTag(logRows)} empty="No tags on these requests." />
+              </>
+            )}
           </Box>
         )}
       </Drawer>
