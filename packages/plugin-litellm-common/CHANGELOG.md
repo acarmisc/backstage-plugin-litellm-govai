@@ -3,6 +3,12 @@
 Shared, dependency-light code for the LiteLLM Backstage plugin packages. This
 changelog is maintained by hand.
 
+## 0.8.0
+
+### Minor Changes
+
+- feat: `UsersMonitoringLogs` type; `SpendLogEntry` gains optional `userAgent` and `tags`.
+
 ## 0.7.0
 
 ### Minor Changes

@@ -9,6 +9,12 @@ commit/PR that bumps the version in `package.json`. Format follows the
 Earlier history: `git log -- packages/plugin-litellm-backend` or the
 [GitHub tags](https://github.com/acarmisc/backstage-plugin-litellm-govai/tags).
 
+## 0.33.0
+
+### Minor Changes
+
+- feat: `GET /insights/users-monitoring` returns all users' spend rows (audit group only, paged internally, `truncated` flag); spend logs now carry `userAgent` and `tags` when LiteLLM logs them.
+
 ## 0.32.0
 
 ### Minor Changes

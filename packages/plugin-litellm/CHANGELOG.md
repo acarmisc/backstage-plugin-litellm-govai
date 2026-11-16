@@ -10,6 +10,12 @@ commit/PR that bumps the version in `package.json`. Format follows the
 Earlier history: `git log -- packages/plugin-litellm` or the
  [GitHub tags](https://github.com/acarmisc/backstage-plugin-litellm-govai/tags).
 
+## 0.53.0
+
+### Minor Changes
+
+- feat: "Users Monitoring" tab after Insights, visible to `litellm.audit.group` members: per-user spend/token/request table with filters, sorting, pagination and a detail drawer (models, user agents, tags).
+
 ## 0.52.0
 
 ### Minor Changes
