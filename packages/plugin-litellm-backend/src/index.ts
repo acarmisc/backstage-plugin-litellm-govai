@@ -60,3 +60,4 @@ export {
   litellmTeamMcpManagePermission,
   litellmTeamDeletePermission,
 } from '@acarmisc/backstage-plugin-litellm-common';
+export { managersGroupTransformer } from './keycloakManagers';

@@ -9,6 +9,12 @@ commit/PR that bumps the version in `package.json`. Format follows the
 Earlier history: `git log -- packages/plugin-litellm-backend` or the
 [GitHub tags](https://github.com/acarmisc/backstage-plugin-litellm-govai/tags).
 
+## 0.37.0
+
+### Minor Changes
+
+- feat: `managersGroupTransformer()` for the Keycloak catalog provider: syncs a Keycloak group attribute (`managers`) into the `govai.litellm/managers` annotation.
+
 ## 0.36.0
 
 ### Minor Changes

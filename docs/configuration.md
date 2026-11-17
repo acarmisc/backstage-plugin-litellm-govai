@@ -254,6 +254,13 @@ litellm:
 
 **Group managers:** annotate a catalog Group with `govai.litellm/managers: user:default/alice, bob` (comma-separated user refs). Those users get the Users Monitoring tab scoped to that group's members (server-side); audit-group members still see everyone.
 
+*Sync from Keycloak:* set a group attribute `managers` (usernames) in Keycloak and register the transformer in your backend so the Keycloak catalog provider writes the annotation on each sync:
+
+```ts
+import { managersGroupTransformer } from '@acarmisc/backstage-plugin-litellm-backend';
+keycloakTransformer.setGroupTransformer(managersGroupTransformer()); // optional arg: attribute name
+```
+
 *required when the `roles` array is present
 †required to enable team management
 
