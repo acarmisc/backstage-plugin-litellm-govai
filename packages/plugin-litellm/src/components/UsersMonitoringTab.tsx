@@ -162,7 +162,7 @@ export const UsersMonitoringTab: FC<{ api: LiteLlmApiInterface }> = ({ api }) =>
     const forbidden = /403|denied|audit/i.test(error.message);
     return (
       <Alert severity={forbidden ? 'warning' : 'error'}>
-        {forbidden ? 'Forbidden: Users Monitoring is restricted to the supervisor group.' : error.message}
+        {forbidden ? 'Forbidden: Users Monitoring is restricted to the supervisor group and group managers.' : error.message}
       </Alert>
     );
   }
@@ -199,6 +199,10 @@ export const UsersMonitoringTab: FC<{ api: LiteLlmApiInterface }> = ({ api }) =>
           </>
         }
       >
+      {value?.scope && (
+        <Alert severity="info">Showing users filtered for your managed group: {value.scope.groups.join(', ')}</Alert>
+      )}
+
       {loading && <LinearProgress />}
 
       {value?.truncated && (

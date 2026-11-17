@@ -15,6 +15,8 @@ export interface UserInfo {
   budget_reset_at?: string;
   /** Backstage-computed: true when the user is a member of litellm.audit.group */
   can_view_audit?: boolean;
+  /** Names of Backstage groups the user manages (annotation `govai.litellm/managers`). */
+  managed_groups?: string[];
 }
 
 export interface TeamMember {
@@ -375,6 +377,8 @@ export interface UsersMonitoringLogs {
   truncated: boolean;
   /** team_id -> team_alias, for display. */
   teams: Record<string, string>;
+  /** Set when a group manager (not an auditor) is served a group-scoped view. */
+  scope?: { groups: string[] };
 }
 
 export interface SpendLogsParams {

@@ -514,7 +514,7 @@ export const LiteLLMPage: FC = () => {
       <Tab label="Teams" value="teams" />
       <Tab label="Models" value="models" />
       <Tab label="Insights" value="insights" />
-      {userInfo?.can_view_audit && <Tab label="Users Monitoring" value="users-monitoring" />}
+      {(userInfo?.can_view_audit || !!userInfo?.managed_groups?.length) && <Tab label="Users Monitoring" value="users-monitoring" />}
     </Tabs>
   );
 
@@ -716,7 +716,7 @@ export const LiteLLMPage: FC = () => {
           loading={usageLoading}
         />
       )}
-      {activeTab === 'users-monitoring' && userInfo?.can_view_audit && (
+      {activeTab === 'users-monitoring' && (userInfo?.can_view_audit || !!userInfo?.managed_groups?.length) && (
         <UsersMonitoringTab api={api} />
       )}
       </Content>

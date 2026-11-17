@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import type { UsersMonitoringLogs } from '@acarmisc/backstage-plugin-litellm-common';
 import { PaginatedSpendLogs } from '../types';
-import { isUserMemberOfGroup, ProvisioningError } from '../provisioning';
+import { getManagedGroups, isUserMemberOfGroup, ProvisioningError } from '../provisioning';
 import { sendError } from '../errors';
 import type { RouterContext } from './context';
 import { createRequireUser, getProvisionedUser } from './middleware/withUser';
@@ -13,7 +13,7 @@ const MONITORING_TTL_MS = 5 * 60_000;
 export function registerInsightsRoutes(router: Router, ctx: RouterContext): void {
   // shortcut: per-process cache, no invalidation; swap for a persisted rollup if ranges get heavy.
   const monitoringCache = new Map<string, { at: number; value: unknown }>();
-  const { client, catalogClient, auth, logger, auditGroup } = ctx;
+  const { client, catalogClient, auth, logger, auditGroup, userIdDomain } = ctx;
   const requireUser = createRequireUser(ctx);
 
   router.get('/insights/spend-logs', requireUser, async (req: Request, res: Response) => {
@@ -38,11 +38,17 @@ export function registerInsightsRoutes(router: Router, ctx: RouterContext): void
           )
         : false;
       // Server-side scoping: only audit-group members may query other
-      // users/teams — everyone else is forced to their own user_id.
+      // users/teams; group managers may query their group's members; everyone
+      // else is forced to their own user_id.
+      let managerOk = false;
+      if (!isAudit && userId && userId !== callerId) {
+        const groups = await getManagedGroups(tokenEntityRef, catalogClient, auth, logger, userIdDomain);
+        managerOk = groups.some(g => g.memberIds.includes(userId));
+      }
       const result: PaginatedSpendLogs = await client.getSpendLogs({
         startDate: start_date,
         endDate: end_date,
-        userId: isAudit ? userId || callerId : callerId,
+        userId: isAudit || managerOk ? userId || callerId : callerId,
         teamId: isAudit ? teamId : undefined,
         page: page ? Number(page) : undefined,
         pageSize: page_size ? Number(page_size) : undefined,
@@ -65,25 +71,21 @@ export function registerInsightsRoutes(router: Router, ctx: RouterContext): void
         res.status(400).json({ error: 'start_date and end_date are required' });
         return;
       }
+      const ref = res.locals.tokenEntityRef as string;
       const isAudit = auditGroup
-        ? await isUserMemberOfGroup(
-            res.locals.tokenEntityRef as string,
-            auditGroup,
-            catalogClient,
-            auth,
-            logger,
-          )
+        ? await isUserMemberOfGroup(ref, auditGroup, catalogClient, auth, logger)
         : false;
-      if (!isAudit) {
-        res.status(403).json({ error: 'Access denied: not a member of the audit group' });
+      // Group managers (not auditors) see only their groups' members, enforced here.
+      const managed = isAudit ? [] : await getManagedGroups(ref, catalogClient, auth, logger, userIdDomain);
+      if (!isAudit && managed.length === 0) {
+        res.status(403).json({ error: 'Access denied: not a member of the audit group or a group manager' });
         return;
       }
+      const scopeNames = managed.map(g => g.name).sort();
       const cacheKey = `${start_date}|${end_date}`;
       const hit = monitoringCache.get(cacheKey);
-      if (hit && Date.now() - hit.at < MONITORING_TTL_MS) {
-        res.json(hit.value);
-        return;
-      }
+      let full = hit && Date.now() - hit.at < MONITORING_TTL_MS ? (hit.value as UsersMonitoringLogs) : undefined;
+      if (!full) {
       // Team names are best effort: ids still render if the lookup fails.
       const [{ rows, truncated }, teamList] = await Promise.all([
         client.getUsersMonitoringRows({ startDate: start_date, endDate: end_date }),
@@ -91,9 +93,22 @@ export function registerInsightsRoutes(router: Router, ctx: RouterContext): void
       ]);
       const teams: Record<string, string> = {};
       for (const t of teamList) if (t.team_alias) teams[t.team_id] = t.team_alias;
-      const value: UsersMonitoringLogs = { rows, truncated, teams };
-      monitoringCache.set(cacheKey, { at: Date.now(), value });
-      res.json(value);
+      full = { rows, truncated, teams };
+      monitoringCache.set(cacheKey, { at: Date.now(), value: full });
+      }
+      if (isAudit) {
+        res.json(full);
+        return;
+      }
+      const ids = new Set(managed.flatMap(g => g.memberIds.map(m => m.toLowerCase())));
+      const rows = full.rows.filter(r => !!r.userId && ids.has(r.userId.toLowerCase()));
+      const teamIds = new Set(rows.map(r => r.teamId));
+      res.json({
+        ...full,
+        rows,
+        teams: Object.fromEntries(Object.entries(full.teams).filter(([id]) => teamIds.has(id))),
+        scope: { groups: scopeNames },
+      });
     } catch (error: unknown) {
       sendError(res, error, logger, 'fetch users monitoring logs');
     }

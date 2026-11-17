@@ -9,6 +9,12 @@ commit/PR that bumps the version in `package.json`. Format follows the
 Earlier history: `git log -- packages/plugin-litellm-backend` or the
 [GitHub tags](https://github.com/acarmisc/backstage-plugin-litellm-govai/tags).
 
+## 0.36.0
+
+### Minor Changes
+
+- feat (#102): group managers (Group annotation `govai.litellm/managers`) get `/insights/users-monitoring` and member `spend-logs` scoped server-side to their groups' members; `/user/info` returns `managed_groups`. Auditors still see everyone.
+
 ## 0.35.0
 
 ### Minor Changes

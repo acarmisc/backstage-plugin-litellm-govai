@@ -39,8 +39,9 @@ function mockAuth(): any {
   };
 }
 
-function mockCatalog(memberOf: string[] = []): any {
+function mockCatalog(memberOf: string[] = [], groups: any[] = []): any {
   return {
+    getEntities: async () => ({ items: groups }),
     getEntityByRef: async () => ({
       kind: 'User',
       spec: { profile: {} },
@@ -77,6 +78,7 @@ interface Harness {
 async function startHarness(opts: {
   config?: Record<string, any>;
   memberOf?: string[];
+  groups?: any[];
 }): Promise<Harness> {
   const cfg = mockConfig({
     'litellm.baseUrl': 'http://litellm.local',
@@ -95,7 +97,7 @@ async function startHarness(opts: {
       authorizeConditional: async () => [],
     },
     client,
-    catalogClient: mockCatalog(opts.memberOf ?? []),
+    catalogClient: mockCatalog(opts.memberOf ?? [], opts.groups ?? []),
   });
   const app = express();
   app.use(router);
@@ -212,6 +214,37 @@ describe('GET /insights/users-monitoring', () => {
     assert.strictEqual(first.body.truncated, false);
     await req(h.baseUrl, `/insights/users-monitoring?${DATES}`, { authRef: 'user:default/alice' });
     assert.strictEqual(h.client.calls.monitoring.length, 1);
+  });
+
+  const group = (members: string[]) => ({
+    metadata: { name: 'team-a', namespace: 'default', title: 'Team A', annotations: { 'govai.litellm/managers': 'user:default/alice' } },
+    relations: members.map(m => ({ type: 'hasMember', targetRef: m })),
+  });
+
+  test('group manager sees only their group members and a scope banner', async () => {
+    const h = await startHarness({ groups: [group(['user:default/bob'])] });
+    harnesses.push(h);
+    const r = await req(h.baseUrl, `/insights/users-monitoring?${DATES}`, { authRef: 'user:default/alice' });
+    assert.strictEqual(r.status, 200);
+    assert.strictEqual(r.body.rows.length, 1);
+    assert.deepStrictEqual(r.body.scope, { groups: ['Team A'] });
+  });
+
+  test('group manager gets no rows of users outside the group', async () => {
+    const h = await startHarness({ groups: [group(['user:default/carol'])] });
+    harnesses.push(h);
+    const r = await req(h.baseUrl, `/insights/users-monitoring?${DATES}`, { authRef: 'user:default/alice' });
+    assert.strictEqual(r.status, 200);
+    assert.deepStrictEqual(r.body.rows, []);
+  });
+
+  test('manager may read spend-logs of a member, not of others', async () => {
+    const h = await startHarness({ groups: [group(['user:default/bob'])] });
+    harnesses.push(h);
+    await req(h.baseUrl, `/insights/spend-logs?${DATES}&userId=bob`, { authRef: 'user:default/alice' });
+    await req(h.baseUrl, `/insights/spend-logs?${DATES}&userId=eve`, { authRef: 'user:default/alice' });
+    assert.strictEqual(h.client.calls.getSpendLogs[0].userId, 'bob');
+    assert.strictEqual(h.client.calls.getSpendLogs[1].userId, 'alice');
   });
 });
 

@@ -3,6 +3,7 @@ import { VirtualKey, ModelInfo, UsageMetrics, UpdateKeyRequest } from '../types'
 import {
   resolveUserId,
   isUserMemberOfGroup,
+  getManagedGroups,
   ProvisioningError,
 } from '../provisioning';
 import {
@@ -61,7 +62,10 @@ export function registerKeysRoutes(router: Router, ctx: RouterContext): void {
               logger,
             )
           : false;
-      res.json({ ...userInfo, can_view_audit: canViewAudit });
+      const managed = tokenEntityRef
+        ? await getManagedGroups(tokenEntityRef, catalogClient, auth, logger, ctx.userIdDomain)
+        : [];
+      res.json({ ...userInfo, can_view_audit: canViewAudit, managed_groups: managed.map(g => g.name) });
     } catch (error: unknown) {
       if (error instanceof ProvisioningError) {
         res.status(error.status).json(error.body);

@@ -3,6 +3,12 @@
 Shared, dependency-light code for the LiteLLM Backstage plugin packages. This
 changelog is maintained by hand.
 
+## 0.10.0
+
+### Minor Changes
+
+- feat (#102): `UserInfo.managed_groups` and `UsersMonitoringLogs.scope`.
+
 ## 0.9.0
 
 ### Minor Changes

@@ -572,6 +572,56 @@ export async function isUserMemberOfGroup(
   }
 }
 
+/** Catalog Group annotation listing its managers (comma-separated user refs or bare names). */
+export const GROUP_MANAGERS_ANNOTATION = 'govai.litellm/managers';
+
+export interface ManagedGroup {
+  ref: string;
+  name: string;
+  /** LiteLLM user ids of the group's direct members. */
+  memberIds: string[];
+}
+
+/**
+ * Groups the user manages: Group entities whose `govai.litellm/managers`
+ * annotation lists them. Fails closed (no groups) when the catalog call errors.
+ */
+export async function getManagedGroups(
+  userEntityRef: string,
+  catalogClient: CatalogClient,
+  auth: AuthService,
+  logger: LoggerService,
+  userIdDomain?: string,
+): Promise<ManagedGroup[]> {
+  try {
+    const { token } = await auth.getPluginRequestToken({
+      onBehalfOf: await auth.getOwnServiceCredentials(),
+      targetPluginId: 'catalog',
+    });
+    const { items } = await catalogClient.getEntities({ filter: { kind: 'Group' } }, { token });
+    const me = userEntityRef.toLowerCase();
+    const bare = me.split('/').pop();
+    return items
+      .filter(g =>
+        (g.metadata.annotations?.[GROUP_MANAGERS_ANNOTATION] ?? '')
+          .split(',')
+          .map(m => m.trim().toLowerCase())
+          .some(m => m === me || m === bare),
+      )
+      .map(g => ({
+        ref: `group:${g.metadata.namespace ?? 'default'}/${g.metadata.name}`,
+        name: g.metadata.title ?? g.metadata.name,
+        memberIds: (g.relations ?? [])
+          .filter(r => r.type === 'hasMember')
+          .map(r => toLiteLLMUserId(r.targetRef, userIdDomain)),
+      }));
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    logger.warn(`Could not resolve managed groups for ${userEntityRef}: ${message}`);
+    return [];
+  }
+}
+
 /**
  * Fetches the user's Backstage group memberships and returns the first matching
  * role config (priority order), or undefined when no role matches.

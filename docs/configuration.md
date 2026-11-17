@@ -252,6 +252,8 @@ litellm:
 | `litellm.teamAdmin.allowedMcpServers` | string[] | no | `[]` | MCP servers a team admin may attach |
 | `litellm.teamAdmin.allowedMcpAccessGroups` | string[] | no | `[]` | MCP access-group names a team admin may attach |
 
+**Group managers:** annotate a catalog Group with `govai.litellm/managers: user:default/alice, bob` (comma-separated user refs). Those users get the Users Monitoring tab scoped to that group's members (server-side); audit-group members still see everyone.
+
 *required when the `roles` array is present
 †required to enable team management
 
