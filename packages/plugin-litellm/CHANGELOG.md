@@ -10,6 +10,12 @@ commit/PR that bumps the version in `package.json`. Format follows the
 Earlier history: `git log -- packages/plugin-litellm` or the
  [GitHub tags](https://github.com/acarmisc/backstage-plugin-litellm-govai/tags).
 
+## 0.57.1
+
+### Patch Changes
+
+- docs: README mentions the Users Monitoring tab and group-manager scoping.
+
 ## 0.57.0
 
 ### Minor Changes
