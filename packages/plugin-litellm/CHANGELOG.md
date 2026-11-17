@@ -10,6 +10,12 @@ commit/PR that bumps the version in `package.json`. Format follows the
 Earlier history: `git log -- packages/plugin-litellm` or the
  [GitHub tags](https://github.com/acarmisc/backstage-plugin-litellm-govai/tags).
 
+## 0.56.0
+
+### Minor Changes
+
+- feat: unify filter bars and table cards (#101): Users Monitoring and Available Models now use the Keys-style card with filters in the header toolbar and search icon inputs.
+
 ## 0.55.0
 
 ### Minor Changes

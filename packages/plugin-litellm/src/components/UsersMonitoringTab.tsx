@@ -3,6 +3,7 @@ import Alert from '@mui/material/Alert';
 import Box from '@mui/material/Box';
 import LinearProgress from '@mui/material/LinearProgress';
 import Drawer from '@mui/material/Drawer';
+import InputAdornment from '@mui/material/InputAdornment';
 import Grid from '@mui/material/Grid';
 import MenuItem from '@mui/material/MenuItem';
 import Table from '@mui/material/Table';
@@ -15,6 +16,7 @@ import TableRow from '@mui/material/TableRow';
 import TableSortLabel from '@mui/material/TableSortLabel';
 import TextField from '@mui/material/TextField';
 import Typography from '@mui/material/Typography';
+import Search from '@mui/icons-material/Search';
 import { useAsync } from 'react-use';
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import type { LiteLlmApiInterface } from '../api';
@@ -167,8 +169,13 @@ export const UsersMonitoringTab: FC<{ api: LiteLlmApiInterface }> = ({ api }) =>
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-      <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
-        <TextField select size="small" label="Time range" value={preset} sx={{ minWidth: 190 }}
+      <SectionCard
+        title="Users Monitoring"
+        subtitle={loading ? 'Loading…' : `${users.length} user${users.length === 1 ? '' : 's'}`}
+        flush
+        actions={
+          <>
+        <TextField select size="small" label="Time range" value={preset} sx={{ minWidth: 170 }}
           onChange={e => { setPreset(e.target.value as Preset); setPage(0); }}>
           {PRESETS.map(([v, l]) => <MenuItem key={v} value={v}>{l}</MenuItem>)}
         </TextField>
@@ -180,16 +187,18 @@ export const UsersMonitoringTab: FC<{ api: LiteLlmApiInterface }> = ({ api }) =>
               onChange={e => setTo(e.target.value)} />
           </>
         )}
-        <TextField size="small" label="Search user (name / email / id)" value={search}
-          onChange={e => { setSearch(e.target.value); setPage(0); }} sx={{ minWidth: 260 }} />
-        <TextField select size="small" label="Team" value={team} sx={{ minWidth: 240 }}
+        <TextField size="small" label="Search user" placeholder="Name, email or id…" value={search}
+          InputProps={{ startAdornment: <InputAdornment position="start"><Search fontSize="small" color="disabled" /></InputAdornment> }}
+          onChange={e => { setSearch(e.target.value); setPage(0); }} sx={{ minWidth: 240 }} />
+        <TextField select size="small" label="Team" value={team} sx={{ minWidth: 160 }}
           SelectProps={{ displayEmpty: true }} InputLabelProps={{ shrink: true }}
           onChange={e => { setTeam(e.target.value); setPage(0); }}>
           <MenuItem value="">All teams</MenuItem>
           {teams.map(t => <MenuItem key={t.id} value={t.id} title={t.id}>{t.name}</MenuItem>)}
         </TextField>
-      </Box>
-
+          </>
+        }
+      >
       {loading && <LinearProgress />}
 
       {value?.truncated && (
@@ -245,6 +254,7 @@ export const UsersMonitoringTab: FC<{ api: LiteLlmApiInterface }> = ({ api }) =>
           />
         </TableContainer>
       )}
+      </SectionCard>
 
       <Drawer anchor="right" open={!!sel} onClose={() => setSelectedId(null)}
         PaperProps={{ sx: { width: { xs: '100%', md: 640 }, p: 3 } }}>

@@ -9,9 +9,6 @@ import TableRow from '@mui/material/TableRow';
 import TableSortLabel from '@mui/material/TableSortLabel';
 import Typography from '@mui/material/Typography';
 import MenuItem from '@mui/material/MenuItem';
-import Select from '@mui/material/Select';
-import FormControl from '@mui/material/FormControl';
-import InputLabel from '@mui/material/InputLabel';
 import TextField from '@mui/material/TextField';
 import InputAdornment from '@mui/material/InputAdornment';
 import { Search } from '@mui/icons-material';
@@ -150,40 +147,33 @@ export const ModelsTable: FC<ModelsTableProps> = ({ allModels, teams, loading })
           ? `${filteredModels.length}${filterText.trim() ? ` of ${teamModels.length}` : ''} model${filteredModels.length === 1 ? '' : 's'}`
           : 'Select a team to view its models'
       }
-    >
-      <Box sx={{ px: 2.5, pb: 2.5, pt: 1, display: 'flex', gap: 2, flexWrap: 'wrap' }}>
-        <FormControl size="small" sx={{ minWidth: 240, mb: 2 }}>
-          <InputLabel id="team-select-label">Team</InputLabel>
-          <Select
-            labelId="team-select-label"
-            value={selectedTeamId}
-            label="Team"
-            onChange={e => setSelectedTeamId(e.target.value)}
-          >
+      actions={
+        <>
+          <TextField select size="small" label="Team" value={selectedTeamId} sx={{ minWidth: 200 }}
+            onChange={e => setSelectedTeamId(e.target.value)}>
             {teams.map(t => (
-              <MenuItem key={t.team_id} value={t.team_id}>
-                {t.team_alias ?? t.team_id}
-              </MenuItem>
+              <MenuItem key={t.team_id} value={t.team_id}>{t.team_alias ?? t.team_id}</MenuItem>
             ))}
-          </Select>
-        </FormControl>
-        <TextField
-          label="Filter Models"
-          size="small"
-          value={filterText}
-          onChange={e => setFilterText(e.target.value)}
-          disabled={!selectedTeamId}
-          sx={{ minWidth: 240, mb: 2 }}
-          InputProps={{
-            startAdornment: (
-              <InputAdornment position="start">
-                <Search fontSize="small" />
-              </InputAdornment>
-            ),
-          }}
-        />
-      </Box>
-
+          </TextField>
+          <TextField
+            label="Filter Models"
+            size="small"
+            value={filterText}
+            onChange={e => setFilterText(e.target.value)}
+            disabled={!selectedTeamId}
+            sx={{ minWidth: 240 }}
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start">
+                  <Search fontSize="small" color="disabled" />
+                </InputAdornment>
+              ),
+            }}
+          />
+        </>
+      }
+      flush
+    >
       {loading && (
         <EmptyState message="Loading models…" />
       )}
