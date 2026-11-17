@@ -9,6 +9,12 @@ commit/PR that bumps the version in `package.json`. Format follows the
 Earlier history: `git log -- packages/plugin-litellm-backend` or the
 [GitHub tags](https://github.com/acarmisc/backstage-plugin-litellm-govai/tags).
 
+## 0.37.3
+
+### Patch Changes
+
+- fix: `managersGroupTransformer` now takes `(entity, group, realm)` like the Keycloak provider's `GroupTransformer` (0.37.0–0.37.2 had group/realm swapped and never read the attribute).
+
 ## 0.37.2
 
 ### Patch Changes

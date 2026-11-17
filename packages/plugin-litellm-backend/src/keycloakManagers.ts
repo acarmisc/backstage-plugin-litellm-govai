@@ -11,8 +11,8 @@ import { GROUP_MANAGERS_ANNOTATION } from './provisioning';
 export function managersGroupTransformer(attribute = 'managers') {
   return async <E extends { metadata: { annotations?: Record<string, string> } }>(
     entity: E,
-    _realm: string,
     group: { attributes?: Record<string, string[] | string> },
+    _realm?: string,
   ): Promise<E> => {
     const raw = group.attributes?.[attribute];
     const managers = (Array.isArray(raw) ? raw : raw ? [raw] : [])
