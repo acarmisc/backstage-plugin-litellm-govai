@@ -2,7 +2,7 @@ import { GROUP_MANAGERS_ANNOTATION } from './provisioning';
 
 /**
  * Keycloak catalog-provider `groupTransformer` that copies a group attribute
- * (default `managers`, values = usernames, one per value or comma-separated)
+ * (default `managers`, values = usernames or emails, one per value or comma-separated)
  * into the `govai.litellm/managers` annotation read by Users Monitoring.
  * Structural types, so no dependency on the keycloak module.
  *
@@ -17,7 +17,7 @@ export function managersGroupTransformer(attribute = 'managers') {
     const raw = group.attributes?.[attribute];
     const managers = (Array.isArray(raw) ? raw : raw ? [raw] : [])
       .flatMap(v => v.split(','))
-      .map(v => v.trim())
+      .map(v => v.trim().split('@')[0]) // Keycloak usernames are emails; catalog names are the local part
       .filter(Boolean);
     if (!managers.length) return entity;
     return {

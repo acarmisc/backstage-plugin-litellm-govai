@@ -9,6 +9,12 @@ commit/PR that bumps the version in `package.json`. Format follows the
 Earlier history: `git log -- packages/plugin-litellm-backend` or the
 [GitHub tags](https://github.com/acarmisc/backstage-plugin-litellm-govai/tags).
 
+## 0.37.1
+
+### Patch Changes
+
+- fix: `managersGroupTransformer` strips the email domain from attribute values (catalog user names are the local part).
+
 ## 0.37.0
 
 ### Minor Changes
