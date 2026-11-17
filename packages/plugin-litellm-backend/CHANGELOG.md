@@ -9,6 +9,12 @@ commit/PR that bumps the version in `package.json`. Format follows the
 Earlier history: `git log -- packages/plugin-litellm-backend` or the
 [GitHub tags](https://github.com/acarmisc/backstage-plugin-litellm-govai/tags).
 
+## 0.37.2
+
+### Patch Changes
+
+- fix: `exports` now declares `types`, so TypeScript with `moduleResolution: bundler` resolves named imports.
+
 ## 0.37.1
 
 ### Patch Changes

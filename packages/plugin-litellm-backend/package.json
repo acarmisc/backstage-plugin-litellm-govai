@@ -1,6 +1,6 @@
 {
   "name": "@acarmisc/backstage-plugin-litellm-backend",
-  "version": "0.37.1",
+  "version": "0.37.2",
   "description": "The Backstage backend plugin for LiteLLM governance",
   "backstage": {
     "role": "backend-plugin",
@@ -19,7 +19,10 @@
   "homepage": "https://github.com/acarmisc/backstage-plugin-litellm-govai#readme",
   "license": "Apache-2.0",
   "exports": {
-    ".": "./dist/index.cjs.js"
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.cjs.js"
+    }
   },
   "main": "dist/index.cjs.js",
   "types": "dist/index.d.ts",
