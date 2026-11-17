@@ -119,7 +119,8 @@ checklist.
 | `litellm.provisioning.*` | off | Create LiteLLM users on first visit, with defaults and per-group overrides |
 | `litellm.keys.*` | `$100`, `1d/7d/30d/90d` | Ceilings for key budget, TPM, RPM and allowed durations |
 | `litellm.keyGeneration.teamRequired` | `true` | Every key must be bound to one of the user's teams |
-| `litellm.audit.group` | — | Group that sees the Audit Log tab |
+| `litellm.audit.group` | — | Group that sees the Audit Log and all of Users Monitoring |
+| Group annotation `govai.litellm/managers` | — | Users listed there see Users Monitoring scoped to that group (syncable from Keycloak, see [docs](docs/configuration.md)) |
 | `litellm.teamAdmin.*` | off | Delegated team management (needs `permission.enabled`) |
 | `litellm.display.*` | off | Hide team budget dollars from members or managers |
 | `litellm.bridge.*` | off | CLI bridge with Keycloak access tokens |

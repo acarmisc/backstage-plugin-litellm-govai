@@ -52,6 +52,10 @@ when you need to restrict actions per role — see [Permissions](permissions.md)
 Two capabilities are group-gated in addition:
 
 - **Audit log tab**: members of `litellm.audit.group`.
+- **Users Monitoring tab**: members of `litellm.audit.group` (all users) and group managers
+  (only their group's members, enforced server-side). Managers are set with the
+  `govai.litellm/managers` Group annotation, optionally synced from a Keycloak group
+  attribute — see [Configuration](configuration.md).
 - **Team management**: members of `litellm.teamAdmin.group`, and only with
   `permission.enabled: true` — see [Team management](permissions.md#team-management-litellm-team-admins).
 

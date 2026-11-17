@@ -36,6 +36,8 @@ instead of maintaining this table by hand.
 | `/teams/:teamId/usage/keys` | GET | A team's keys with per-key usage, for team leads (same access as `usage/members`, see [Permissions](permissions.md#team-keys-and-per-key-usage)) |
 | `/usage` | GET | Get usage metrics and analytics for the current user |
 | `/audit` | GET | Audit logs (gated by `litellm.audit.group` membership) |
+| `/insights/users-monitoring` | GET | Per-key usage rows for all users (`start_date`, `end_date` required). Audit-group members see everyone; group managers (`govai.litellm/managers` annotation) get only their groups' members plus `scope.groups`; others get 403 |
+| `/insights/spend-logs` | GET | Spend logs (`userId` / `teamId` filters honoured for audit members; a group manager may pass `userId` of a member of a managed group) |
 | `/opencode/connect` | GET / POST | OpenCode SSO connect: GET shows a confirmation page (no state change); POST creates or rotates the key and redirects to the local callback (only when `litellm.opencode.enabled`) |
 | `/provisioning/preview` | GET | Resolve which role a Backstage group maps to (dry-run, audit-group-gated) |
 

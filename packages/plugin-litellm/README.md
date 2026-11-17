@@ -39,7 +39,8 @@ component below.
 Tabs: **Overview** (usage KPIs and charts), **Keys** (your virtual keys: edit,
 block / unblock, reset spend, delete), **Teams** (team usage, and team
 management for admins), **Models** (the proxy's model catalogue) and **Audit
-Log** (members of `litellm.audit.group` only). `?tab=<name>` opens a tab and
+Log** (members of `litellm.audit.group` only) and **Users Monitoring** (audit
+group: all users; group managers: only their group's members). `?tab=<name>` opens a tab and
 `?generate=1` opens the Generate New Key dialog.
 
 ![The /litellm page](https://raw.githubusercontent.com/acarmisc/backstage-plugin-litellm-govai/main/docs/images/overview.png)
